@@ -161,6 +161,31 @@ def test_new_nested_reactions_are_deterministic():
     assert [r.model_dump() for r in a] == [r.model_dump() for r in b]
 
 
+def test_category_override_reaches_scoring():
+    """The product_category override must flow all the way into per-persona
+    market-fit scoring, not just the report weights. Same persona + same
+    stimulus, only `category` differs -> decision.market_fit_score must
+    differ, proving the passed-in category actually drives the preset
+    weights used by compute_market_fit (not an internally re-classified one).
+    """
+    persona = _mk_persona("P1", price_sensitivity=0.5)
+    stimulus = STIM_PRICED
+    features = parse_stimulus(stimulus, "Test", "product_concept")
+    provider = MockPersonaProvider(seed=42)
+
+    r_luxury = asyncio.run(
+        provider.react(persona, stimulus, "product_concept", features, category="luxury_product")
+    )
+    r_b2b = asyncio.run(
+        provider.react(persona, stimulus, "product_concept", features, category="b2b_saas")
+    )
+
+    assert r_luxury.decision.market_fit_score != r_b2b.decision.market_fit_score, (
+        "passing a different category must change market_fit_score — the "
+        "override is not reaching per-persona scoring"
+    )
+
+
 def _mk_persona_sk(pid: str, skepticism: float) -> Persona:
     return Persona(
         persona_id=pid, preset="us_smb", segment="test", sub_segment="test",

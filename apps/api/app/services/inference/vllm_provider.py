@@ -63,6 +63,7 @@ class VLLMProvider(PersonaInferenceProvider):
         stimulus: str,
         stimulus_type: str,
         features: StimulusFeatures | None = None,
+        category: str | None = None,
     ) -> PersonaReaction:
         payload = {
             "model": self.model,
@@ -85,7 +86,7 @@ class VLLMProvider(PersonaInferenceProvider):
         )
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"]
-        return parse_llm_reaction(content, persona, features)
+        return parse_llm_reaction(content, persona, features, category)
 
     async def react_batch(
         self,
@@ -94,11 +95,13 @@ class VLLMProvider(PersonaInferenceProvider):
         stimulus_type: str,
         features: StimulusFeatures | None = None,
         concurrency: int = 64,
+        category: str | None = None,
     ) -> list[PersonaReaction]:
         # Higher default concurrency than base: vLLM's continuous batching is
         # most efficient when its queue is kept full.
         return await super().react_batch(personas, stimulus, stimulus_type,
-                                         features, concurrency=concurrency)
+                                         features, concurrency=concurrency,
+                                         category=category)
 
     async def health_check(self) -> bool:
         try:

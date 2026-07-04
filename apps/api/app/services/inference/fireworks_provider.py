@@ -84,6 +84,7 @@ class FireworksProvider(PersonaInferenceProvider):
         stimulus: str,
         stimulus_type: str,
         features: StimulusFeatures | None = None,
+        category: str | None = None,
     ) -> PersonaReaction:
         payload = {
             "model": self.model,
@@ -104,7 +105,7 @@ class FireworksProvider(PersonaInferenceProvider):
         )
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"]
-        return parse_llm_reaction(content, persona, features)
+        return parse_llm_reaction(content, persona, features, category)
 
     async def health_check(self) -> bool:
         try:
@@ -121,6 +122,7 @@ def parse_llm_reaction(
     content: str,
     persona: Persona,
     features: StimulusFeatures | None = None,
+    category: str | None = None,
 ) -> PersonaReaction:
     """Parse + validate an LLM JSON reply into a PersonaReaction.
 
@@ -130,6 +132,11 @@ def parse_llm_reaction(
 
     market_fit_score and status are NEVER trusted from the model — they are
     always recomputed server-side via `compute_market_fit`/`status_for`.
+
+    `category` is the run's authoritative product category (override or the
+    single auto-detected value for the whole run); when provided it wins over
+    re-classifying `features` here, keeping scoring consistent with the
+    report's own category weights.
     """
     text = content.strip()
     if text.startswith("```"):
@@ -158,14 +165,14 @@ def parse_llm_reaction(
     buy_likelihood = _clamp(float(data.get("buy_likelihood", 0.5)))
     max_price = max(0.0, float(data.get("max_price", 0.0)))
 
-    category = classify_category(features)[0] if features else "generic"
+    cat = category or (classify_category(features)[0] if features else "generic")
     high_risk = is_high_risk(features) if features else False
-    is_teen_paid_edu = persona.life_stage == "teen_student" and category == "education_product"
+    is_teen_paid_edu = persona.life_stage == "teen_student" and cat == "education_product"
 
     breakdown = compute_market_fit(
         core,
         age_specific_scores,
-        category,
+        cat,
         persona.life_stage,
         is_high_risk=high_risk,
         is_teen_paid_edu=is_teen_paid_edu,

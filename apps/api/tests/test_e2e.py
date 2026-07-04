@@ -109,6 +109,21 @@ def test_validation_rules(client):
     assert client.get("/api/storm/nope/report").status_code == 404
 
 
+def test_product_category_override_flows_to_report(client):
+    """docs/api-contract.md: product_category override sets which preset the
+    whole storm scores against -> report.product_category must equal the
+    override the caller passed, not the auto-detected category."""
+    resp = client.post(
+        "/api/storm/create",
+        json=create_payload(product_category="luxury_product", persona_count=50),
+    )
+    assert resp.status_code == 200, resp.text
+    storm_id = resp.json()["storm_id"]
+
+    report = _wait_for_report(client, storm_id)
+    assert report["product_category"] == "luxury_product"
+
+
 def test_reproducible_runs_with_seed(client):
     a = client.post("/api/storm/create", json=create_payload(seed=123)).json()["storm_id"]
     b = client.post("/api/storm/create", json=create_payload(seed=123)).json()["storm_id"]

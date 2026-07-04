@@ -32,11 +32,18 @@ class PersonaInferenceProvider(ABC):
         stimulus: str,
         stimulus_type: str,
         features: StimulusFeatures | None = None,
+        category: str | None = None,
     ) -> PersonaReaction:
         """Produce a structured reaction for a single persona.
 
         `features` is the pre-parsed stimulus (parse once per storm, not once
         per persona). Providers may ignore it and re-derive from `stimulus`.
+
+        `category` is the run's AUTHORITATIVE product category (explicit
+        override or auto-detected once for the whole run — see
+        storm_runner.py). When provided, it MUST be used for scoring instead
+        of re-classifying internally, so every persona's market_fit_score is
+        computed under the same category as the report's weights.
         """
 
     async def react_batch(
@@ -46,6 +53,7 @@ class PersonaInferenceProvider(ABC):
         stimulus_type: str,
         features: StimulusFeatures | None = None,
         concurrency: int = 8,
+        category: str | None = None,
     ) -> list[PersonaReaction]:
         """Default batching: bounded-concurrency fan-out over react().
 
@@ -57,7 +65,7 @@ class PersonaInferenceProvider(ABC):
 
         async def _one(p: Persona) -> PersonaReaction:
             async with sem:
-                return await self.react(p, stimulus, stimulus_type, features)
+                return await self.react(p, stimulus, stimulus_type, features, category)
 
         return list(await asyncio.gather(*(_one(p) for p in personas)))
 

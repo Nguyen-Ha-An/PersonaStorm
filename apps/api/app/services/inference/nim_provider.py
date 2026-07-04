@@ -91,6 +91,7 @@ class NIMProvider(PersonaInferenceProvider):
         stimulus: str,
         stimulus_type: str,
         features: StimulusFeatures | None = None,
+        category: str | None = None,
     ) -> PersonaReaction:
         payload: dict = {
             "model": self.model,
@@ -120,7 +121,7 @@ class NIMProvider(PersonaInferenceProvider):
         # Reasoning models split chain-of-thought into reasoning_content and the
         # answer into content; we only ever parse content (the constrained JSON).
         content = message.get("content") or ""
-        return parse_llm_reaction(content, persona, features)
+        return parse_llm_reaction(content, persona, features, category)
 
     async def health_check(self) -> bool:
         try:

@@ -202,6 +202,7 @@ class StormManager:
                 reactions = await provider.react_batch(
                     chunk, run.request.stimulus, run.request.stimulus_type.value,
                     run.features, concurrency=s.storm_max_concurrency,
+                    category=run.category,
                 )
                 for r in reactions:
                     run.add_reaction(r)

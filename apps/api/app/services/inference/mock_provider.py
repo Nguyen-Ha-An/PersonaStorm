@@ -199,24 +199,26 @@ class MockPersonaProvider(PersonaInferenceProvider):
         stimulus: str,
         stimulus_type: str,
         features: StimulusFeatures | None = None,
+        category: str | None = None,
     ) -> PersonaReaction:
         f = features or parse_stimulus(stimulus, title="", stimulus_type=stimulus_type)
         stim_hash = hashlib.sha1(stimulus.encode()).hexdigest()[:10]
         rng = random.Random(f"{self.seed}:{persona.persona_id}:{stim_hash}")
 
-        # Wire the category classifier into the mock path so market fit uses the
-        # right category weights and high-risk gate.
-        category, _conf = classify_category(f)
+        # The run's authoritative category (explicit override or auto-detected
+        # ONCE for the whole run) always wins over re-classifying here — this
+        # keeps per-persona scoring consistent with the report's own weights.
+        cat = category or classify_category(f)[0]
         high_risk = is_high_risk(f)
 
-        core, overlay = self._score_criteria(persona, f, category, rng)
+        core, overlay = self._score_criteria(persona, f, cat, rng)
 
         # market_fit is ALWAYS the authoritative scorer's output — never invented.
         breakdown = compute_market_fit(
-            core, overlay, category, persona.life_stage,
+            core, overlay, cat, persona.life_stage,
             is_high_risk=high_risk,
             is_teen_paid_edu=(persona.life_stage == "teen_student"
-                              and category == "education_product"),
+                              and cat == "education_product"),
         )
 
         buy = self._buy_likelihood(persona, core, rng)
@@ -228,7 +230,7 @@ class MockPersonaProvider(PersonaInferenceProvider):
 
         qualitative = self._qualitative(persona, f, core, buy, status, rng)
         research = self._research_recommendation(persona, f, core, rng)
-        reasoning = self._reasoning(core, category, breakdown)
+        reasoning = self._reasoning(core, cat, breakdown)
 
         return PersonaReaction(
             persona_id=persona.persona_id,

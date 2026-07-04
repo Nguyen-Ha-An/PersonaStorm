@@ -8,6 +8,8 @@ scorer's hard gate treats specially.
 
 from __future__ import annotations
 
+import re
+
 from ..stimulus_parser import StimulusFeatures
 from .presets import CATEGORY_IDS
 
@@ -58,6 +60,29 @@ _PARSER_CATEGORY_MAP: dict[str, str] = {
 }
 
 
+def _keyword_hit(word: str, tokset: set[str], lower: str) -> bool:
+    """True if ``word`` is present as a whole token, or as a word-boundary
+    match in ``lower``.
+
+    Uses ``\\b`` word-boundary matching (rather than raw substring search)
+    so mid-word substrings don't false-positive — e.g. "ai" must not match
+    inside "maintain" or "domain". Multi-word/hyphenated keywords like
+    "money-back" or "two-sided" still match since the boundaries anchor on
+    the full phrase, not on individual letters within a larger word.
+    """
+    return word in tokset or re.search(rf"\b{re.escape(word)}\b", lower) is not None
+
+
+def _any_keyword_hit(words: set[str], tokset: set[str], lower: str) -> bool:
+    """True if any keyword in ``words`` hits (see ``_keyword_hit``)."""
+    return any(_keyword_hit(w, tokset, lower) for w in words)
+
+
+def _count_keyword_hits(words: set[str], tokset: set[str], lower: str) -> int:
+    """Count of keywords in ``words`` that hit (see ``_keyword_hit``)."""
+    return sum(1 for w in words if _keyword_hit(w, tokset, lower))
+
+
 def _prior_category(features: StimulusFeatures) -> str | None:
     cat = features.category
     if cat == "devtool":
@@ -86,14 +111,14 @@ def classify_category(features: StimulusFeatures) -> tuple[str, float]:
     # tagged it saas_b2b.
     if features.mentions_ai:
         scores["ai_tool"] += 1.5
-    ai_hits = sum(1 for w in _AI_TOOL_WORDS if w in tokset or w in lower)
+    ai_hits = _count_keyword_hits(_AI_TOOL_WORDS, tokset, lower)
     scores["ai_tool"] += 0.5 * ai_hits
 
     # Keyword sets for categories the parser doesn't natively cover.
     for cat, words in _KEYWORDS.items():
         if cat == "ai_tool":
             continue  # handled above
-        hits = sum(1 for w in words if w in tokset or w in lower)
+        hits = _count_keyword_hits(words, tokset, lower)
         scores[cat] += hits
 
     total = sum(scores.values())
@@ -113,4 +138,4 @@ def is_high_risk(features: StimulusFeatures) -> bool:
     """True if the stimulus touches finance/medical/health/safety/childcare."""
     lower = features.raw.lower()
     tokset = set(features.tokens)
-    return any(w in tokset or w in lower for w in _HIGH_RISK_WORDS)
+    return _any_keyword_hit(_HIGH_RISK_WORDS, tokset, lower)

@@ -87,3 +87,18 @@ def test_marketplace_classifies_as_marketplace():
     )
     cat, conf = classify_category(f)
     assert cat == "marketplace" and conf > 0
+
+
+def test_no_substring_false_positive_ai():
+    f = parse_stimulus(
+        "Maintain your domain names with our registrar dashboard.", "X", "product_concept"
+    )
+    cat, _ = classify_category(f)
+    assert cat != "ai_tool"
+
+
+def test_no_substring_false_positive_high_risk():
+    f = parse_stimulus(
+        "A childproof lock for smart-home devices. No overpaying.", "X", "product_concept"
+    )
+    assert is_high_risk(f) is False

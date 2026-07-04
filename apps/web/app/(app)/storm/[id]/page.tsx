@@ -77,7 +77,6 @@ function LiveStormView({ stormId, onRetry }: { stormId: string; onRetry: () => v
         <ErrorState
           title="Can't connect to the storm stream"
           message={s.connectionError}
-          detail={`API target: ${s.apiTarget}`}
           onRetry={onRetry}
           homeHref="/storm/new"
           homeLabel="Start a new storm"

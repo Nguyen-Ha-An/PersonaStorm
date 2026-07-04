@@ -66,9 +66,9 @@ jobs:
 
       - name: Build web app
         working-directory: apps/web
-        env:
-          # Build-time fallback only. Set the real production value in Vercel.
-          NEXT_PUBLIC_API_BASE: https://api.example.com
+        # No backend URL needed at build time — the browser never talks to the
+        # FastAPI backend directly. BACKEND_API_BASE is read server-side, at
+        # request time, by the /api/backend proxy route (apps/web/app/api/backend).
         run: npm run build
 
   # Deploys Supabase migrations to the PRODUCTION database. Runs only on a push
@@ -249,6 +249,24 @@ jobs:
             exit 1
           fi
 
+      # BACKEND_API_BASE is read server-side by the /api/backend proxy route,
+      # never baked into the browser bundle. Production deploys require it —
+      # without it every storm/billing/admin action would 503 in production
+      # with no way for the deployer to notice until a user hits it. Fail loud
+      # here instead. (Login/signup/dashboard don't need it — see
+      # docs/deployment.md if you intend to ship the frontend before the
+      # backend is deployed and want to bypass this gate.)
+      - name: Validate BACKEND_API_BASE (required for production)
+        env:
+          BACKEND_API_BASE: ${{ secrets.BACKEND_API_BASE }}
+        run: |
+          if [ -z "${BACKEND_API_BASE:-}" ]; then
+            echo "Missing required GitHub secret: BACKEND_API_BASE"
+            echo "Production requires BACKEND_API_BASE so storm/billing/admin calls actually work."
+            echo "Set it to your deployed FastAPI backend's URL, in both this repo's secrets and in Vercel (Settings -> Environment Variables, NOT prefixed with NEXT_PUBLIC_)."
+            exit 1
+          fi
+
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
@@ -276,15 +294,12 @@ jobs:
       - name: Verify production build locally
         working-directory: apps/web
         env:
-          NEXT_PUBLIC_API_BASE: ${{ secrets.NEXT_PUBLIC_API_BASE }}
+          # Only NEXT_PUBLIC_* vars affect the build — they're inlined into the
+          # browser bundle. BACKEND_API_BASE is intentionally NOT passed here:
+          # it's read at request time by the proxy route, not at build time.
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
         run: |
-          if [ -z "${NEXT_PUBLIC_API_BASE:-}" ]; then
-            echo "::warning title=NEXT_PUBLIC_API_BASE not set::The production frontend needs NEXT_PUBLIC_API_BASE pointing at your deployed FastAPI backend. Set it in Vercel (Settings -> Environment Variables) AND as the NEXT_PUBLIC_API_BASE GitHub secret. Without it the deployed app shows a 'Backend API is not configured' banner. Note: the actual Vercel build uses the value from 'vercel pull', so set it in Vercel too."
-          else
-            echo "NEXT_PUBLIC_API_BASE is set for the local verification build."
-          fi
           if [ -z "${NEXT_PUBLIC_SUPABASE_URL:-}" ] || [ -z "${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}" ]; then
             echo "::warning title=Supabase frontend env not set::Login/signup need NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY (anon key only — never the service role key). Set them in Vercel (Settings -> Environment Variables). The build still succeeds; the app just shows an 'auth not configured' notice until they are set."
           else

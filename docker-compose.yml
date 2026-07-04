@@ -23,10 +23,11 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-      args:
-        # The browser calls the API directly, so this must be the HOST-visible
-        # origin (not the compose-internal http://api:8000).
-        NEXT_PUBLIC_API_BASE: http://localhost:8000
+    environment:
+      # The Next.js SERVER (not the browser) calls the backend now, so this
+      # can safely be the compose-internal hostname — it never reaches the
+      # browser bundle.
+      BACKEND_API_BASE: http://api:8000
     ports:
       - "3000:3000"
     depends_on:

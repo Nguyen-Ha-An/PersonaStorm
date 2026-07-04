@@ -9,9 +9,29 @@ persona-adherence *measurable* (see services/quality/metrics.py).
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from ..services.criteria import age_overlays
 
 Familiarity = Literal["low", "medium", "high"]
+
+
+class DecisionContext(BaseModel):
+    """How this persona actually makes the buy/adopt decision.
+
+    All fields are optional — most personas only have a subset populated
+    (e.g. only teens carry `needs_parent_approval`/`school_context`). The
+    generator fills these in deterministically based on life stage; this
+    model just needs safe defaults so an empty `DecisionContext()` is valid.
+    """
+
+    needs_parent_approval: bool | None = None
+    budget_control: str | None = None
+    main_influence_sources: list[str] = Field(default_factory=list)
+    risk_owner: str | None = None
+    attention_span: str | None = None
+    school_context: str | None = None
+    decision_horizon: str | None = None
 
 
 class Persona(BaseModel):
@@ -27,6 +47,16 @@ class Persona(BaseModel):
     region: str
     income_band: str
     occupation: str
+
+    # Authoritatively derived from `age` by the validator below — never trust
+    # a caller-supplied value. Default "" only exists so construction without
+    # it is legal; the validator always overwrites it with the correct stage.
+    life_stage: str = ""
+
+    # How this persona actually makes the buy/adopt decision (parent approval,
+    # budget control, influence sources, ...). Populated by the generator;
+    # defaults to an empty DecisionContext so existing callers are unaffected.
+    decision_context: DecisionContext = Field(default_factory=DecisionContext)
 
     # --- psychographic / behavioral traits (0 = none, 1 = extreme) ------------
     price_sensitivity: float = Field(..., ge=0.0, le=1.0)
@@ -48,6 +78,13 @@ class Persona(BaseModel):
     # Rough monthly discretionary budget (USD) derived from income band; the
     # anchor the reaction engine uses to reason about willingness to pay.
     monthly_budget_usd: float = Field(..., ge=0)
+
+    @model_validator(mode="after")
+    def _derive_life_stage(self) -> "Persona":
+        """life_stage is authoritative and always derived from age — any
+        caller-supplied value (or the "" default) is overwritten here."""
+        self.life_stage = age_overlays.life_stage_for(self.age)
+        return self
 
     def trait_dict(self) -> dict[str, float]:
         """Traits as a dict — used by quality metrics and prompt builders."""

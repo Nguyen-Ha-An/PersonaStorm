@@ -5,10 +5,13 @@ good the reaction model is (garbage-in collapse). This runs BEFORE inference,
 which is cheaper than detecting collapse after 1,000 generations.
 
 Checks:
-1. Trait spread    — every behavioral trait must have stddev >= MIN_TRAIT_STD.
-2. Coverage        — every declared sub-segment must actually appear (>= ~3%).
-3. Dealbreaker mix — enough distinct dealbreaker combinations.
-4. Age spread      — population isn't a single age.
+1. Trait spread     — every behavioral trait must have stddev >= MIN_TRAIT_STD.
+2. Coverage         — every declared sub-segment must actually appear (>= ~3%).
+3. Dealbreaker mix  — enough distinct dealbreaker combinations.
+4. Age spread       — population isn't a single age.
+5. Age-cohort spread — population isn't a single life-stage cohort (warn only;
+   e.g. a legitimately narrow market like "SEA Gen Z" may still collapse to
+   one or two cohorts, so this never hard-fails the report).
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ class DiversityReport:
     sub_segment_counts: dict[str, int] = field(default_factory=dict)
     dealbreaker_uniqueness: float = 0.0
     age_std: float = 0.0
+    life_stage_counts: dict[str, int] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -42,6 +46,7 @@ class DiversityReport:
             "sub_segment_counts": self.sub_segment_counts,
             "dealbreaker_uniqueness": round(self.dealbreaker_uniqueness, 3),
             "age_std": round(self.age_std, 2),
+            "life_stage_counts": self.life_stage_counts,
             "warnings": self.warnings,
         }
 
@@ -80,11 +85,23 @@ def validate_diversity(personas: list[Persona],
     if age_std < min_age_std:
         warnings.append(f"age spread low (std={age_std:.1f} < {min_age_std:.1f} for span {span:.0f})")
 
+    # Age-cohort (life-stage) spread — non-fatal. A population that collapses
+    # to a single life stage loses the overlay-criteria diversity the age
+    # bands are meant to exercise downstream, but some target markets are
+    # legitimately narrow, so this only warns.
+    life_stage_counts = Counter(p.life_stage for p in personas)
+    if len(life_stage_counts) <= 1:
+        only = next(iter(life_stage_counts), "unknown")
+        warnings.append(
+            f"age-cohort spread low: population collapses to a single life stage ('{only}')"
+        )
+
     return DiversityReport(
         ok=len(warnings) == 0,
         trait_std=trait_std,
         sub_segment_counts=dict(seg_counts),
         dealbreaker_uniqueness=uniqueness,
         age_std=age_std,
+        life_stage_counts=dict(life_stage_counts),
         warnings=warnings,
     )

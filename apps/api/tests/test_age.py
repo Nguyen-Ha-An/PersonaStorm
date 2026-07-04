@@ -1,5 +1,32 @@
+from app.schemas.persona import Persona
 from app.services.criteria import age_overlays as ao
 from app.services.criteria import registry as reg
+
+
+def _mk_persona(age: int) -> Persona:
+    return Persona(
+        persona_id="P_0001", preset="us_smb", segment="test", sub_segment="test",
+        age=age, region="US", income_band="test", occupation="owner",
+        price_sensitivity=0.5, skepticism=0.5, novelty_seeking=0.5,
+        brand_trust=0.5, social_influence=0.5, risk_tolerance=0.5,
+        privacy_sensitivity=0.5, category_familiarity="medium",
+        research_style="reads reviews", buying_trigger="clear ROI",
+        dealbreakers=["unclear pricing"], monthly_budget_usd=200.0,
+    )
+
+
+def test_persona_life_stage_auto_derived_from_age():
+    teen = _mk_persona(age=15)
+    assert teen.life_stage == "teen_student"
+
+    parent = _mk_persona(age=40)
+    assert parent.life_stage == "parent_family"
+
+
+def test_persona_decision_context_defaults_empty():
+    p = _mk_persona(age=30)
+    assert p.decision_context.needs_parent_approval is None
+    assert p.decision_context.main_influence_sources == []
 
 
 def test_life_stage_bands():

@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import random
 
-from ...schemas.persona import Persona
+from ...schemas.persona import DecisionContext, Persona
+from ..criteria.age_overlays import life_stage_for
 from .diversity import validate_diversity
 from .presets import DB, PresetSpec, SubSegmentSpec, resolve_preset
 
@@ -88,12 +89,16 @@ class PersonaGenerator:
         if traits["privacy_sensitivity"] > 0.75 and not (set(dealbreakers) & _PRIVACY_DEALBREAKERS):
             dealbreakers.append("vague about what happens to my data")
 
+        age = rng.randint(*sub.age_range)
+        life_stage = life_stage_for(age)
+        decision_context = self._decision_context(preset, sub, life_stage, rng)
+
         return Persona(
             persona_id=f"{preset.id_prefix}_{idx:04d}",
             preset=preset.key,
             segment=sub.name,
             sub_segment=sub.name,
-            age=rng.randint(*sub.age_range),
+            age=age,
             region=rng.choice(sub.regions),
             income_band=band_label,
             occupation=rng.choice(sub.occupations),
@@ -102,7 +107,67 @@ class PersonaGenerator:
             buying_trigger=rng.choice(sub.buying_triggers),
             dealbreakers=list(dict.fromkeys(dealbreakers)),  # dedupe, keep order
             monthly_budget_usd=budget,
+            decision_context=decision_context,
             **traits,
+        )
+
+    # ------------------------------------------------------ decision context
+    def _decision_context(self, preset: PresetSpec, sub: SubSegmentSpec,
+                           life_stage: str, rng: random.Random) -> DecisionContext:
+        """Build a deterministic (seeded) DecisionContext from life stage +
+        preset/sub-segment shape. Teens get the parent-approval-shaped
+        fields; other stages get reasonable, still-seeded defaults."""
+        if life_stage == "teen_student":
+            return DecisionContext(
+                needs_parent_approval=True,
+                budget_control="allowance",
+                risk_owner="parent",
+                attention_span="short",
+                main_influence_sources=list(
+                    rng.sample(["peers", "creators", "school"], k=3)
+                ),
+                school_context=rng.choice([
+                    "in school, homework-heavy schedule",
+                    "in school, active in clubs/extracurriculars",
+                    "in school, prepping for exams",
+                ]),
+                decision_horizon="days",
+            )
+
+        if life_stage == "student_young_adult":
+            return DecisionContext(
+                needs_parent_approval=False,
+                budget_control=rng.choice(["self", "shared with roommates"]),
+                risk_owner="self",
+                attention_span=rng.choice(["short", "medium"]),
+                main_influence_sources=list(
+                    rng.sample(["peers", "creators", "online reviews"], k=2)
+                ),
+                decision_horizon=rng.choice(["days", "weeks"]),
+            )
+
+        if life_stage == "parent_family":
+            return DecisionContext(
+                needs_parent_approval=False,
+                budget_control=rng.choice(["household budget", "self"]),
+                risk_owner=rng.choice(["self", "shared with spouse"]),
+                attention_span="medium",
+                main_influence_sources=list(
+                    rng.sample(["other parents", "online reviews", "school"], k=2)
+                ),
+                decision_horizon=rng.choice(["weeks", "months"]),
+            )
+
+        # early_career / established_adult / older_adult / anything else.
+        return DecisionContext(
+            needs_parent_approval=False,
+            budget_control=rng.choice(["self", "employer/expense", "household budget"]),
+            risk_owner="self",
+            attention_span=rng.choice(["medium", "long"]),
+            main_influence_sources=list(
+                rng.sample(["colleagues", "online reviews", "industry blogs"], k=2)
+            ),
+            decision_horizon=rng.choice(["weeks", "months", "quarter"]),
         )
 
 

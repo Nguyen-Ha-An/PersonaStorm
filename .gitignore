@@ -27,3 +27,7 @@ data/runs/*.json
 
 # sdd scratch (progress ledger, briefs, review packages)
 .superpowers/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+apps/web/tsconfig.tsbuildinfo

@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: "20"
+  NODE_VERSION: "22"
   PYTHON_VERSION: "3.11"
 
 jobs:
@@ -174,13 +174,41 @@ jobs:
             echo "VERCEL_SCOPE_ARG=" >> "$GITHUB_ENV"
           fi
 
-      - name: Pull Vercel project settings
-        run: vercel pull --yes --environment=production --cwd apps/web --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG
+      - name: Create Vercel project link
+        working-directory: apps/web
+        run: |
+          mkdir -p .vercel
+          cat > .vercel/project.json <<EOF
+          {"orgId":"${VERCEL_ORG_ID}","projectId":"${VERCEL_PROJECT_ID}"}
+          EOF
+          echo "Linked Vercel project in apps/web/.vercel/project.json"
+
+      - name: Pull Vercel production environment
+        working-directory: apps/web
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG
+
+      - name: Verify production build locally
+        working-directory: apps/web
+        env:
+          NEXT_PUBLIC_API_BASE: ${{ secrets.NEXT_PUBLIC_API_BASE }}
+        run: |
+          npm ci
+          npm run build
 
       - name: Deploy web to Vercel production
         id: deploy
+        working-directory: apps/web
         run: |
-          deployment_url=$(vercel deploy --prod --yes --cwd apps/web --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG)
+          set -o pipefail
+          deployment_url=$(vercel deploy --prod --yes --debug --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG 2>&1 | tee vercel-deploy.log | tail -n 1)
           echo "deployment_url=$deployment_url" >> "$GITHUB_OUTPUT"
           echo "### Vercel production deployment" >> "$GITHUB_STEP_SUMMARY"
           echo "$deployment_url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Vercel deploy log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vercel-deploy-log
+          path: apps/web/vercel-deploy.log
+          if-no-files-found: ignore

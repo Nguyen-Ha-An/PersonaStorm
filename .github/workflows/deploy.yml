@@ -66,9 +66,9 @@ jobs:
 
       - name: Build web app
         working-directory: apps/web
-        env:
-          # Build-time fallback only. Set the real production value in Vercel.
-          NEXT_PUBLIC_API_BASE: https://api.example.com
+        # No backend URL needed at build time — the browser never talks to the
+        # FastAPI backend directly. BACKEND_API_BASE is read server-side, at
+        # request time, by the /api/backend proxy route (apps/web/app/api/backend).
         run: npm run build
 
   # Deploys Supabase migrations to the PRODUCTION database. Runs only on a push
@@ -187,6 +187,35 @@ jobs:
           EOF
           echo "Linked Vercel project in apps/web/.vercel/project.json"
 
+      # GitHub Actions secrets are the source of truth for Vercel's env, not the
+      # Vercel dashboard — this pushes them in on every deploy so the dashboard
+      # never silently drifts out of sync (or starts out empty). BACKEND_API_BASE
+      # is optional for previews: skip it quietly if unset rather than failing
+      # the whole preview deploy — storm/billing/admin just show a clear
+      # "not configured" state until a backend exists.
+      - name: Sync Vercel environment variables (preview)
+        working-directory: apps/web
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          BACKEND_API_BASE: ${{ secrets.BACKEND_API_BASE }}
+        run: |
+          set -eu
+          sync_env() {
+            name="$1"; value="$2"
+            if [ -z "$value" ]; then
+              echo "  - $name: not set (GitHub secret missing) — skipping"
+              return 0
+            fi
+            vercel env rm "$name" preview --yes --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG >/dev/null 2>&1 || true
+            printf '%s' "$value" | vercel env add "$name" preview --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG >/dev/null
+            echo "  - $name: synced to Vercel (preview)"
+          }
+          echo "Syncing GitHub secrets into Vercel (preview environment):"
+          sync_env NEXT_PUBLIC_SUPABASE_URL "$NEXT_PUBLIC_SUPABASE_URL"
+          sync_env NEXT_PUBLIC_SUPABASE_ANON_KEY "$NEXT_PUBLIC_SUPABASE_ANON_KEY"
+          sync_env BACKEND_API_BASE "$BACKEND_API_BASE"
+
       - name: Pull Vercel preview environment
         working-directory: apps/web
         run: vercel pull --yes --environment=preview --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG
@@ -249,6 +278,45 @@ jobs:
             exit 1
           fi
 
+      # BACKEND_API_BASE is read server-side by the /api/backend proxy route,
+      # never baked into the browser bundle. Production deploys require it —
+      # without it every storm/billing/admin action would 503 in production
+      # with no way for the deployer to notice until a user hits it. Fail loud
+      # here instead. (Login/signup/dashboard don't need it — see
+      # docs/deployment.md if you intend to ship the frontend before the
+      # backend is deployed and want to bypass this gate.)
+      - name: Validate BACKEND_API_BASE (required for production)
+        env:
+          BACKEND_API_BASE: ${{ secrets.BACKEND_API_BASE }}
+        run: |
+          if [ -z "${BACKEND_API_BASE:-}" ]; then
+            echo "Missing required GitHub secret: BACKEND_API_BASE"
+            echo "Deploy apps/api first (see apps/api/README.md — Render or Railway), then set"
+            echo "BACKEND_API_BASE to the public FastAPI URL, e.g. https://personastorm-api.onrender.com"
+            exit 1
+          fi
+
+      # Login/signup/dashboard are Supabase-only, but they still need these two
+      # to actually authenticate — a production deploy without them ships a
+      # site where nobody can log in. Fail loud here rather than silently
+      # deploying a broken auth flow.
+      - name: Validate Supabase frontend secrets (required for production)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          missing=0
+          for name in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "Missing required GitHub secret: $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Set these from your Supabase project (Settings -> API). Anon key only — never the service role key."
+            exit 1
+          fi
+
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
@@ -269,27 +337,44 @@ jobs:
           EOF
           echo "Linked Vercel project in apps/web/.vercel/project.json"
 
+      # GitHub Actions secrets are the source of truth for Vercel's env, not the
+      # Vercel dashboard — this pushes them in on every deploy so the dashboard
+      # never silently drifts out of sync (or starts out empty, as it did before
+      # this step existed). Only these three ever get synced — see the "Never
+      # sync" list in docs/deployment.md for what must never appear here.
+      - name: Sync Vercel environment variables (production)
+        working-directory: apps/web
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          BACKEND_API_BASE: ${{ secrets.BACKEND_API_BASE }}
+        run: |
+          set -eu
+          sync_env() {
+            name="$1"; value="$2"
+            if [ -z "$value" ]; then
+              echo "  - $name: not set (GitHub secret missing) — skipping"
+              return 0
+            fi
+            vercel env rm "$name" production --yes --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG >/dev/null 2>&1 || true
+            printf '%s' "$value" | vercel env add "$name" production --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG >/dev/null
+            echo "  - $name: synced to Vercel (production)"
+          }
+          echo "Syncing GitHub secrets into Vercel (production environment):"
+          sync_env NEXT_PUBLIC_SUPABASE_URL "$NEXT_PUBLIC_SUPABASE_URL"
+          sync_env NEXT_PUBLIC_SUPABASE_ANON_KEY "$NEXT_PUBLIC_SUPABASE_ANON_KEY"
+          sync_env BACKEND_API_BASE "$BACKEND_API_BASE"
+
       - name: Pull Vercel production environment
         working-directory: apps/web
         run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG
 
       - name: Verify production build locally
         working-directory: apps/web
-        env:
-          NEXT_PUBLIC_API_BASE: ${{ secrets.NEXT_PUBLIC_API_BASE }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        # NEXT_PUBLIC_SUPABASE_* were already validated above and are now synced
+        # into Vercel; `vercel pull` just wrote them to .env.production.local,
+        # which `next build` loads automatically — no need to pass them here too.
         run: |
-          if [ -z "${NEXT_PUBLIC_API_BASE:-}" ]; then
-            echo "::warning title=NEXT_PUBLIC_API_BASE not set::The production frontend needs NEXT_PUBLIC_API_BASE pointing at your deployed FastAPI backend. Set it in Vercel (Settings -> Environment Variables) AND as the NEXT_PUBLIC_API_BASE GitHub secret. Without it the deployed app shows a 'Backend API is not configured' banner. Note: the actual Vercel build uses the value from 'vercel pull', so set it in Vercel too."
-          else
-            echo "NEXT_PUBLIC_API_BASE is set for the local verification build."
-          fi
-          if [ -z "${NEXT_PUBLIC_SUPABASE_URL:-}" ] || [ -z "${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}" ]; then
-            echo "::warning title=Supabase frontend env not set::Login/signup need NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY (anon key only — never the service role key). Set them in Vercel (Settings -> Environment Variables). The build still succeeds; the app just shows an 'auth not configured' notice until they are set."
-          else
-            echo "Supabase frontend env is set for the local verification build."
-          fi
           npm ci
           npm run build
 

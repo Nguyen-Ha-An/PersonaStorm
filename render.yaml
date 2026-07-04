@@ -1,0 +1,53 @@
+# Render Blueprint for the PersonaStorm FastAPI backend (apps/api).
+#
+# Deploy: Render dashboard -> New -> Blueprint -> point at this repo.
+# Render reads this file and creates the service below automatically.
+#
+# IMPORTANT: no secret VALUES live in this file (see `sync: false` below —
+# that tells Render to prompt for the value in the dashboard instead of
+# storing it here). Set actual values in the Render dashboard after the
+# first deploy: Service -> Environment.
+#
+# This does not replace docs/deployment.md — see it for the full picture
+# (Vercel frontend + this backend + Supabase).
+
+services:
+  - type: web
+    name: personastorm-api
+    runtime: python
+    rootDir: apps/api
+    plan: free # change in the Render dashboard if you need more resources
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      # Mock mode by default — runs fully offline, no LLM keys required.
+      # Switch to "nvidia" once NVIDIA_API_KEY is set below.
+      - key: INFERENCE_PROVIDER
+        value: mock
+      - key: ANALYST_PROVIDER
+        value: mock
+      # Hardens auth: refuses unverified tokens once SUPABASE_JWT_SECRET is set.
+      - key: API_ENV
+        value: prod
+      # --- Supabase (auth + database) — set real values in the dashboard ---
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      # --- CORS — set to your deployed Vercel domain(s) ---
+      - key: CORS_ORIGINS
+        sync: false
+      # --- Optional: only needed if using a real LLM provider instead of mock ---
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: NVIDIA_BASE_URL
+        value: https://integrate.api.nvidia.com/v1
+      - key: NVIDIA_MODEL
+        value: z-ai/glm-5.2

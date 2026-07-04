@@ -32,6 +32,7 @@ def _wait_for_report(client, storm_id, timeout_s=30.0):
 def test_health(client):
     data = client.get("/api/health").json()
     assert data["status"] == "ok"
+    assert data["service"] == "personastorm-api"
     assert data["inference_provider"] == "mock"
 
 

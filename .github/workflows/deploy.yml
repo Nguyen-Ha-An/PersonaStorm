@@ -75,7 +75,7 @@ jobs:
     name: Deploy Supabase migrations
     runs-on: ubuntu-latest
     needs: [api-tests, web-build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     environment: production
 
     env:
@@ -130,7 +130,7 @@ jobs:
     name: Deploy web to Vercel
     runs-on: ubuntu-latest
     needs: [api-tests, web-build, supabase-deploy]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     environment: production
 
     env:

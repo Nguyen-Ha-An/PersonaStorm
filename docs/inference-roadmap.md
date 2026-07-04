@@ -1,31 +1,56 @@
-# Inference roadmap: mock → Fireworks → vLLM on AMD MI300X
+# Inference roadmap: mock → NVIDIA NIM GLM-5.2 → vLLM on AMD MI300X
 
-Everything below is a **provider swap**, not a rewrite. The storm runner,
-schemas, quality system, and UI are identical across all stages — that is the
-point of `PersonaInferenceProvider` (services/inference/base.py).
+PersonaStorm has **two independent LLM swap points**, each a pure `.env`
+change, not a rewrite:
+
+1. **Persona reaction swarm** — `INFERENCE_PROVIDER=mock|nvidia|vllm`
+   (`services/inference/`, `PersonaInferenceProvider`). Generates the 1,000
+   individual persona reactions.
+2. **Analyst/report engine** — `ANALYST_PROVIDER=mock|nvidia`
+   (`services/analyst/`, `AnalystProvider`). One call per storm; re-narrates
+   the executive summary, recommendations, top-objection labels, and kill
+   quote from aggregates the deterministic engine already computed. Numbers
+   stay Python-computed (architecture honesty rule) — the analyst never
+   invents `market_fit_score` or any count.
+
+The storm runner, schemas, quality system, and UI are identical across every
+combination of the two knobs below.
 
 ## Stage 0 — Mock (shipped, default)
 
-Deterministic trait-driven engine. Zero GPU, zero network, reproducible demos.
-Also the permanent **fallback + CI provider**: tests and the eval harness run
-against it forever, so pipeline regressions never need a GPU to catch.
+Deterministic trait-driven reaction engine (`INFERENCE_PROVIDER=mock`) plus
+the local deterministic report builder (`ANALYST_PROVIDER=mock`, which simply
+returns the report builder's own text unchanged — see `mock_analyst.py`).
+Zero GPU, zero network, reproducible demos. Also the permanent **fallback +
+CI provider**: tests and the eval harness run against it forever, so
+pipeline regressions never need a GPU or an API key to catch.
 
-## Stage 1 — Fireworks-hosted Gemma (structured placeholder shipped)
+## Stage 1 — NVIDIA NIM GLM-5.2 (shipped)
 
-Two distinct roles:
+A single, OpenAI-compatible `NvidiaProvider` / `NvidiaAnalyst` pair targets
+**NVIDIA Build / NVIDIA NIM** — either the hosted `build.nvidia.com` catalog
+(`https://integrate.api.nvidia.com/v1`) or a self-hosted NIM container. Both
+roles share the same model family, `z-ai/glm-5.2`:
 
-1. **Analyst/aggregator agent (Gemma 27B)** — first real-LLM milestone.
-   Takes the Python-computed aggregates (counts, clusters, curve) and writes
-   the executive summary, segment insights, and recommendation phrasing.
-   Numbers stay Python-computed (architecture honesty rule). Low volume
-   (1 call/storm), high value, trivial cost.
-2. **Swarm on Fireworks** — for zero-GPU environments, run the whole persona
-   swarm through `FireworksProvider`. 1,000 short completions/storm; watch
-   rate limits; set `STORM_MAX_CONCURRENCY` ≈ 8–16.
+1. **Analyst/report agent** (`ANALYST_PROVIDER=nvidia`,
+   `services/analyst/nvidia_analyst.py`) — the first real-LLM milestone.
+   Takes the Python-computed aggregates (counts, clusters, curve) and
+   rewrites the executive summary, recommendations, top-objection labels,
+   and kill quote. Numbers stay Python-computed. Low volume (1 call/storm),
+   high value, trivial cost. On any failure (missing key, network error,
+   invalid JSON) it logs server-side (no secrets) and falls back to the
+   original deterministic report text, plus a note appended to
+   `quality.notes` — `enhance_report` never raises, so a storm can never
+   crash because of the analyst.
+2. **Reaction swarm on NVIDIA NIM** (`INFERENCE_PROVIDER=nvidia`,
+   `services/inference/nvidia_provider.py`) — for zero-GPU environments, run
+   the whole persona swarm through the same NIM endpoint. 1,000 short
+   completions/storm; watch rate limits; set `STORM_MAX_CONCURRENCY` ≈ 8–16.
 
-Both roles share one prompt/schema contract (`services/inference/prompts.py`):
-the system prompt tells the model to react AS the persona, evaluated through
-the full 17-criterion + age-overlay schema, and to output only
+Both roles share one prompt/schema contract
+(`services/inference/prompts.py`, `services/analyst/prompts.py`): the
+reaction system prompt tells the model to react AS the persona, evaluated
+through the full 17-criterion + age-overlay schema, and to output only
 `REACTION_JSON_SCHEMA` — criteria scores, qualitative fields, and a
 decision-lite block (`buy_likelihood`, `max_price`,
 `recommended_pricing_model`). The model **never** returns `market_fit_score`
@@ -34,25 +59,34 @@ or `status`; `parse_llm_reaction` always recomputes both server-side via
 [criteria-system.md](criteria-system.md) §5) — so swapping to a live LLM
 changes reaction quality, never the scoring honesty guarantee.
 
-Activation: `.env` → `INFERENCE_PROVIDER=fireworks`, `FIREWORKS_API_KEY=…`.
-Remaining work: live-key smoke test, retry/backoff on 429, usage metering
-(TODOs marked in fireworks_provider.py).
+Config (`apps/api/app/config.py`, see `.env.example`):
 
-## Stage 1b — NVIDIA NIM (structured placeholder shipped)
+```bash
+INFERENCE_PROVIDER=nvidia   # and/or ANALYST_PROVIDER=nvidia
+NVIDIA_API_KEY=nvapi-...            # from build.nvidia.com
+NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
+NVIDIA_MODEL=z-ai/glm-5.2
+NVIDIA_USE_GUIDED_JSON=true  # nvext.guided_json; false -> json_object mode
+NVIDIA_MAX_TOKENS=2048       # per-persona reaction budget
+ANALYST_MAX_TOKENS=4096      # larger budget for report narration
+```
 
-A fourth, OpenAI-compatible provider (`NIMProvider`) targets NVIDIA NIM —
-either the hosted `build.nvidia.com` catalog or a self-hosted NIM container.
-Same `PersonaInferenceProvider` interface, same criteria-aware prompts and
-`REACTION_JSON_SCHEMA`, same server-side `compute_market_fit` recompute.
-Activation: `INFERENCE_PROVIDER=nim`, `NIM_API_KEY=…` (hosted) or
-`NIM_BASE_URL=http://<host>:8000/v1` (self-hosted, key usually not needed),
-`NIM_MODEL` (default `z-ai/glm-5.2`, a reasoning model — `NIM_MAX_TOKENS`
-leaves headroom for reasoning tokens ahead of the JSON payload).
-`NIM_USE_GUIDED_JSON=true` requests strict JSON via `nvext.guided_json`;
-set `false` to fall back to `response_format=json_object` if an
-endpoint/model rejects the NIM extension. Not part of the original design
-spec's two-provider roadmap, but shipped alongside Fireworks/vLLM since it's
-the same swap point and useful for AMD/NVIDIA-agnostic demos.
+`NVIDIA_USE_GUIDED_JSON=true` requests strict JSON via `nvext.guided_json`
+for the reaction swarm; set `false` to fall back to
+`response_format=json_object` if an endpoint/model rejects the NIM
+extension. GLM-5.2 is a reasoning model — reasoning tokens count against
+`NVIDIA_MAX_TOKENS`/`ANALYST_MAX_TOKENS`, so both budgets leave headroom
+ahead of the JSON payload; the analyst gets a larger budget since report
+narration is longer than a single persona reaction.
+
+Self-hosted: point `NVIDIA_BASE_URL` at a NIM container's own `/v1`
+endpoint (`http://<host>:8000/v1`); `NVIDIA_API_KEY` is usually not needed
+in that case.
+
+*Legacy note: an earlier iteration of this roadmap used Fireworks-hosted
+Gemma 27B as the analyst/swarm model. Fireworks has been removed in favor of
+NVIDIA NIM GLM-5.2 as the primary non-mock path; nothing above depends on
+Fireworks.*
 
 ## Stage 2 — vLLM on AMD MI300X / ROCm (target architecture)
 
@@ -100,16 +134,18 @@ VLLM_MODEL=google/gemma-3-27b-it
 3. Prefix-cache hit rate with 1,000 shared-stimulus prompts.
 4. LoRA adapter hot-swap latency (`--enable-lora`, see training roadmap).
 
-## Stage 3 — Calibrated persona LoRA on the same stack
+## Stage 3 — Optional future LoRA persona model on the same stack
 
 After training (training-roadmap.md), serving changes by one flag:
 
 ```bash
 vllm serve google/gemma-3-27b-it --enable-lora \
-  --lora-modules persona-v1=/adapters/persona-v1
-# .env: VLLM_MODEL=persona-v1
+  --lora-modules gemma-persona-reaction=/adapters/persona-v1
+# .env: VLLM_MODEL=gemma-persona-reaction
 ```
 
 Optional per-segment adapters (`persona-sea-genz-v1`, …) are selected per
 request by passing the adapter name as `model` — a 5-line change isolated to
-`VLLMProvider.react`.
+`VLLMProvider.react`. The analyst engine (NVIDIA NIM GLM-5.2) is unaffected
+by this stage — it stays on `ANALYST_PROVIDER=nvidia` regardless of which
+model serves the reaction swarm.

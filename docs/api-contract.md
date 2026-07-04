@@ -176,3 +176,34 @@ Field notes:
 { "status": "ok", "version": "0.1.0", "inference_provider": "mock",
   "active_storms": 0, "time": "…" }
 ```
+
+`inference_provider` reflects `INFERENCE_PROVIDER` (the persona reaction
+swarm's provider name). `ANALYST_PROVIDER` is a separate knob (see below) and
+is not currently surfaced on this endpoint.
+
+## Environment / config
+
+Two independent env vars select the two LLM swap points (`apps/api/app/config.py`,
+`.env.example`):
+
+- **`INFERENCE_PROVIDER`** = `mock` \| `nvidia` \| `vllm` — the persona
+  reaction engine that generates the 1,000 individual reactions
+  (`services/inference/`).
+- **`ANALYST_PROVIDER`** = `mock` \| `nvidia` — the report/analyst model
+  that re-narrates the executive summary, recommendations, top-objection
+  labels, and kill quote from the already-computed aggregates
+  (`services/analyst/`). It never changes a number.
+
+Both default to `mock`, so the app runs fully offline with no key. When
+`ANALYST_PROVIDER=nvidia`, `NVIDIA_API_KEY`/`NVIDIA_BASE_URL`/`NVIDIA_MODEL`
+configure the call (NVIDIA NIM GLM-5.2, OpenAI-compatible,
+`https://integrate.api.nvidia.com/v1` by default). **Graceful fallback:** if
+the NVIDIA analyst is unreachable or misconfigured (missing key, network
+error, invalid JSON response), `enhance_report` never raises — it logs the
+failure server-side (no secrets) and returns the original deterministic
+report unchanged. The report response shape is **unchanged** by this
+fallback (the analyst only re-narrates existing text fields, never adds new
+report fields), but you will see an extra line appended to
+`quality.notes` describing the analyst's outcome — e.g. `"Report narrated by
+NVIDIA GLM-5.2 analyst."` on success, or `"NVIDIA analyst unavailable —
+local report builder used."` if it fell back.

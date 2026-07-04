@@ -59,11 +59,17 @@ with near-zero parent approval), then clamps to `[0,1]` — that's the
 ```
 input → parser → category classifier → persona space builder (1,000 personas,
       life_stage + decision_context) → diversity validator → criteria preset
-      selection → multi-criteria reaction engine (mock | Fireworks | vLLM | NIM)
+      selection → multi-criteria reaction engine (mock | nvidia | vLLM)
       → market-fit scoring (compute_market_fit) → SSE stream → quality /
       collapse / consistency check → segment + age-cohort + criteria
-      aggregation → weakness diagnosis → report + trust panel
+      aggregation → weakness diagnosis → analyst re-narration (mock | nvidia)
+      → report + trust panel
 ```
+
+Two independent engines, two separate `.env` knobs: the **reaction
+provider** (`INFERENCE_PROVIDER`) generates the 1,000 persona reactions; the
+**analyst model** (`ANALYST_PROVIDER`) summarizes and diagnoses that swarm
+output afterward — it re-narrates text only and never invents a number.
 
 One calibrated model + 1,000 persona *profiles* — not 1,000 models. Personas
 are data; the model has one trained skill: react consistently as the persona
@@ -116,38 +122,55 @@ docker compose up --build   # web :3000, api :8000
 
 ## Environment variables
 
-Copy `.env.example` → `.env`. Everything defaults to a working mock setup.
+Copy `.env.example` → `.env`. Everything defaults to a working mock setup —
+`INFERENCE_PROVIDER=mock` + `ANALYST_PROVIDER=mock` runs fully offline, no
+key needed.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `INFERENCE_PROVIDER` | `mock` | `mock` \| `fireworks` \| `vllm` \| `nim` |
-| `FIREWORKS_API_KEY` | — | required for `fireworks` |
-| `FIREWORKS_MODEL` | `accounts/fireworks/models/gemma-3-27b-it` | hosted Gemma analyst/swarm model |
+| `INFERENCE_PROVIDER` | `mock` | reaction engine for the 1,000-persona swarm: `mock` \| `nvidia` \| `vllm` |
+| `ANALYST_PROVIDER` | `mock` | report/analyst model: `mock` (local deterministic builder) \| `nvidia` (GLM-5.2) |
+| `NVIDIA_API_KEY` | — | required for the hosted NVIDIA endpoint (get an `nvapi-` key at [build.nvidia.com](https://build.nvidia.com)) |
+| `NVIDIA_BASE_URL` | `https://integrate.api.nvidia.com/v1` | NVIDIA NIM (hosted or self-hosted, OpenAI-compatible) |
+| `NVIDIA_MODEL` | `z-ai/glm-5.2` | used by both the `nvidia` reaction provider and the `nvidia` analyst |
+| `NVIDIA_MAX_TOKENS` / `ANALYST_MAX_TOKENS` | `2048` / `4096` | per-persona reaction budget / larger analyst-report budget |
 | `VLLM_BASE_URL` | `http://localhost:8001/v1` | OpenAI-compatible vLLM (AMD MI300X target) |
 | `VLLM_MODEL` | `google/gemma-3-27b-it` | model or LoRA adapter name |
-| `NIM_BASE_URL` | `https://integrate.api.nvidia.com/v1` | NVIDIA NIM (hosted or self-hosted, OpenAI-compatible) |
-| `NIM_API_KEY` / `NIM_MODEL` | — / `z-ai/glm-5.2` | NIM auth + model |
 | `STORM_BATCH_SIZE` / `STORM_BATCH_INTERVAL_MS` | `25` / `350` | demo pacing (mock only) |
 | `PERSONA_SEED` | `1337` | reproducible storms |
 | `NEXT_PUBLIC_API_BASE` | `http://localhost:8000` | frontend → API origin |
 
-## Switching inference providers
+## Switching providers
+
+Two independent knobs — the reaction swarm and the analyst/report model:
 
 ```bash
-INFERENCE_PROVIDER=mock       # deterministic local engine (default, CI, demos)
-INFERENCE_PROVIDER=fireworks  # Fireworks-hosted Gemma (needs FIREWORKS_API_KEY)
-INFERENCE_PROVIDER=vllm       # any OpenAI-compatible vLLM server (MI300X/ROCm target)
-INFERENCE_PROVIDER=nim        # NVIDIA NIM, hosted or self-hosted (OpenAI-compatible)
+INFERENCE_PROVIDER=mock    # deterministic local reaction engine (default, CI, demos)
+INFERENCE_PROVIDER=nvidia  # NVIDIA NIM GLM-5.2 reaction swarm (needs NVIDIA_API_KEY)
+INFERENCE_PROVIDER=vllm    # any OpenAI-compatible vLLM server (MI300X/ROCm target)
+
+ANALYST_PROVIDER=mock      # local deterministic report builder's own text (default)
+ANALYST_PROVIDER=nvidia    # NVIDIA NIM GLM-5.2 re-narrates the report (needs NVIDIA_API_KEY)
 ```
 
-No code changes — the swap point is `apps/api/app/services/inference/`
-(`PersonaInferenceProvider`). Providers **fail gracefully** when
-unconfigured (`ProviderNotConfiguredError`) rather than crashing the storm.
-On every path — mock or LLM — `market_fit_score` is always recomputed
-server-side by `compute_market_fit`; it is never a value the model invents.
-MI300X serving commands and the batching plan:
-[docs/inference-roadmap.md](docs/inference-roadmap.md). LoRA calibration
-plan: [docs/training-roadmap.md](docs/training-roadmap.md).
+Three practical combos: **mock + mock** (fully offline demo/CI), **mock
+swarm + nvidia analyst** (fast local swarm, one real-LLM call for report
+polish), and **vllm swarm + nvidia analyst** (future AMD MI300X-hosted
+swarm plus the GLM-5.2 analyst).
+
+No code changes for either knob — the swap points are
+`apps/api/app/services/inference/` (`PersonaInferenceProvider`) and
+`apps/api/app/services/analyst/` (`AnalystProvider`). Both **fail
+gracefully** when unconfigured: the reaction provider raises
+`ProviderNotConfiguredError` at startup rather than mid-storm, and the
+analyst factory catches that error and falls back to the mock analyst (local
+report text) with a clear server log if `ANALYST_PROVIDER=nvidia` but
+`NVIDIA_API_KEY` is missing or the call fails. On every path — mock or
+LLM — `market_fit_score` is always recomputed server-side by
+`compute_market_fit`; it is never a value a model invents, and the analyst
+only ever re-narrates text fields, never numbers. MI300X serving commands
+and the batching plan: [docs/inference-roadmap.md](docs/inference-roadmap.md).
+LoRA calibration plan: [docs/training-roadmap.md](docs/training-roadmap.md).
 
 ### Why one calibrated model + 1,000 persona profiles, not 1,000 models
 
@@ -203,12 +226,14 @@ curve, kill-quote selection, recommendations, `next_human_validation`, the
 full Market Evaluation Dashboard UI (live grid + report), tests, Docker, JSON
 persistence.
 
-**Structured placeholders (marked with TODOs):** `FireworksProvider`,
-`VLLMProvider`, and `NIMProvider` (plumbing + prompts + guided-JSON schema
-ready; needs a live key / MI300X or NIM endpoint to test end-to-end), a
-future LoRA-calibrated persona model (see
+**Structured placeholders (marked with TODOs):** `VLLMProvider` (plumbing +
+prompts + guided-JSON schema ready; needs a live MI300X/vLLM endpoint to test
+end-to-end), a future LoRA-calibrated persona model (see
 [docs/training-roadmap.md](docs/training-roadmap.md)), real benchmark
-calibration data (shipped samples are labeled illustrative).
+calibration data (shipped samples are labeled illustrative). `NvidiaProvider`
+(reaction swarm) and `NvidiaAnalyst` (report narration) are implemented
+against NVIDIA NIM GLM-5.2 and fall back gracefully without a live key, but
+have not been exercised against a live key in this environment.
 
 ## License / hackathon note
 

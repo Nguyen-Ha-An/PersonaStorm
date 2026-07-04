@@ -86,7 +86,7 @@ bottom.
 
 > "Under the hood: one calibrated model, persona-conditioned across a
 > 17-criterion schema — not a thousand models. Today it runs on a
-> deterministic local engine; the same interface swaps to Gemma on Fireworks
+> deterministic local engine; the same interface swaps to NVIDIA NIM GLM-5.2
 > or vLLM on an AMD MI300X, where 192 GB of HBM3 runs the whole 27B swarm on
 > one GPU. But the headline isn't the score — it's this: PersonaStorm doesn't
 > replace research. **It tells you what to validate with real humans next.**

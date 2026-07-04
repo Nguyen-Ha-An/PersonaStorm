@@ -13,5 +13,6 @@ contract as OpenAPI at `http://localhost:8000/docs` (auto-generated from the
 Pydantic models), which is the fastest way to check the current truth.
 
 `reaction.schema.json` (minus server-filled fields) is also handed to vLLM
-guided decoding / Fireworks `response_format` so real models are constrained
-to schema-valid output — see `apps/api/app/services/inference/prompts.py`.
+guided decoding / NVIDIA NIM `nvext.guided_json` (or `response_format`) so
+real models are constrained to schema-valid output — see
+`apps/api/app/services/inference/prompts.py`.

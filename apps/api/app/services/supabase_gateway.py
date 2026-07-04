@@ -205,8 +205,17 @@ class InMemorySupabaseGateway:
             if new_balance < 0:
                 raise InsufficientCreditsError(balance=balance, needed=-amount)
             wallet["balance_credits"] = new_balance
+            # Mirror adjust_wallet_balance(): a charge adds to lifetime_spent, a
+            # refund reverses it. Floor at 0. (Kept in sync with the SQL RPC.)
             if amount < 0:
-                wallet["lifetime_spent_credits"] += -amount
+                spent_delta = -amount
+            elif transaction_type == "refund":
+                spent_delta = -amount
+            else:
+                spent_delta = 0
+            wallet["lifetime_spent_credits"] = max(
+                0, wallet["lifetime_spent_credits"] + spent_delta
+            )
             wallet["updated_at"] = _now()
             self._transactions.append(
                 {
@@ -350,9 +359,12 @@ class HttpSupabaseGateway:
         await self._client.aclose()
 
     async def _get(self, path: str, params: dict[str, Any]) -> list[dict[str, Any]]:
-        resp = await self._client.get(
-            f"{self._rest}/{path}", params=params, headers=self._headers()
-        )
+        try:
+            resp = await self._client.get(
+                f"{self._rest}/{path}", params=params, headers=self._headers()
+            )
+        except httpx.HTTPError as exc:  # connect/read/timeout — treat as backend down
+            raise SupabaseError(f"GET {path} transport error: {exc}") from exc
         if resp.status_code >= 300:
             raise SupabaseError(f"GET {path} -> {resp.status_code}: {resp.text}")
         return resp.json()
@@ -361,13 +373,16 @@ class HttpSupabaseGateway:
         self, method: str, path: str, *, params: dict[str, Any] | None = None,
         json: Any = None, prefer: str = "return=representation",
     ) -> list[dict[str, Any]]:
-        resp = await self._client.request(
-            method,
-            f"{self._rest}/{path}",
-            params=params,
-            json=json,
-            headers=self._headers({"Prefer": prefer}),
-        )
+        try:
+            resp = await self._client.request(
+                method,
+                f"{self._rest}/{path}",
+                params=params,
+                json=json,
+                headers=self._headers({"Prefer": prefer}),
+            )
+        except httpx.HTTPError as exc:
+            raise SupabaseError(f"{method} {path} transport error: {exc}") from exc
         if resp.status_code >= 300:
             raise SupabaseError(f"{method} {path} -> {resp.status_code}: {resp.text}")
         if resp.status_code == 204 or not resp.content:
@@ -436,18 +451,24 @@ class HttpSupabaseGateway:
         storm_id: str | None = None,
         actor_user_id: str | None = None,
     ) -> int:
-        resp = await self._client.post(
-            f"{self._rest}/rpc/adjust_wallet_balance",
-            headers=self._headers(),
-            json={
-                "target_user_id": user_id,
-                "amount": amount,
-                "transaction_type": transaction_type,
-                "description": description,
-                "storm_id": storm_id,
-                "actor_user_id": actor_user_id,
-            },
-        )
+        try:
+            resp = await self._client.post(
+                f"{self._rest}/rpc/adjust_wallet_balance",
+                headers=self._headers(),
+                json={
+                    "target_user_id": user_id,
+                    "amount": amount,
+                    "transaction_type": transaction_type,
+                    "description": description,
+                    "storm_id": storm_id,
+                    "actor_user_id": actor_user_id,
+                },
+            )
+        except httpx.HTTPError as exc:
+            # Ambiguous outcome: the deduction MAY have committed server-side. We
+            # surface it as SupabaseError (-> 502) so the caller does not treat a
+            # transport failure as a definitive charge or a definitive no-charge.
+            raise SupabaseError(f"adjust_wallet_balance transport error: {exc}") from exc
         if resp.status_code >= 300:
             body = resp.text
             if "insufficient_credits" in body:
@@ -583,11 +604,14 @@ class HttpSupabaseGateway:
         return storms
 
     async def count_admins(self) -> int:
-        resp = await self._client.get(
-            f"{self._rest}/profiles",
-            params={"role": "eq.admin", "select": "id"},
-            headers=self._headers({"Prefer": "count=exact"}),
-        )
+        try:
+            resp = await self._client.get(
+                f"{self._rest}/profiles",
+                params={"role": "eq.admin", "select": "id"},
+                headers=self._headers({"Prefer": "count=exact"}),
+            )
+        except httpx.HTTPError as exc:
+            raise SupabaseError(f"count_admins transport error: {exc}") from exc
         if resp.status_code >= 300:
             raise SupabaseError(f"count_admins -> {resp.status_code}: {resp.text}")
         # Content-Range: 0-4/5  -> total after the slash

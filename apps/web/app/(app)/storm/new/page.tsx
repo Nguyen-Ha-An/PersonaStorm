@@ -69,18 +69,28 @@ export default function NewStormPage() {
   const canRun = stimulusOk && customOk && affordable && !submitting;
 
   // Live price preview — re-quote whenever the persona count changes (debounced).
+  // A monotonically increasing seq guards against out-of-order responses so a
+  // slow earlier request can't overwrite the price for the current count.
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const quoteSeq = useRef(0);
   useEffect(() => {
     setQuoteLoading(true);
     if (debounce.current) clearTimeout(debounce.current);
+    const seq = ++quoteSeq.current;
     debounce.current = setTimeout(() => {
       getQuote({ persona_count: count, include_analyst_report: true })
         .then((q) => {
+          if (seq !== quoteSeq.current) return; // stale response — ignore
           setQuote(q);
           setQuoteError(null);
         })
-        .catch((e) => setQuoteError(e instanceof Error ? e.message : "Could not price this run."))
-        .finally(() => setQuoteLoading(false));
+        .catch((e) => {
+          if (seq !== quoteSeq.current) return;
+          setQuoteError(e instanceof Error ? e.message : "Could not price this run.");
+        })
+        .finally(() => {
+          if (seq === quoteSeq.current) setQuoteLoading(false);
+        });
     }, 250);
     return () => {
       if (debounce.current) clearTimeout(debounce.current);

@@ -61,7 +61,9 @@ create table if not exists public.wallet_transactions (
   balance_after integer not null,
   description text,
   storm_id text,
-  created_by uuid references auth.users(id),
+  -- SET NULL (not the default NO ACTION): deleting the acting admin/user must
+  -- not be blocked by, nor cascade-delete, an audit row it merely stamped.
+  created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
@@ -271,9 +273,21 @@ begin
       using errcode = 'check_violation';
   end if;
 
+  -- lifetime_spent tracks NET credits actually consumed: a charge (amount < 0)
+  -- adds to it, and a refund (positive 'refund' txn) reverses the corresponding
+  -- charge so it must subtract. Floor at 0 so it can never go negative.
   update public.wallets
   set balance_credits = v_new_balance,
-      lifetime_spent_credits = lifetime_spent_credits + (case when amount < 0 then -amount else 0 end)
+      lifetime_spent_credits = greatest(
+        0,
+        lifetime_spent_credits + (
+          case
+            when amount < 0 then -amount
+            when transaction_type = 'refund' then -amount
+            else 0
+          end
+        )
+      )
   where id = v_wallet_id;
 
   insert into public.wallet_transactions

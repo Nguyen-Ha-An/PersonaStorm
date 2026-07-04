@@ -49,9 +49,15 @@ def _extract_token(request: Request) -> str | None:
     auth = request.headers.get("authorization") or request.headers.get("Authorization")
     if auth and auth.lower().startswith("bearer "):
         return auth[7:].strip()
-    # SSE / EventSource can't set headers — accept the token as a query param.
-    token = request.query_params.get("access_token")
-    return token.strip() if token else None
+    # SSE / EventSource can't set headers — accept the token as a query param,
+    # but ONLY on the stream endpoint. A token that leaks into a reverse-proxy
+    # access log / browser history / Referer via the stream URL must not be
+    # replayable against any other endpoint, so we refuse query-string tokens
+    # everywhere else and require the Authorization header there.
+    if request.url.path.endswith("/stream"):
+        token = request.query_params.get("access_token")
+        return token.strip() if token else None
+    return None
 
 
 def _decode_token(token: str, settings: Settings) -> dict:
@@ -72,14 +78,22 @@ def _decode_token(token: str, settings: Settings) -> dict:
                 detail="Invalid or expired session token.",
             ) from exc
 
-    # No secret configured.
-    if settings.api_env == "prod":
-        logger.error("SUPABASE_JWT_SECRET is not set in prod — refusing to accept tokens.")
+    # No JWT secret configured. The unverified dev fallback below is only safe
+    # when we are NOT talking to a real Supabase (in-memory gateway) AND not in
+    # prod. If real Supabase creds are present, accepting an unverified token
+    # would let anyone forge `sub` and read another user's authoritative role
+    # from the live DB — so we refuse. This decouples the fallback from a single
+    # easy-to-miss flag (API_ENV) and fails safe on a misconfigured deploy.
+    if settings.api_env == "prod" or settings.supabase_configured:
+        logger.error(
+            "SUPABASE_JWT_SECRET is not set but auth is required "
+            "(supabase configured or prod) — refusing to accept tokens."
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Auth is not configured on the server (missing SUPABASE_JWT_SECRET).",
         )
-    # Dev fallback: decode without verifying the signature.
+    # Dev fallback (in-memory gateway, non-prod only): decode without verifying.
     try:
         return jwt.decode(token, options={"verify_signature": False, "verify_aud": False})
     except jwt.PyJWTError as exc:

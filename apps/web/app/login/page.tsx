@@ -19,7 +19,14 @@ export default function LoginPage() {
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params?.get("next") || "/dashboard";
+  // Only honor a same-origin path — never an absolute/protocol-relative URL —
+  // so `?next=https://evil.com` (or `//evil.com`, `/\evil.com`) can't turn the
+  // post-login redirect into an open redirect.
+  const rawNext = params?.get("next") ?? "";
+  const next =
+    rawNext.startsWith("/") && !rawNext.startsWith("//") && !rawNext.startsWith("/\\")
+      ? rawNext
+      : "/dashboard";
   const { session, loading, configured, signIn } = useAuth();
 
   const [email, setEmail] = useState("");

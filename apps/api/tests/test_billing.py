@@ -59,6 +59,26 @@ def test_wallet_cannot_go_negative():
     asyncio.run(run())
 
 
+def test_refund_reverses_lifetime_spent():
+    """A refund must not leave lifetime_spent inflated — net consumed credits
+    for a charged-then-refunded run is zero."""
+    gw = InMemorySupabaseGateway(starter_credits=100)
+
+    async def run():
+        await gw.ensure_and_get_profile("u1", "e@x", "n")
+        await gw.adjust_wallet("u1", -20, "storm_charge", storm_id="s1")
+        w = await gw.get_wallet("u1")
+        assert w["balance_credits"] == 80
+        assert w["lifetime_spent_credits"] == 20
+
+        await gw.adjust_wallet("u1", 20, "refund", storm_id="s1")
+        w = await gw.get_wallet("u1")
+        assert w["balance_credits"] == 100
+        assert w["lifetime_spent_credits"] == 0  # refund reversed the spend
+
+    asyncio.run(run())
+
+
 def test_concurrent_charges_never_oversell():
     """The FOR UPDATE lock (here an asyncio.Lock) must serialize charges so the
     balance never oversells under concurrency."""

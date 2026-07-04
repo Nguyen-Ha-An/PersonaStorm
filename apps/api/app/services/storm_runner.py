@@ -55,6 +55,7 @@ class StormRun:
 
         # live aggregates for progress events
         self.wtp_sum = 0.0
+        self.market_fit_sum = 0.0
         self.status_counts = {"green": 0, "yellow": 0, "red": 0}
         self._objection_counts: Counter[str] = Counter()
         self._objection_raw: dict[str, str] = {}
@@ -80,6 +81,7 @@ class StormRun:
         self.reactions.append(r)
         self.status_counts[r.status] += 1
         self.wtp_sum += r.max_price
+        self.market_fit_sum += r.market_fit_score
         if r.first_objection.strip():
             key = normalize_objection(r.first_objection)
             self._objection_counts[key] += 1
@@ -103,6 +105,7 @@ class StormRun:
             "yellow": self.status_counts["yellow"],
             "red": self.status_counts["red"],
             "avg_max_price": round(self.wtp_sum / done, 2) if done else 0.0,
+            "avg_market_fit": round(self.market_fit_sum / done, 3) if done else 0.0,
             "top_objection": self.top_objection(),
             "collapse_risk": self.collapse.level,
             "elapsed_ms": int((time.time() - self.created_at) * 1000),

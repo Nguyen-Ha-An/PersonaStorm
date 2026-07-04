@@ -69,6 +69,7 @@ export interface ProgressEvent {
   yellow: number;
   red: number;
   avg_max_price: number;
+  avg_market_fit: number;
   top_objection: string;
   collapse_risk: Level;
   elapsed_ms: number;

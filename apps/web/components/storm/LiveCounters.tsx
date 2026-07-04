@@ -55,6 +55,14 @@ export function LiveCounters({ progress, total }: { progress: ProgressEvent | nu
           </span>
         </div>
 
+        {/* live average market-fit score */}
+        <div className="flex items-center justify-between rounded-lg border border-storm-800 bg-storm-850 px-4 py-3">
+          <span className="text-xs uppercase tracking-wider text-storm-400">avg market-fit score</span>
+          <span className="font-mono text-lg font-bold text-signal-cyan">
+            {Math.round((p?.avg_market_fit ?? 0) * 100)}%
+          </span>
+        </div>
+
         {/* top objection */}
         <div className="rounded-lg border border-storm-800 bg-storm-850 px-4 py-3">
           <p className="mb-1 text-xs uppercase tracking-wider text-storm-400">top emerging objection</p>

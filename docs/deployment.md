@@ -12,6 +12,92 @@ The workflow is designed for the current monorepo layout:
 
 ---
 
+## SaaS layer: Supabase Auth, wallets, pricing & admin
+
+PersonaStorm is a dashboard SaaS: users sign up, get a credit wallet, pay
+credits per storm run, and admins manage users/wallets/pricing. This is backed
+by Supabase Auth + Postgres.
+
+### Data model (see `supabase/migrations/`)
+
+| Table | Purpose |
+|---|---|
+| `profiles` | one row per auth user; `role` is `user` or `admin` |
+| `wallets` | credit balance + lifetime spent, one per user |
+| `wallet_transactions` | immutable audit log; every balance change writes a row |
+| `storm_runs` | ownership + billing metadata per run (+ optional durable `report_json`) |
+| `pricing_rules` | the credit pricing formula, editable by admins |
+
+Key database objects: `is_admin()`, an `updated_at` trigger, a `handle_new_user`
+trigger that provisions `profiles` + `wallets` + **100 starter credits** on
+signup, and `adjust_wallet_balance(...)` — the single atomic, row-locking entry
+point for any balance change. **`EXECUTE` on `adjust_wallet_balance` is revoked
+from `anon`/`authenticated`** so only the backend (service role) can move
+credits; a browser client cannot credit itself.
+
+Pricing formula (default rule 10 / 5 / 5, analyst report included):
+
+```text
+total_credits = base_run_credits
+              + ceil(persona_count / 100) * credits_per_100_personas
+              + analyst_report_credits
+# 100 personas = 20, 250 = 30, 500 = 40, 1000 = 65
+```
+
+### One-time Supabase setup
+
+1. Create a Supabase project.
+2. Apply the migrations — either push from GitHub Actions (below) or locally:
+   ```bash
+   supabase link --project-ref <project-ref>
+   supabase db push
+   ```
+3. Create the first admin (see "How to create the first admin" below).
+
+### Backend environment variables (server-side only)
+
+Set these where the FastAPI backend runs (Render/Railway/Fly.io/VPS):
+
+| Variable | Required | Purpose |
+|---|---:|---|
+| `SUPABASE_URL` | yes | `https://<project-ref>.supabase.co` |
+| `SUPABASE_ANON_KEY` | yes | anon public key |
+| `SUPABASE_SERVICE_ROLE_KEY` | yes | **secret** — bypasses RLS; server-side only, never in frontend env |
+| `SUPABASE_JWT_SECRET` | yes | **secret** — HS256 secret to verify access tokens (Settings → API → JWT Secret) |
+| `API_ENV` | recommended | set to `prod` so the API refuses unverified tokens |
+| `CORS_ORIGINS` | yes | include your Vercel domain |
+
+> If the Supabase backend variables are unset, the API falls back to an
+> in-memory gateway and dev auth so it still boots and `pytest` runs — but
+> real login, billing, and persistence require them in production.
+
+### Frontend (Vercel) environment variables
+
+| Variable | Required | Purpose |
+|---|---:|---|
+| `NEXT_PUBLIC_API_BASE` | yes | deployed FastAPI backend origin |
+| `NEXT_PUBLIC_SUPABASE_URL` | yes | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Supabase **anon** key (never the service role key) |
+
+### How to create the first admin
+
+After migrations are applied, run the bootstrap script against your project
+using the **service role** key (server-side, in a trusted shell):
+
+```bash
+export SUPABASE_URL=https://<project-ref>.supabase.co
+export SUPABASE_SERVICE_ROLE_KEY=<service role key>
+export ADMIN_EMAIL=you@example.com
+export ADMIN_PASSWORD=<strong password>
+export ADMIN_FULL_NAME="PersonaStorm Admin"
+python scripts/create_admin_user.py
+```
+
+It creates the auth user (email pre-confirmed), sets `role = admin`, ensures a
+wallet, and grants 10000 credits. It is idempotent and never prints secrets.
+
+---
+
 ## What runs automatically
 
 ### Pull requests into `main`

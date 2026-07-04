@@ -191,11 +191,18 @@ jobs:
         working-directory: apps/web
         env:
           NEXT_PUBLIC_API_BASE: ${{ secrets.NEXT_PUBLIC_API_BASE }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
         run: |
           if [ -z "${NEXT_PUBLIC_API_BASE:-}" ]; then
             echo "::warning title=NEXT_PUBLIC_API_BASE not set::The production frontend needs NEXT_PUBLIC_API_BASE pointing at your deployed FastAPI backend. Set it in Vercel (Settings -> Environment Variables) AND as the NEXT_PUBLIC_API_BASE GitHub secret. Without it the deployed app shows a 'Backend API is not configured' banner. Note: the actual Vercel build uses the value from 'vercel pull', so set it in Vercel too."
           else
             echo "NEXT_PUBLIC_API_BASE is set for the local verification build."
+          fi
+          if [ -z "${NEXT_PUBLIC_SUPABASE_URL:-}" ] || [ -z "${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}" ]; then
+            echo "::warning title=Supabase frontend env not set::Login/signup need NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY (anon key only — never the service role key). Set them in Vercel (Settings -> Environment Variables). The build still succeeds; the app just shows an 'auth not configured' notice until they are set."
+          else
+            echo "Supabase frontend env is set for the local verification build."
           fi
           npm ci
           npm run build

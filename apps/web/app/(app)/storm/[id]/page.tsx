@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
-import { Button, Card, PageShell, StatusBadge } from "@/components/ui";
+import { useEffect, useState } from "react";
+import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import { Button, Card, StatusBadge } from "@/components/ui";
 import { ErrorState } from "@/components/feedback";
 import { PersonaGrid } from "@/components/storm/PersonaGrid";
 import { LiveCounters } from "@/components/storm/LiveCounters";
 import { QuoteFeed } from "@/components/storm/QuoteFeed";
+import { getStormMeta } from "@/lib/api";
 import { useStormStream } from "@/lib/useStormStream";
 
 export default function LiveStormPage() {
@@ -17,13 +19,12 @@ export default function LiveStormPage() {
 
   if (!stormId) {
     return (
-      <PageShell className="py-16">
+      <DashboardShell title="Live Storm">
         <ErrorState title="No storm selected" message="This URL is missing a storm ID." />
-      </PageShell>
+      </DashboardShell>
     );
   }
 
-  // Remounting on retry re-opens a fresh EventSource from scratch.
   return (
     <LiveStormView key={retryKey} stormId={stormId} onRetry={() => setRetryKey((k) => k + 1)} />
   );
@@ -31,8 +32,16 @@ export default function LiveStormPage() {
 
 function LiveStormView({ stormId, onRetry }: { stormId: string; onRetry: () => void }) {
   const s = useStormStream(stormId);
+  const [price, setPrice] = useState<number | null>(null);
   const done = s.progress?.completed ?? 0;
   const pct = s.total > 0 ? Math.round((done / s.total) * 100) : 0;
+
+  // One lightweight meta fetch for the "price paid" chip.
+  useEffect(() => {
+    getStormMeta(stormId)
+      .then((m) => setPrice(m.price_credits))
+      .catch(() => setPrice(null));
+  }, [stormId]);
 
   const badge = s.failed
     ? { tone: "red" as const, label: "error", pulse: false }
@@ -42,57 +51,43 @@ function LiveStormView({ stormId, onRetry }: { stormId: string; onRetry: () => v
         ? { tone: "cyan" as const, label: "streaming", pulse: true }
         : { tone: "yellow" as const, label: "connecting", pulse: true };
 
-  const heading = s.complete
-    ? "Storm complete"
-    : s.failed
-      ? "Storm failed"
-      : "Swarm reacting…";
+  const heading = s.complete ? "Storm complete" : s.failed ? "Storm failed" : "Swarm reacting…";
 
-  // Hard connection/config failure — the stream never came up.
+  const actions = (
+    <div className="flex items-center gap-2">
+      {price !== null && (
+        <span className="hidden rounded-lg border border-storm-800 bg-storm-900/70 px-2.5 py-1.5 font-mono text-[11px] text-storm-300 sm:inline-flex">
+          {price} credits paid
+        </span>
+      )}
+      <StatusBadge tone={badge.tone} pulse={badge.pulse}>
+        {badge.label}
+      </StatusBadge>
+      {s.complete && (
+        <Link href={`/storm/${stormId}/report`}>
+          <Button size="sm">View report →</Button>
+        </Link>
+      )}
+    </div>
+  );
+
   if (s.connectionError) {
     return (
-      <PageShell className="py-16">
+      <DashboardShell title="Live Storm" subtitle={stormId}>
         <ErrorState
           title="Can't connect to the storm stream"
           message={s.connectionError}
           detail={`API target: ${s.apiTarget}`}
           onRetry={onRetry}
+          homeHref="/storm/new"
           homeLabel="Start a new storm"
         />
-      </PageShell>
+      </DashboardShell>
     );
   }
 
   return (
-    <PageShell className="py-8">
-      {/* header */}
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate font-mono text-[11px] uppercase tracking-[0.2em] text-storm-400">
-            live storm · {stormId}
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight text-storm-100 sm:text-3xl">
-            {heading}
-          </h1>
-        </div>
-        <div className="flex items-center gap-3">
-          <StatusBadge tone={badge.tone} pulse={badge.pulse}>
-            {badge.label}
-          </StatusBadge>
-          {s.complete && (
-            <Link href={`/storm/${stormId}/report`}>
-              <Button>View full report →</Button>
-            </Link>
-          )}
-          <Link href="/">
-            <Button variant="outline" size="sm">
-              New storm
-            </Button>
-          </Link>
-        </div>
-      </div>
-
-      {/* prominent progress bar */}
+    <DashboardShell title={heading} subtitle={`live storm · ${stormId}`} actions={actions}>
       {!s.failed && (
         <div className="mb-6">
           <div className="mb-1.5 flex items-center justify-between font-mono text-[11px] text-storm-400">
@@ -115,8 +110,9 @@ function LiveStormView({ stormId, onRetry }: { stormId: string; onRetry: () => v
       {s.failed ? (
         <ErrorState
           title="The storm failed to finish"
-          message={s.failed}
+          message={`${s.failed} — the credits for this run have been refunded to your wallet.`}
           onRetry={onRetry}
+          homeHref="/storm/new"
           homeLabel="Start a new storm"
         />
       ) : (
@@ -165,6 +161,6 @@ function LiveStormView({ stormId, onRetry }: { stormId: string; onRetry: () => v
           </Link>
         </Card>
       )}
-    </PageShell>
+    </DashboardShell>
   );
 }

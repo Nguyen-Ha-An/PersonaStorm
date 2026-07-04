@@ -327,3 +327,44 @@ export function MetricCard({
 export function Skeleton({ className }: { className?: string }) {
   return <div className={clsx("skeleton rounded-lg", className)} />;
 }
+
+// ── Modal ─────────────────────────────────────────────────────────────────
+
+/** Lightweight centered dialog. Closes on backdrop click or Escape (caller
+ *  handles Escape if needed). Renders nothing when `open` is false. */
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  footer,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: ReactNode;
+  children: ReactNode;
+  footer?: ReactNode;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-storm-950/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-storm-700 bg-storm-900 shadow-card">
+        <div className="flex items-center justify-between border-b border-storm-800 px-5 py-3.5">
+          <h3 className="text-sm font-semibold text-storm-100">{title}</h3>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-md p-1 text-storm-400 transition hover:bg-storm-850 hover:text-storm-100"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+        <div className="p-5">{children}</div>
+        {footer ? <div className="flex justify-end gap-2 border-t border-storm-800 px-5 py-3.5">{footer}</div> : null}
+      </div>
+    </div>
+  );
+}

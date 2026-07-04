@@ -60,6 +60,22 @@ class Settings(BaseSettings):
     data_dir: Path = REPO_ROOT / "data"
     runs_dir: Path = REPO_ROOT / "data" / "runs"
 
+    # --- Supabase (auth + database) ------------------------------------------
+    # All optional so the API still boots (and the test suite runs) without a
+    # live Supabase. When these are unset the backend uses an in-memory gateway
+    # + in-memory auth so local development and CI work end-to-end; production
+    # MUST set them. See docs/deployment.md.
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+    supabase_service_role_key: str = ""
+    # HS256 secret used to verify Supabase-issued access tokens. Found in the
+    # Supabase dashboard under Project Settings -> API -> JWT Secret.
+    supabase_jwt_secret: str = ""
+    # Starter credits granted to a brand-new user. Kept in sync with the
+    # handle_new_user() SQL trigger (which is authoritative in production); this
+    # value is only used by the in-memory dev/test gateway.
+    starter_credits: int = 100
+
     # --- server --------------------------------------------------------------
     # Comma-separated exact origins allowed to call the API from a browser.
     # In production, add your deployed Vercel domain, e.g.
@@ -78,6 +94,11 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def supabase_configured(self) -> bool:
+        """True when we have enough to talk to a real Supabase project."""
+        return bool(self.supabase_url and self.supabase_service_role_key)
 
 
 @lru_cache

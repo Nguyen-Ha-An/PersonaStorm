@@ -16,6 +16,9 @@ npm-debug.log*
 .env.local
 .env*.local
 
+# Vercel CLI project link (orgId/projectId — output of local `vercel link`)
+.vercel/
+
 # storm run artifacts (regenerable)
 data/runs/*.json
 

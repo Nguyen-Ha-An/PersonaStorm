@@ -1,24 +1,43 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import clsx from "clsx";
-import { API_CONFIGURED, API_TARGET_LABEL } from "@/lib/api";
+import { checkBackendHealth, type BackendHealth } from "@/lib/api";
 import { SUPABASE_CONFIGURED } from "@/lib/supabase/client";
 
 /**
- * Compact health chip for the topbar: green when both the API origin and
- * Supabase are configured, amber otherwise. Purely informational — the real
- * errors surface where a call actually fails.
+ * Compact health chip for the topbar. The browser can no longer inspect
+ * whether the backend is configured at build time (BACKEND_API_BASE is a
+ * server-only secret), so this probes the same-origin health proxy once on
+ * mount. Purely informational — the real errors surface where an action
+ * actually fails.
  */
 export function ApiStatusBadge() {
-  const ok = API_CONFIGURED && SUPABASE_CONFIGURED;
-  const label = !API_CONFIGURED
-    ? "API not configured"
-    : !SUPABASE_CONFIGURED
-      ? "Auth not configured"
-      : "Connected";
+  const [backend, setBackend] = useState<BackendHealth | "checking">("checking");
+
+  useEffect(() => {
+    let cancelled = false;
+    checkBackendHealth().then((h) => {
+      if (!cancelled) setBackend(h);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const ok = backend === "ok" && SUPABASE_CONFIGURED;
+  const label = !SUPABASE_CONFIGURED
+    ? "Auth not configured"
+    : backend === "checking"
+      ? "Checking…"
+      : backend === "ok"
+        ? "Connected"
+        : backend === "unavailable"
+          ? "Backend not configured"
+          : "Backend unreachable";
+
   return (
     <span
-      title={API_CONFIGURED ? `API: ${API_TARGET_LABEL}` : API_TARGET_LABEL}
       className={clsx(
         "hidden items-center gap-2 rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider sm:inline-flex",
         ok

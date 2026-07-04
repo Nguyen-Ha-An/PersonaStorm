@@ -1,24 +1,27 @@
 "use client";
 
 /**
- * SSE client for /api/storm/{id}/stream.
+ * SSE client for the same-origin proxy route /api/backend/storm/{id}/stream
+ * (which forwards to the FastAPI backend's /api/storm/{id}/stream — see
+ * apps/web/app/api/backend/[...path]/route.ts).
  *
  * Auth: EventSource can't set an Authorization header, so we fetch the Supabase
- * access token first and pass it as `?access_token=` (the backend accepts it
- * there for the stream endpoint only, and still enforces storm ownership).
+ * access token first and pass it as `?access_token=` (the proxy forwards it
+ * verbatim, and the backend accepts it there for the stream endpoint only,
+ * still enforcing storm ownership).
  *
  * Performance: reaction events arrive in bursts (25/batch). Applying each via
  * setState would re-render the 1,000-cell grid hundreds of times, so events
  * accumulate in refs and a 120 ms flush timer commits them in one update.
  *
- * Reliability: EventSource retries forever by spec, so a wrong API origin or a
- * missing storm would otherwise spin as "reconnecting…". We detect a config
- * error before connecting, or repeated failures before the first `init`, and
- * surface a clear, actionable `connectionError`.
+ * Reliability: EventSource retries forever by spec, so an unconfigured/down
+ * backend or a missing storm would otherwise spin as "reconnecting…". We
+ * detect repeated failures before the first `init` and surface a clear,
+ * actionable `connectionError` instead.
  */
 
 import { useEffect, useRef, useState } from "react";
-import { streamUrl, API_TARGET_LABEL, ApiError } from "./api";
+import { streamUrl, ApiError } from "./api";
 import { getAccessToken } from "./supabase/client";
 import type { CellStatus, Level, ProgressEvent, ReactionEvent } from "./types";
 
@@ -39,7 +42,6 @@ export interface StormStreamState {
   failed: string | null;
   connected: boolean;
   connectionError: string | null;
-  apiTarget: string;
   collapseRisk: Level;
 }
 
@@ -177,10 +179,10 @@ export function useStormStream(stormId: string | null): StormStreamState {
           closed = true;
           es?.close();
           setConnectionError(
-            `Could not reach the storm stream at ${API_TARGET_LABEL}. ` +
-              `The backend may be unreachable, your session may have expired, ` +
-              `or this storm ID may not exist (storms are held in memory and are ` +
-              `lost if the API restarts).`,
+            "Could not reach the storm stream. The PersonaStorm backend may be " +
+              "unreachable or not configured, your session may have expired, " +
+              "or this storm ID may not exist (storms are held in memory and are " +
+              "lost if the API restarts).",
           );
         }
       };
@@ -203,7 +205,6 @@ export function useStormStream(stormId: string | null): StormStreamState {
     failed,
     connected,
     connectionError,
-    apiTarget: API_TARGET_LABEL,
     collapseRisk: progress?.collapse_risk ?? "low",
   };
 }

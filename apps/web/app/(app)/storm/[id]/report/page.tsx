@@ -23,7 +23,7 @@ import { PriceCurve } from "@/components/report/PriceCurve";
 import { Recommendations } from "@/components/report/Recommendations";
 import { SegmentHeatmap } from "@/components/report/SegmentHeatmap";
 import { TrustPanel } from "@/components/report/TrustPanel";
-import { API_TARGET_LABEL, getReport } from "@/lib/api";
+import { getReport } from "@/lib/api";
 import type { StormReport } from "@/lib/types";
 
 const MARKET_LABELS: Record<string, string> = {
@@ -91,7 +91,6 @@ export default function ReportPage() {
         <ErrorState
           title="Couldn't load this report"
           message={error}
-          detail={`API target: ${API_TARGET_LABEL}`}
           onRetry={retry}
           homeHref="/storm/new"
           homeLabel="Run a new storm"

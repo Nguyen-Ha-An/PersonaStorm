@@ -8,9 +8,9 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button, Card } from "@/components/ui";
-import { API_CONFIGURED, API_TARGET_LABEL, CONFIG_ERROR } from "@/lib/api";
+import { checkBackendHealth, type BackendHealth } from "@/lib/api";
 
 type AlertTone = "red" | "yellow" | "cyan";
 
@@ -83,34 +83,47 @@ export function Alert({
 }
 
 /**
- * Persistent banner shown when the browser has no backend origin configured —
- * i.e. a production build without NEXT_PUBLIC_API_BASE. Explains the exact fix
- * instead of letting the app fail with a vague fetch error later.
+ * Banner shown when the backend proxy reports the FastAPI backend is not
+ * configured or unreachable. Unlike the old build-time NEXT_PUBLIC_API_BASE
+ * check, the browser has no way to know this statically anymore — the real
+ * backend address is a server-only secret (BACKEND_API_BASE) — so this probes
+ * the same-origin health proxy once on mount. Renders nothing while checking
+ * or once healthy, so it never flashes on a working deployment.
  */
 export function ApiConfigAlert() {
-  if (API_CONFIGURED) return null;
-  return (
-    <Alert
-      tone="yellow"
-      title="Backend API is not configured"
-      detail={`Current API target: ${API_TARGET_LABEL}`}
-    >
-      {CONFIG_ERROR} Vercel hosts the Next.js frontend only — the FastAPI backend
-      must be deployed separately (Render, Railway, Fly.io, a VPS, …), then its
-      public URL set as <span className="font-mono text-storm-100">NEXT_PUBLIC_API_BASE</span>.
-    </Alert>
-  );
-}
+  const [health, setHealth] = useState<BackendHealth | "checking">("checking");
 
-/** Compact readout of the current API target — handy on error screens. */
-export function ApiTargetLine() {
+  useEffect(() => {
+    let cancelled = false;
+    checkBackendHealth().then((h) => {
+      if (!cancelled) setHealth(h);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (health === "checking" || health === "ok") return null;
+
   return (
-    <p className="font-mono text-xs text-storm-400">
-      API target:{" "}
-      <span className={API_CONFIGURED ? "text-storm-200" : "text-signal-yellow"}>
-        {API_TARGET_LABEL}
-      </span>
-    </p>
+    <Alert tone="yellow" title="PersonaStorm backend is not configured or unreachable">
+      {health === "unavailable" ? (
+        <>
+          The FastAPI backend hasn&rsquo;t been deployed yet, or{" "}
+          <span className="font-mono text-storm-100">BACKEND_API_BASE</span> isn&rsquo;t set. If
+          deployed, set <span className="font-mono text-storm-100">BACKEND_API_BASE</span> in
+          Vercel (or your host&rsquo;s environment variables) to the backend&rsquo;s URL. For local
+          development, run FastAPI on <span className="font-mono text-storm-100">http://localhost:8000</span>.
+        </>
+      ) : (
+        <>
+          The backend didn&rsquo;t respond. Verify it is running and reachable, and that{" "}
+          <span className="font-mono text-storm-100">BACKEND_API_BASE</span> is correct.
+        </>
+      )}{" "}
+      Login, signup, and the dashboard still work — only storm/billing/admin actions need the
+      backend.
+    </Alert>
   );
 }
 

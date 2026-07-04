@@ -17,6 +17,53 @@ The workflow is designed for the current monorepo layout:
 
 ---
 
+## Backend deployment status: not deployed yet — read this first
+
+As of this writing, **only the Next.js frontend is deployed (to Vercel)**.
+The FastAPI backend in `apps/api` is not deployed anywhere yet, and there is
+no real backend URL to point anything at. Concretely:
+
+- **The FastAPI backend is not deployed by the Vercel frontend deployment.**
+  Vercel only ever builds and hosts `apps/web` — it has no knowledge of
+  `apps/api` and never runs it.
+- **You must deploy `apps/api` to a backend host** — Render (blueprint at
+  `render.yaml`, repo root) or Railway are the two documented options; see
+  [apps/api/README.md](../apps/api/README.md) for exact steps for either, or
+  any other host that can run `uvicorn app.main:app`.
+- **After deploying, copy the public backend URL** (e.g.
+  `https://personastorm-api.onrender.com`) **into the `BACKEND_API_BASE`
+  GitHub Actions secret** (repo → Settings → Secrets and variables → Actions).
+- **The frontend calls `/api/backend/...`** (same-origin, browser-visible)
+  **and the Next.js proxy route forwards it to `BACKEND_API_BASE`**
+  (server-side only, never seen by the browser) — see "Frontend API routing"
+  below for the full mechanism.
+
+Until `BACKEND_API_BASE` is set, the deployed frontend is **not** broken —
+login, signup, and the dashboard shell all work (they only need Supabase).
+Only storm creation, wallet, billing, and admin calls return a clear `503`
+until the backend exists and the secret is set. The production Vercel deploy
+job in CI (`vercel-production-deploy`) **fails on purpose** with a clear
+message if `BACKEND_API_BASE` is missing — see "What runs automatically"
+below — so a missing backend is loud in CI, not silently broken in the field.
+
+### Verify a backend deployment before wiring it up
+
+Once `apps/api` is deployed somewhere, confirm it's actually reachable and
+healthy before setting `BACKEND_API_BASE`:
+
+```bash
+curl https://your-backend-domain.com/api/health
+# {"status":"ok","service":"personastorm-api","version":"0.1.0","inference_provider":"mock","active_storms":0,"time":"..."}
+
+curl https://your-backend-domain.com/openapi.json
+# should return the FastAPI-generated OpenAPI schema (a large JSON document), not an error
+```
+
+If either fails, fix the backend deployment first — do not set
+`BACKEND_API_BASE` to a URL that doesn't answer `/api/health` yet.
+
+---
+
 ## Frontend API routing: same-origin proxy (BFF), not a direct browser call
 
 The browser **never** calls the FastAPI backend directly. Every frontend data
@@ -225,25 +272,55 @@ https://supabase.com/dashboard/project/<project-ref>
 
 | Secret | Required | Purpose |
 |---|---:|---|
-| `BACKEND_API_BASE` | yes (production job fails without it) | Deployed FastAPI backend URL. Used by the CI verification step and documents what to also set in Vercel (Settings → Environment Variables) as a **plain**, non-`NEXT_PUBLIC_` variable. |
-| `NEXT_PUBLIC_SUPABASE_URL` | yes | Supabase project URL, baked into the browser build |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Supabase anon key, baked into the browser build (safe to expose — cannot bypass RLS) |
+| `BACKEND_API_BASE` | yes (production job fails without it; optional for preview) | Deployed FastAPI backend URL. Server-side only, non-`NEXT_PUBLIC_`. |
+| `NEXT_PUBLIC_SUPABASE_URL` | yes (production job fails without it) | Supabase project URL, baked into the browser build |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes (production job fails without it) | Supabase anon key, baked into the browser build (safe to expose — cannot bypass RLS) |
 
 These three are **not** the same as the backend's own `SUPABASE_URL` /
 `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_JWT_SECRET` (see "Backend environment
 variables" above) — never set those on the frontend side.
 
+### Exact env var classification
+
+**GitHub Actions secrets synced into Vercel (frontend/server-side, safe):**
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+BACKEND_API_BASE=
+```
+
+**Backend-host-only vars (never synced to Vercel, never in frontend env):**
+
+```env
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_JWT_SECRET=
+CORS_ORIGINS=
+ADMIN_EMAIL=
+ADMIN_PASSWORD=
+ADMIN_FULL_NAME=
+```
+
+Set the backend-only vars directly on whatever host runs `apps/api` (Render/
+Railway/Fly.io/VPS dashboard or CLI) — **never** as a GitHub Actions secret
+that gets synced to Vercel, and never as a `NEXT_PUBLIC_*` variable.
+
 ---
 
 ## Required Vercel environment variables
 
-Set these in:
-
-`Vercel project → Settings → Environment Variables`
+GitHub Actions is the **source of truth** for these — the `vercel-preview-deploy`
+and `vercel-production-deploy` jobs each run a "Sync Vercel environment
+variables" step that pushes the values below from GitHub secrets into Vercel
+(via `vercel env add`) on every deploy, so the Vercel dashboard never drifts
+out of sync or starts out empty. You normally don't need to touch the Vercel
+dashboard directly.
 
 | Variable | Example | Required | Purpose |
 |---|---|---:|---|
-| `BACKEND_API_BASE` | `https://api.yourdomain.com` | **yes**, for storm/billing/admin to work | **Plain variable — do NOT prefix with `NEXT_PUBLIC_`.** Read server-side, at request time, by the `/api/backend` proxy route (`apps/web/app/api/backend/[...path]/route.ts`). Set for **Production** (and **Preview**, if you want preview deploys to reach a staging backend). |
+| `BACKEND_API_BASE` | `https://api.yourdomain.com` | **yes** in production (preview optional) | **Plain variable — do NOT prefix with `NEXT_PUBLIC_`.** Read server-side, at request time, by the `/api/backend` proxy route (`apps/web/app/api/backend/[...path]/route.ts`). |
 | `NEXT_PUBLIC_SUPABASE_URL` | `https://xxxx.supabase.co` | **yes** | Supabase project URL, inlined into the browser bundle at build time. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `eyJ...` | **yes** | Supabase anon key, inlined into the browser bundle. Safe to expose — it cannot bypass Row Level Security. |
 
@@ -256,7 +333,8 @@ Set these in:
 > keep working, and only backend-dependent actions (starting a storm, viewing
 > a report, wallet, admin) return a clear `503` until it's set.
 
-Set it via the Vercel dashboard (`Settings → Environment Variables`) or the CLI:
+Manual alternative (only needed if you're deploying outside this repo's
+GitHub Action, e.g. `vercel deploy` from your own machine):
 
 ```bash
 cd apps/web
@@ -267,7 +345,7 @@ vercel env add NEXT_PUBLIC_SUPABASE_URL production
 vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
 ```
 
-The GitHub Action uses `vercel pull` to pull environment settings before building, then runs every Vercel step with `working-directory: apps/web` so the monorepo's frontend app is the Vercel project root.
+The GitHub Action uses `vercel pull` to pull the just-synced environment settings before building, then runs every Vercel step with `working-directory: apps/web` so the monorepo's frontend app is the Vercel project root.
 
 ---
 
@@ -398,16 +476,24 @@ secrets are only visible to jobs that declare that environment, so:
 ## Backend deployment note
 
 This workflow validates `apps/api` but does not deploy it. Until the backend
-is deployed and `BACKEND_API_BASE` is set in Vercel, the frontend still loads
-and login/signup/dashboard work — storm/billing/admin calls return a clear
-`503` in the meantime.
+is deployed and `BACKEND_API_BASE` is set, the frontend still loads and
+login/signup/dashboard work — storm/billing/admin calls return a clear `503`
+in the meantime, and the `vercel-production-deploy` CI job refuses to deploy
+production at all until `BACKEND_API_BASE` is set (see "Backend deployment
+status" at the top of this doc).
 
-For production, deploy `apps/api` separately using the existing Dockerfile or command:
+For production, deploy `apps/api` separately — see
+[apps/api/README.md](../apps/api/README.md) for exact steps for Render
+(preferred — blueprint at `render.yaml`), Railway, Docker, or a bare
+`uvicorn` command:
 
 ```bash
 cd apps/api
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 
-Then set Vercel's `BACKEND_API_BASE` (a plain, server-side variable — **not**
-`NEXT_PUBLIC_BACKEND_API_BASE`) to that public backend URL.
+Then verify it (`curl .../api/health`) and set the `BACKEND_API_BASE` GitHub
+Actions secret to that public backend URL — CI syncs it into Vercel
+automatically on the next deploy (see "Sync Vercel environment variables"
+above). Do **not** set `NEXT_PUBLIC_BACKEND_API_BASE` — that would expose the
+backend's address to the browser and defeats the whole point of the proxy.

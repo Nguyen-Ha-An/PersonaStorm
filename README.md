@@ -119,9 +119,18 @@ personastorm/
 ├── packages/schemas  JSON Schema contract (mirrors Pydantic + TS types)
 ├── data/           sample inputs, benchmark samples, persona exports, runs
 ├── scripts/        create_admin_user.py · seed_personas.py · run_local_demo.py · evaluate_outputs.py
+├── render.yaml     Render Blueprint to deploy apps/api (see apps/api/README.md)
 └── docs/           architecture · criteria-system · api-contract · deployment ·
                     inference/training roadmaps · evaluation framework · demo script
 ```
+
+> **Deployment status:** the Next.js frontend deploys to Vercel; the FastAPI
+> backend (`apps/api`) does **not** — it must be deployed separately (see
+> [apps/api/README.md](apps/api/README.md) for Render/Railway/Docker steps),
+> then its public URL set as the `BACKEND_API_BASE` secret. Until then, the
+> deployed frontend still works for login/signup/dashboard (Supabase-only) —
+> only storm/billing/admin calls show a clear "backend not configured" state.
+> Full picture: [docs/deployment.md](docs/deployment.md).
 
 ## Quickstart (local, no GPU, no keys)
 

@@ -32,14 +32,13 @@ export const maxDuration = 300;
 const DEV_DEFAULT_BACKEND = "http://localhost:8000";
 
 const BACKEND_NOT_CONFIGURED = {
-  detail:
-    "PersonaStorm backend is not configured. Set BACKEND_API_BASE in Vercel or deploy the FastAPI backend.",
+  detail: "PersonaStorm backend is not configured. Set BACKEND_API_BASE to the deployed FastAPI backend URL.",
 };
 
 const BACKEND_UNREACHABLE = {
   detail:
-    "Could not reach the PersonaStorm backend. If deployed, verify it is running and that " +
-    "BACKEND_API_BASE is correct. For local development, run FastAPI on http://localhost:8000.",
+    "PersonaStorm backend is not configured or unreachable. If deployed, verify it is running and " +
+    "that BACKEND_API_BASE is correct. For local development, run FastAPI on http://localhost:8000.",
 };
 
 function json(body: unknown, status: number): Response {

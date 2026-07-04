@@ -14,6 +14,7 @@ async def health(request: Request) -> dict:
     manager = request.app.state.manager
     return {
         "status": "ok",
+        "service": "personastorm-api",
         "version": __version__,
         "inference_provider": manager.provider.name,
         "active_storms": sum(

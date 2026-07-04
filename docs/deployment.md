@@ -100,25 +100,39 @@ wallet, and grants 10000 credits. It is idempotent and never prints secrets.
 
 ## What runs automatically
 
-### Pull requests into `main`
+| Trigger | CI (API tests + web build) | Supabase migrations | Vercel |
+|---|---|---|---|
+| **Pull request** into `main` | ✅ | ❌ never | ✅ **Preview** deploy |
+| **Push** to `main` | ✅ | ✅ if `supabase/migrations/*.sql` exists | ✅ **Production** deploy |
+| **Manual dispatch** (`workflow_dispatch`) | ✅ | ✅ if `supabase/migrations/*.sql` exists | ✅ **Production** deploy |
 
-The workflow runs checks only:
+### Pull request = CI + Vercel Preview
 
-1. API tests from `apps/api`
-2. Next.js build from `apps/web`
+Every PR into `main` runs:
 
-It does not mutate Supabase and does not deploy production Vercel from PRs.
+1. API tests (`apps/api`)
+2. Next.js build (`apps/web`)
+3. A Vercel **Preview** deployment (`vercel deploy`, no `--prod`) — reviewers get a live preview link in the job's step summary.
 
-### Pushes to `main`
+**Supabase migrations are intentionally skipped on PRs** to avoid mutating the
+production database from unmerged code. A PR is proposed, not-yet-reviewed
+code — letting it run `supabase db push` against the shared production
+database would mean any branch (even before review) could alter production
+schema. Migrations only ship once that code has actually landed on `main`, or
+via an explicit manual dispatch.
 
-The workflow runs:
+### Push to `main` = CI + Supabase migrations + Vercel Production
 
 1. API tests
 2. Next.js build
-3. Supabase migrations deploy, if `supabase/migrations/*.sql` exists
-4. Vercel production deployment from `apps/web`
+3. Supabase migrations deploy (`supabase-deploy`), if `supabase/migrations/*.sql` exists
+4. Vercel **Production** deployment (`vercel-production-deploy`)
 
-The Supabase job runs before Vercel so the frontend deploy happens after database migrations are applied.
+The Supabase job runs before the production Vercel deploy (`vercel-production-deploy` `needs: [..., supabase-deploy]`) so the frontend goes live only after the database it depends on has already been migrated.
+
+### Manual dispatch = Supabase migrations + Vercel Production
+
+Running the workflow manually (`Actions → CI and Deploy → Run workflow`) follows the exact same path as a push to `main`: CI, then Supabase migrations (if any), then a production Vercel deploy. Use this to redeploy without a new commit (e.g. after only rotating a secret).
 
 ---
 
@@ -270,7 +284,25 @@ You can trigger the workflow manually from:
 
 `GitHub → Actions → CI and Deploy → Run workflow`
 
-Manual runs follow the same deployment logic as `main` pushes.
+Manual runs follow the same deployment logic as `main` pushes (Supabase migrations, then Vercel production).
+
+---
+
+## A note on the `vercel-preview-deploy` job and secrets
+
+`vercel-preview-deploy` does **not** declare `environment: production` (unlike
+`supabase-deploy` and `vercel-production-deploy`) — a PR should get a preview
+link immediately, without waiting on a production environment's manual
+approval gate, if one is configured.
+
+This only matters if your `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID`
+secrets are scoped to the **production** GitHub Environment specifically (Settings
+→ Environments → production → Secrets) rather than added as plain repository
+secrets (Settings → Secrets and variables → Actions). Environment-scoped
+secrets are only visible to jobs that declare that environment, so:
+
+- If your Vercel secrets are **repository secrets** (the common case, and what `docs/deployment.md` above assumes): no action needed, `vercel-preview-deploy` already sees them.
+- If they are **Environment secrets** on `production` only: either duplicate them as repository secrets, or add a separate `preview` Environment (with no required reviewers) holding the same values and set `environment: preview` on `vercel-preview-deploy`.
 
 ---
 

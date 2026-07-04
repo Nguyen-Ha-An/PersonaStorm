@@ -71,6 +71,11 @@ jobs:
           NEXT_PUBLIC_API_BASE: https://api.example.com
         run: npm run build
 
+  # Deploys Supabase migrations to the PRODUCTION database. Runs only on a push
+  # to main or a manual dispatch — NEVER on pull_request. A PR is unmerged code;
+  # letting it push schema changes to production would mutate a shared database
+  # from code nobody has approved yet. PR runs get CI (api-tests/web-build) and
+  # a Vercel Preview instead — see vercel-preview-deploy below.
   supabase-deploy:
     name: Deploy Supabase migrations
     runs-on: ubuntu-latest
@@ -126,8 +131,89 @@ jobs:
         if: steps.migrations.outputs.has_migrations == 'true'
         run: supabase db push
 
-  vercel-deploy:
-    name: Deploy web to Vercel
+  # Pull requests: deploy a Vercel PREVIEW so reviewers get a live link. This
+  # never touches Supabase (see supabase-deploy) and never runs `vercel --prod`.
+  vercel-preview-deploy:
+    name: Deploy web to Vercel (Preview)
+    runs-on: ubuntu-latest
+    needs: [api-tests, web-build]
+    if: github.event_name == 'pull_request'
+
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_SCOPE: ${{ secrets.VERCEL_SCOPE }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Validate Vercel secrets
+        run: |
+          missing=0
+          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            if [ -z "${!name}" ]; then
+              echo "Missing required GitHub secret: $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Prepare Vercel scope argument
+        run: |
+          if [ -n "${VERCEL_SCOPE:-}" ]; then
+            echo "VERCEL_SCOPE_ARG=--scope ${VERCEL_SCOPE}" >> "$GITHUB_ENV"
+          else
+            echo "VERCEL_SCOPE_ARG=" >> "$GITHUB_ENV"
+          fi
+
+      - name: Create Vercel project link
+        working-directory: apps/web
+        run: |
+          mkdir -p .vercel
+          cat > .vercel/project.json <<EOF
+          {"orgId":"${VERCEL_ORG_ID}","projectId":"${VERCEL_PROJECT_ID}"}
+          EOF
+          echo "Linked Vercel project in apps/web/.vercel/project.json"
+
+      - name: Pull Vercel preview environment
+        working-directory: apps/web
+        run: vercel pull --yes --environment=preview --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG
+
+      - name: Deploy preview to Vercel
+        id: deploy
+        working-directory: apps/web
+        run: |
+          set -o pipefail
+          deployment_url=$(vercel deploy --yes --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG 2>&1 | tee vercel-deploy.log | tail -n 1)
+          echo "deployment_url=$deployment_url" >> "$GITHUB_OUTPUT"
+          echo "### Vercel preview deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "$deployment_url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Vercel deploy log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vercel-preview-deploy-log
+          path: apps/web/vercel-deploy.log
+          if-no-files-found: ignore
+
+  # Push to main / manual dispatch only: deploy the Vercel PRODUCTION build.
+  # Waits on supabase-deploy so the database is already migrated before the
+  # new frontend (which may depend on new columns/tables) goes live.
+  vercel-production-deploy:
+    name: Deploy web to Vercel (Production)
     runs-on: ubuntu-latest
     needs: [api-tests, web-build, supabase-deploy]
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')

@@ -61,7 +61,14 @@ class Settings(BaseSettings):
     runs_dir: Path = REPO_ROOT / "data" / "runs"
 
     # --- server --------------------------------------------------------------
+    # Comma-separated exact origins allowed to call the API from a browser.
+    # In production, add your deployed Vercel domain, e.g.
+    #   CORS_ORIGINS=http://localhost:3000,https://personastorm.vercel.app
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    # Optional regex to match dynamic origins (e.g. Vercel preview deploys whose
+    # subdomain changes per branch/commit). Example that covers all previews of
+    # a project:  CORS_ORIGIN_REGEX=https://.*\\.vercel\\.app
+    cors_origin_regex: str | None = None
     api_env: Literal["dev", "prod"] = "dev"
 
     model_config = SettingsConfigDict(

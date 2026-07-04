@@ -9,21 +9,51 @@
 body {
   @apply bg-storm-950 text-storm-200 antialiased;
   font-feature-settings: "ss01", "cv05";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* Instrument-panel grid backdrop */
+/* Tighter, more confident headings across the app. */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+}
+
+/* Instrument-panel backdrop: a soft top-glow over a faint precision grid that
+   fades out toward the fold — calmer and less neon than a full-page grid. */
 .bg-tunnel {
+  position: relative;
+  background-color: theme("colors.storm.950");
   background-image:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(34, 211, 238, 0.08), transparent),
-    linear-gradient(rgba(43, 58, 92, 0.14) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(43, 58, 92, 0.14) 1px, transparent 1px);
-  background-size: 100% 100%, 36px 36px, 36px 36px;
+    radial-gradient(60rem 32rem at 50% -8rem, rgba(34, 211, 238, 0.06), transparent 70%),
+    radial-gradient(48rem 28rem at 100% 0%, rgba(52, 211, 153, 0.04), transparent 70%);
+}
+.bg-tunnel::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(58, 71, 97, 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(58, 71, 97, 0.09) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(120% 80% at 50% 0%, #000 0%, transparent 65%);
+  mask-image: radial-gradient(120% 80% at 50% 0%, #000 0%, transparent 65%);
+}
+/* Keep real content above the fixed grid layer. */
+.bg-tunnel > * {
+  position: relative;
+  z-index: 1;
 }
 
 ::selection {
-  background: rgba(34, 211, 238, 0.3);
+  background: rgba(34, 211, 238, 0.28);
+  color: #fff;
 }
 
+/* Thin, unobtrusive scrollbars. */
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -32,9 +62,40 @@ body {
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  @apply bg-storm-700 rounded-full;
+  @apply rounded-full;
+  background: theme("colors.storm.700");
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: theme("colors.storm.600");
 }
 
-.glow-green { box-shadow: 0 0 6px rgba(52, 211, 153, 0.55); }
-.glow-yellow { box-shadow: 0 0 6px rgba(251, 191, 36, 0.5); }
-.glow-red { box-shadow: 0 0 6px rgba(251, 113, 133, 0.5); }
+/* Subtle status glows for the live grid — kept low so the UI reads clean. */
+.glow-green {
+  box-shadow: 0 0 6px rgba(52, 211, 153, 0.5);
+}
+.glow-yellow {
+  box-shadow: 0 0 6px rgba(251, 191, 36, 0.45);
+}
+.glow-red {
+  box-shadow: 0 0 6px rgba(251, 113, 133, 0.45);
+}
+
+/* Skeleton shimmer used by loading states. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  @apply bg-storm-850;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(154, 168, 196, 0.08),
+    transparent
+  );
+  @apply animate-shimmer;
+}

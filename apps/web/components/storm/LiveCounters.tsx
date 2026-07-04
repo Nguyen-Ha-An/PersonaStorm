@@ -37,10 +37,10 @@ export function LiveCounters({ progress, total }: { progress: ProgressEvent | nu
               ["red", "unlikely", p?.red ?? 0],
             ] as const
           ).map(([status, label, value]) => (
-            <div key={status} className="rounded-lg border border-storm-800 bg-storm-850 px-2 py-3">
+            <div key={status} className="rounded-xl border border-storm-800 bg-storm-850/70 px-2 py-3">
               <div className="flex items-center justify-center gap-1.5">
                 <StatusDot status={status} />
-                <span className="font-mono text-lg font-bold text-white">{value}</span>
+                <span className="font-mono text-lg font-bold text-storm-100">{value}</span>
               </div>
               <p className="mt-0.5 text-[10px] uppercase tracking-wider text-storm-400">{label}</p>
             </div>
@@ -48,15 +48,15 @@ export function LiveCounters({ progress, total }: { progress: ProgressEvent | nu
         </div>
 
         {/* willingness to pay */}
-        <div className="flex items-center justify-between rounded-lg border border-storm-800 bg-storm-850 px-4 py-3">
+        <div className="flex items-center justify-between rounded-xl border border-storm-800 bg-storm-850/70 px-4 py-3">
           <span className="text-xs uppercase tracking-wider text-storm-400">avg willingness to pay</span>
-          <span className="font-mono text-lg font-bold text-white">
+          <span className="font-mono text-lg font-bold text-storm-100">
             ${p?.avg_max_price?.toFixed(2) ?? "0.00"}
           </span>
         </div>
 
         {/* live average market-fit score */}
-        <div className="flex items-center justify-between rounded-lg border border-storm-800 bg-storm-850 px-4 py-3">
+        <div className="flex items-center justify-between rounded-xl border border-storm-800 bg-storm-850/70 px-4 py-3">
           <span className="text-xs uppercase tracking-wider text-storm-400">avg market-fit score</span>
           <span className="font-mono text-lg font-bold text-signal-cyan">
             {Math.round((p?.avg_market_fit ?? 0) * 100)}%
@@ -64,7 +64,7 @@ export function LiveCounters({ progress, total }: { progress: ProgressEvent | nu
         </div>
 
         {/* top objection */}
-        <div className="rounded-lg border border-storm-800 bg-storm-850 px-4 py-3">
+        <div className="rounded-xl border border-storm-800 bg-storm-850/70 px-4 py-3">
           <p className="mb-1 text-xs uppercase tracking-wider text-storm-400">top emerging objection</p>
           <p className="min-h-[2.4em] text-sm leading-snug text-signal-yellow">
             {p?.top_objection || "listening to the swarm…"}
@@ -72,7 +72,7 @@ export function LiveCounters({ progress, total }: { progress: ProgressEvent | nu
         </div>
 
         {/* collapse risk */}
-        <div className="flex items-center justify-between rounded-lg border border-storm-800 bg-storm-850 px-4 py-3">
+        <div className="flex items-center justify-between rounded-xl border border-storm-800 bg-storm-850/70 px-4 py-3">
           <span className="text-xs uppercase tracking-wider text-storm-400">collapse risk</span>
           <LevelBadge level={p?.collapse_risk ?? "low"} />
         </div>

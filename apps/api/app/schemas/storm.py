@@ -41,6 +41,11 @@ class StormCreateRequest(BaseModel):
     )
     target_market: TargetMarket
     custom_segment_description: str | None = Field(default=None, max_length=2000)
+    product_category: str | None = Field(
+        default=None,
+        description="Override the auto-detected product category (one of the "
+                    "10 criteria presets); None = auto-detect from the stimulus",
+    )
     persona_count: int = Field(default=1000, ge=50, le=1200)
     seed: int | None = Field(
         default=None,

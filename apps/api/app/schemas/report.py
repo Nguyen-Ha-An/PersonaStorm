@@ -20,6 +20,8 @@ class AdoptionSummary(BaseModel):
     green: int = 0
     yellow: int = 0
     red: int = 0
+    average_buy_likelihood: float = Field(0.0, ge=0.0, le=1.0)
+    average_market_fit_score: float = Field(0.0, ge=0.0, le=1.0)
 
 
 class SegmentReport(BaseModel):
@@ -63,13 +65,70 @@ class KillQuoteContext(BaseModel):
     skepticism: float
 
 
+class Overall(BaseModel):
+    """Headline verdict for the whole run — the number leadership reads first."""
+
+    market_fit_score: float = Field(..., ge=0.0, le=1.0)
+    confidence: Literal["low", "medium", "high"]
+    top_blockers: list[str] = Field(default_factory=list)
+    top_strengths: list[str] = Field(default_factory=list)
+
+
+class CriterionBreakdown(BaseModel):
+    """One of the 17 core criteria, averaged across the whole swarm."""
+
+    criterion_id: str
+    label: str
+    average_score: float = Field(..., ge=0.0, le=1.0)
+    higher_is_better: bool
+    weight: float = Field(..., ge=0.0)
+    segment_scores: list[dict] = Field(default_factory=list)
+    interpretation: str = ""
+
+
+class CriterionCard(BaseModel):
+    """A ranked criterion in the weakness/strength diagnosis."""
+
+    criterion_id: str
+    label: str
+    average_score: float = Field(..., ge=0.0, le=1.0)
+    weight: float = Field(..., ge=0.0)
+    interpretation: str = ""
+
+
+class AgeCohortReport(BaseModel):
+    """Adoption + top barrier for one life-stage cohort that appears in the run."""
+
+    life_stage: str
+    personas: int
+    adoption_rate: float = Field(..., ge=0.0, le=1.0)
+    avg_buy_likelihood: float = Field(..., ge=0.0, le=1.0)
+    avg_market_fit_score: float = Field(..., ge=0.0, le=1.0)
+    top_barrier: str
+    insight: str
+
+
+class NextValidation(BaseModel):
+    """A concrete human-research test the swarm says would de-risk this most."""
+
+    question: str
+    test_type: str
+    rationale: str
+
+
 class StormReport(BaseModel):
     storm_id: str
     title: str
     summary: str
+    product_category: str = "generic"
 
     adoption: AdoptionSummary
+    overall: Overall | None = None
     segments: list[SegmentReport]
+    criteria_breakdown: list[CriterionBreakdown] = Field(default_factory=list)
+    weakest_criteria: list[CriterionCard] = Field(default_factory=list)
+    strongest_criteria: list[CriterionCard] = Field(default_factory=list)
+    age_cohorts: list[AgeCohortReport] = Field(default_factory=list)
     top_objections: list[ObjectionCluster]
     price_sensitivity: list[PricePoint]
 
@@ -78,6 +137,7 @@ class StormReport(BaseModel):
 
     quality: QualityMetrics
     recommendations: list[Recommendation]
+    next_human_validation: list[NextValidation] = Field(default_factory=list)
 
     persona_count: int
     stimulus_type: str

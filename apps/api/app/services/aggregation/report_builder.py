@@ -17,6 +17,8 @@ from ...schemas.reaction import PersonaReaction
 from ...schemas.report import (
     AdoptionSummary,
     KillQuoteContext,
+    NextValidation,
+    Overall,
     Recommendation,
     SegmentReport,
     StormReport,
@@ -24,8 +26,23 @@ from ...schemas.report import (
 from ...schemas.storm import StormCreateRequest
 from ...utils.text import normalize_objection
 from ..stimulus_parser import StimulusFeatures
+from .age_analysis import build_age_cohorts
+from .criteria_aggregation import build_criteria_breakdown, diagnose_weakness
 from .objections import cluster_objections
 from .pricing import average_wtp, build_price_curve
+
+# Human-readable phrasing for each best_next_test enum value.
+_TEST_LABELS = {
+    "survey": "a targeted survey",
+    "interview": "user interviews",
+    "landing_page_ab_test": "a landing-page A/B test",
+    "pricing_test": "a pricing (Van Westendorp) test",
+    "ad_test": "an ad test",
+    "usability_test": "a usability test",
+}
+
+_LEVEL_RANK = {"low": 0, "medium": 1, "high": 2}
+_RANK_LEVEL = {0: "low", 1: "medium", 2: "high"}
 
 
 def build_report(
@@ -35,38 +52,124 @@ def build_report(
     reactions: list[PersonaReaction],
     features: StimulusFeatures,
     quality: QualityMetrics,
+    category: str = "generic",
 ) -> StormReport:
+    n = max(1, len(reactions))
+    avg_buy = sum(r.buy_likelihood for r in reactions) / n
+    avg_fit = sum(r.market_fit_score for r in reactions) / n
     adoption = AdoptionSummary(
         green=sum(1 for r in reactions if r.status == "green"),
         yellow=sum(1 for r in reactions if r.status == "yellow"),
         red=sum(1 for r in reactions if r.status == "red"),
+        average_buy_likelihood=round(avg_buy, 4),
+        average_market_fit_score=round(avg_fit, 4),
     )
     segments = _segment_reports(reactions)
     objections = cluster_objections(reactions)
     curve = build_price_curve(reactions, features)
     avg_wtp = average_wtp(reactions)
     kill_quote, kill_ctx = _kill_quote(personas, reactions, features)
+
+    # --- criteria + age-cohort aggregation (Task 10) ------------------------
+    criteria_breakdown = build_criteria_breakdown(reactions, category)
+    weakest, strongest, top_blockers, top_strengths = diagnose_weakness(
+        criteria_breakdown, category
+    )
+    age_cohorts = build_age_cohorts(personas, reactions)
+    overall = Overall(
+        market_fit_score=round(avg_fit, 4),
+        confidence=_confidence(quality),
+        top_blockers=top_blockers,
+        top_strengths=top_strengths,
+    )
+    next_validation = _next_human_validation(reactions)
+
     recommendations = _recommendations(request, features, quality, objections,
                                        segments, curve, adoption, len(reactions))
-    summary = _summary(request, adoption, objections, avg_wtp, quality, len(reactions))
+    summary = _summary(request, adoption, objections, avg_wtp, quality,
+                       top_blockers, len(reactions))
 
     return StormReport(
         storm_id=storm_id,
         title=request.title,
         summary=summary,
+        product_category=category,
         adoption=adoption,
+        overall=overall,
         segments=segments,
+        criteria_breakdown=criteria_breakdown,
+        weakest_criteria=weakest,
+        strongest_criteria=strongest,
+        age_cohorts=age_cohorts,
         top_objections=objections,
         price_sensitivity=curve,
         kill_quote=kill_quote,
         kill_quote_context=kill_ctx,
         quality=quality,
         recommendations=recommendations,
+        next_human_validation=next_validation,
         persona_count=len(reactions),
         stimulus_type=request.stimulus_type.value,
         target_market=request.target_market.value,
         avg_max_price=avg_wtp,
     )
+
+
+# ---------------------------------------------------------------- confidence
+
+def _confidence(quality: QualityMetrics) -> str:
+    """Run-level confidence, derived from benchmark confidence and collapse
+    risk, and CAPPED so it can never EXCEED benchmark confidence — a run cannot
+    be more trustworthy than the benchmark it was calibrated against.
+
+    High collapse risk (reaction diversity collapsed) knocks confidence down a
+    notch; low collapse risk lets it sit at the benchmark ceiling."""
+    ceiling = _LEVEL_RANK[quality.benchmark_confidence]
+    rank = ceiling
+    if quality.collapse_risk == "high":
+        rank -= 2
+    elif quality.collapse_risk == "medium":
+        rank -= 1
+    rank = max(0, min(rank, ceiling))
+    return _RANK_LEVEL[rank]
+
+
+# ------------------------------------------------------- next human validation
+
+def _next_human_validation(reactions: list[PersonaReaction]) -> list[NextValidation]:
+    """Aggregate each persona's `research_recommendation` into a short list of
+    concrete tests. Groups by `best_next_test`, orders by how many personas
+    asked for it, and attaches a representative validation question per test."""
+    by_test: dict[str, list[str]] = {}
+    for r in reactions:
+        rec = r.research_recommendation
+        if not rec.should_validate_with_humans:
+            continue
+        by_test.setdefault(rec.best_next_test, [])
+        q = rec.validation_question.strip()
+        if q:
+            by_test[rec.best_next_test].append(q)
+
+    if not by_test:
+        return []
+
+    total = sum(len(qs) or 1 for qs in by_test.values())
+    ordered = sorted(by_test.items(), key=lambda kv: -len(kv[1]))
+    out: list[NextValidation] = []
+    for test, questions in ordered[:3]:
+        # Most common question is the most representative ask for this test.
+        question = ""
+        if questions:
+            question = Counter(questions).most_common(1)[0][0]
+        share = len(questions) / total if total else 0.0
+        label = _TEST_LABELS.get(test, test.replace("_", " "))
+        out.append(NextValidation(
+            question=question or f"Run {label} to validate the swarm's read.",
+            test_type=test,
+            rationale=(f"{share:.0%} of personas flagged this as the highest-value "
+                       f"human test — run {label} next."),
+        ))
+    return out
 
 
 # ------------------------------------------------------------------- segments
@@ -220,19 +323,27 @@ def _recommendations(request, features, quality, objections, segments, curve,
 
 # ---------------------------------------------------------------------- summary
 
-def _summary(request, adoption, objections, avg_wtp, quality, total) -> str:
+def _summary(request, adoption, objections, avg_wtp, quality, top_blockers, total) -> str:
     total = max(1, total)
     g, y, r = adoption.green, adoption.yellow, adoption.red
     top_line = (f"{g / total:.0%} of {total} synthetic personas showed buy intent, "
                 f"{y / total:.0%} are persuadable but unconvinced, and "
                 f"{r / total:.0%} rejected the {request.stimulus_type.value.replace('_', ' ')}.")
+    # Diagnostic: name WHERE the product is weakest by criterion, not just the
+    # verbatim objection. This separates the criteria-driven weakness (e.g.
+    # Trust, Proof Requirement) from the pricing signal below.
+    diag_line = ""
+    if top_blockers:
+        blockers = ", ".join(top_blockers[:3])
+        diag_line = (f" The weakest purchase criteria are {blockers} — these, more "
+                     f"than price, gate adoption.")
     obj_line = ""
     if objections:
-        obj_line = (f" The dominant objection — “{objections[0].label}” — "
+        obj_line = (f" The dominant free-text objection — “{objections[0].label}” — "
                     f"accounts for {objections[0].share:.0%} of first objections.")
     wtp_line = f" Average stated willingness to pay is ${avg_wtp:g}."
     trust_line = (f" Signal quality: collapse risk {quality.collapse_risk}, "
                   f"segment variance {quality.segment_variance}, "
                   f"benchmark confidence {quality.benchmark_confidence} — "
                   "treat as pre-research hypotheses, not validated demand.")
-    return top_line + obj_line + wtp_line + trust_line
+    return top_line + diag_line + obj_line + wtp_line + trust_line

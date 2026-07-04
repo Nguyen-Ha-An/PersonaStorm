@@ -26,6 +26,7 @@ from ..schemas.report import StormReport
 from ..schemas.storm import StormCreateRequest, StormMeta, StormStatus
 from ..utils.text import normalize_objection
 from .aggregation import build_report
+from .criteria.classifier import classify_category
 from .inference import MockPersonaProvider, PersonaInferenceProvider, get_provider
 from .persona import PersonaGenerator
 from .quality import RunningCollapseMonitor, compute_quality
@@ -48,6 +49,7 @@ class StormRun:
         self.personas: list[Persona] = []
         self.reactions: list[PersonaReaction] = []
         self.features: StimulusFeatures | None = None
+        self.category: str = "generic"
         self.diversity: dict[str, Any] | None = None
         self.report: StormReport | None = None
 
@@ -169,6 +171,9 @@ class StormManager:
             run.features = parse_stimulus(
                 run.request.stimulus, run.request.title, run.request.stimulus_type.value
             )
+            # One product category for the whole run: explicit override wins,
+            # else auto-detect from the parsed stimulus. Drives criteria weights.
+            run.category = run.request.product_category or classify_category(run.features)[0]
 
             # 2) Persona Space Builder + 3) Diversity Validator
             run.status = StormStatus.generating_personas
@@ -213,7 +218,8 @@ class StormManager:
 
             # 6) Aggregator / Analyst -> final report
             run.report = build_report(
-                run.id, run.request, run.personas, run.reactions, run.features, quality
+                run.id, run.request, run.personas, run.reactions, run.features,
+                quality, run.category,
             )
             run.status = StormStatus.complete
             run.notify()

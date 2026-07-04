@@ -7,6 +7,8 @@ from .conftest import create_payload
 REPORT_KEYS = {
     "storm_id", "summary", "adoption", "segments", "top_objections",
     "price_sensitivity", "kill_quote", "quality", "recommendations", "disclaimer",
+    "product_category", "overall", "criteria_breakdown", "weakest_criteria",
+    "strongest_criteria", "age_cohorts", "next_human_validation",
 }
 QUALITY_KEYS = {
     "persona_adherence", "product_grounding", "generic_response_rate",
@@ -52,6 +54,21 @@ def test_full_storm_flow(client):
     # positioning rule: at least one recommendation points to real research
     assert any("real" in r["detail"].lower() or "human" in r["title"].lower()
                for r in report["recommendations"])
+
+    # --- Task 10: criteria + age-cohort aggregation -------------------------
+    assert isinstance(report["product_category"], str) and report["product_category"]
+    assert len(report["criteria_breakdown"]) == 17
+    assert 0.0 <= report["overall"]["market_fit_score"] <= 1.0
+    assert report["overall"]["confidence"] in ("low", "medium", "high")
+    assert report["weakest_criteria"], "weakest_criteria missing"
+    assert report["strongest_criteria"], "strongest_criteria missing"
+    assert report["age_cohorts"], "age_cohorts missing"
+    assert "average_market_fit_score" in report["adoption"]
+    assert "average_buy_likelihood" in report["adoption"]
+    # confidence must never exceed benchmark confidence
+    levels = {"low": 0, "medium": 1, "high": 2}
+    assert (levels[report["overall"]["confidence"]]
+            <= levels[report["quality"]["benchmark_confidence"]])
 
     # meta endpoint agrees
     meta = client.get(f"/api/storm/{storm_id}").json()

@@ -26,6 +26,7 @@ from ..schemas.report import StormReport
 from ..schemas.storm import StormCreateRequest, StormMeta, StormStatus
 from ..utils.text import normalize_objection
 from .aggregation import build_report
+from .analyst import AnalystProvider, get_analyst
 from .criteria.classifier import classify_category
 from .inference import MockPersonaProvider, PersonaInferenceProvider, get_provider
 from .persona import PersonaGenerator
@@ -147,6 +148,9 @@ class StormManager:
         # Fail fast on misconfiguration: build the provider at startup, not
         # mid-storm. For mock we rebuild per-run so per-request seeds work.
         self.provider: PersonaInferenceProvider = get_provider(settings)
+        # Analyst is optional narration over the already-computed report;
+        # get_analyst() gracefully falls back to MockAnalyst if unconfigured.
+        self.analyst: AnalystProvider = get_analyst(settings)
 
     # ------------------------------------------------------------------ create
     def create(self, request: StormCreateRequest) -> StormRun:
@@ -220,11 +224,21 @@ class StormManager:
                 benchmark_dir=s.data_dir / "benchmark_samples",
             )
 
-            # 6) Aggregator / Analyst -> final report
+            # 6) Aggregator -> final report, then optional Analyst re-narration
             run.report = build_report(
                 run.id, run.request, run.personas, run.reactions, run.features,
                 quality, run.category,
             )
+            # enhance_report() is contractually safe (never raises), but we
+            # guard it here too: a storm must NEVER fail because of the
+            # analyst, whatever goes wrong.
+            try:
+                run.report = await self.analyst.enhance_report(run.report)
+            except Exception as exc:  # noqa: BLE001 — analyst is best-effort only
+                logger.warning(
+                    "analyst.enhance_report raised unexpectedly for %s, keeping "
+                    "deterministic report: %s", run.id, exc,
+                )
             run.status = StormStatus.complete
             run.notify()
 

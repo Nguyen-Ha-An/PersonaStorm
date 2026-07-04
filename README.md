@@ -138,7 +138,8 @@ key needed.
 | `VLLM_MODEL` | `google/gemma-3-27b-it` | model or LoRA adapter name |
 | `STORM_BATCH_SIZE` / `STORM_BATCH_INTERVAL_MS` | `25` / `350` | demo pacing (mock only) |
 | `PERSONA_SEED` | `1337` | reproducible storms |
-| `NEXT_PUBLIC_API_BASE` | `http://localhost:8000` | frontend → API origin |
+| `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | browser origins allowed to call the API — add your Vercel domain in production |
+| `NEXT_PUBLIC_API_BASE` | `http://localhost:8000` *(dev only)* | frontend → API origin. **Local dev:** leave unset (defaults to localhost). **Production:** required — set it to your deployed FastAPI backend URL. A production build with this unset shows a clear config banner instead of failing against localhost. See [docs/deployment.md](docs/deployment.md). |
 
 ## Switching providers
 

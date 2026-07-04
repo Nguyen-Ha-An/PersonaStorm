@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Button, Card, CardHeader, Input, Label, Select, Textarea } from "@/components/ui";
-import { createStorm } from "@/lib/api";
+import { Button, Card, Input, Label, PageShell, Select, Textarea } from "@/components/ui";
+import { Alert, ApiConfigAlert } from "@/components/feedback";
+import { API_TARGET_LABEL, createStorm } from "@/lib/api";
 import { SAMPLES } from "@/lib/samples";
 import type { StimulusType, TargetMarket } from "@/lib/types";
 
@@ -40,6 +41,12 @@ const CATEGORIES: { value: string; label: string }[] = [
   { value: "generic", label: "Generic" },
 ];
 
+const FEATURES: [string, string][] = [
+  ["Objection radar", "Clustered themes ranked by frequency, per segment."],
+  ["Price sensitivity", "A demand curve from 1,000 stated willingness-to-pay points."],
+  ["Trust panel", "Collapse risk, adherence & grounding shown on every report."],
+];
+
 export default function LandingPage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
@@ -71,7 +78,7 @@ export default function LandingPage() {
       });
       router.push(`/storm/${resp.storm_id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to start storm");
+      setError(e instanceof Error ? e.message : "Failed to start the storm.");
       setSubmitting(false);
     }
   }
@@ -86,35 +93,54 @@ export default function LandingPage() {
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-6">
+    <PageShell className="pb-16">
       {/* hero */}
-      <section className="py-14 text-center">
-        <p className="mb-3 font-mono text-xs uppercase tracking-[0.3em] text-signal-cyan">
-          1,000 synthetic personas · one calibrated model · live objection radar
-        </p>
-        <h1 className="mx-auto max-w-3xl text-4xl font-bold leading-tight text-white sm:text-5xl">
-          PersonaStorm <span className="text-storm-300">— the product wind tunnel.</span>
+      <section className="animate-fade-up py-14 text-center sm:py-20">
+        <span className="inline-flex items-center gap-2 rounded-full border border-storm-700 bg-storm-900/60 px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.2em] text-storm-300">
+          <span className="h-1.5 w-1.5 rounded-full bg-signal-cyan" />
+          1,000 personas · one calibrated model · live objection radar
+        </span>
+        <h1 className="mx-auto mt-6 max-w-4xl text-4xl font-bold leading-[1.05] tracking-tight text-storm-100 sm:text-6xl">
+          Test the market
+          <span className="text-signal-cyan"> before you build it.</span>
         </h1>
-        <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-storm-300">
-          Paste a product concept, landing page, ad, or pricing table. PersonaStorm streams
-          reactions from a structured persona swarm — surfacing likely objections, price
-          resistance, and segment risks <em>before</em> you spend on surveys, ads, or launches.
-          Synthetic signal, honestly labeled. Not a replacement for real research.
+        <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-storm-300">
+          PersonaStorm is the product wind tunnel. Paste a concept, landing page, ad, or
+          pricing table — a synthetic persona swarm reacts live, then it produces a market
+          evaluation dashboard surfacing objections, price resistance, and segment risk
+          <em className="text-storm-200"> before</em> you spend on surveys, ads, or launches.
+        </p>
+        <p className="mx-auto mt-3 max-w-xl text-xs text-storm-400">
+          Synthetic signal, honestly labeled — not a replacement for real research.
         </p>
       </section>
 
       {/* input console */}
-      <section className="mx-auto max-w-3xl pb-10">
-        <Card>
-          <CardHeader title="Test chamber input" hint="no data leaves your machine in mock mode" />
+      <section className="mx-auto max-w-3xl space-y-4">
+        <ApiConfigAlert />
+
+        <Card className="overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-storm-800 px-6 py-4">
+            <div>
+              <h2 className="text-sm font-semibold text-storm-100">Test chamber</h2>
+              <p className="text-xs text-storm-400">
+                Paste your stimulus, choose a market, and run the swarm.
+              </p>
+            </div>
+            <span className="font-mono text-[10px] uppercase tracking-wider text-storm-500">
+              no data leaves your machine in mock mode
+            </span>
+          </div>
+
           <div className="space-y-5 p-6">
+            {/* samples */}
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-storm-400">Try a sample:</span>
               {SAMPLES.map((s, i) => (
                 <button
                   key={s.name}
                   onClick={() => loadSample(i)}
-                  className="rounded-full border border-storm-700 px-3 py-1 text-xs text-storm-300 transition hover:border-signal-cyan/60 hover:text-white"
+                  className="rounded-full border border-storm-700 bg-storm-850/60 px-3 py-1 text-xs text-storm-300 transition hover:border-signal-cyan/50 hover:text-storm-100"
                 >
                   {s.name}
                 </button>
@@ -165,7 +191,7 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="grid gap-5 sm:grid-cols-2">
+            <div className="grid gap-5 sm:grid-cols-3">
               <div>
                 <Label htmlFor="market">Target market</Label>
                 <Select
@@ -181,29 +207,21 @@ export default function LandingPage() {
                 </Select>
               </div>
               <div>
-                <Label htmlFor="count">Persona count</Label>
-                <Select
-                  id="count"
-                  value={count}
-                  onChange={(e) => setCount(Number(e.target.value))}
-                >
-                  {COUNTS.map((c) => (
-                    <option key={c} value={c}>
-                      {c.toLocaleString()} personas
+                <Label htmlFor="category">Product category</Label>
+                <Select id="category" value={category} onChange={(e) => setCategory(e.target.value)}>
+                  {CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
                     </option>
                   ))}
                 </Select>
               </div>
               <div>
-                <Label htmlFor="category">Product category</Label>
-                <Select
-                  id="category"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                >
-                  {CATEGORIES.map((c) => (
-                    <option key={c.value} value={c.value}>
-                      {c.label}
+                <Label htmlFor="count">Persona count</Label>
+                <Select id="count" value={count} onChange={(e) => setCount(Number(e.target.value))}>
+                  {COUNTS.map((c) => (
+                    <option key={c} value={c}>
+                      {c.toLocaleString()} personas
                     </option>
                   ))}
                 </Select>
@@ -229,30 +247,37 @@ export default function LandingPage() {
             )}
 
             {error && (
-              <div className="rounded-lg border border-signal-red/40 bg-signal-red/10 px-4 py-3 text-sm text-signal-red">
-                {error} — is the API running on port 8000?
-              </div>
+              <Alert
+                tone="red"
+                title="Could not reach PersonaStorm API"
+                detail={`Current API target: ${API_TARGET_LABEL}`}
+              >
+                {error}
+              </Alert>
             )}
 
-            <Button onClick={runStorm} disabled={!canRun} className="w-full py-3 text-base">
-              {submitting ? "Spinning up the tunnel…" : `⛈ Run Storm — ${count.toLocaleString()} personas`}
+            <Button onClick={runStorm} disabled={!canRun} size="lg" className="w-full">
+              {submitting ? "Spinning up the tunnel…" : `Run Storm — ${count.toLocaleString()} personas`}
             </Button>
+            <p className="text-center text-[11px] leading-relaxed text-storm-500">
+              Outputs are synthetic hypotheses from a calibrated model. Every report carries a
+              trust panel and a real-human validation queue.
+            </p>
           </div>
         </Card>
 
-        <div className="mt-6 grid grid-cols-1 gap-3 text-center sm:grid-cols-3">
-          {[
-            ["Objection radar", "clustered themes ranked by frequency, per segment"],
-            ["Price sensitivity", "demand curve from 1,000 stated willingness-to-pay points"],
-            ["Trust panel", "collapse risk, adherence & grounding shown on every report"],
-          ].map(([t, d]) => (
-            <div key={t} className="rounded-lg border border-storm-800 bg-storm-900/50 px-4 py-3">
-              <p className="font-mono text-xs font-bold uppercase tracking-wider text-signal-cyan">{t}</p>
-              <p className="mt-1 text-xs leading-relaxed text-storm-400">{d}</p>
+        {/* feature strip */}
+        <div className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-3">
+          {FEATURES.map(([t, d]) => (
+            <div key={t} className="rounded-xl border border-storm-800 bg-storm-900/50 px-4 py-3.5">
+              <p className="font-mono text-xs font-bold uppercase tracking-wider text-signal-cyan">
+                {t}
+              </p>
+              <p className="mt-1.5 text-xs leading-relaxed text-storm-400">{d}</p>
             </div>
           ))}
         </div>
       </section>
-    </main>
+    </PageShell>
   );
 }

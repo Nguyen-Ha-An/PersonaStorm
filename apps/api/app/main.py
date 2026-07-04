@@ -52,7 +52,11 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
-        allow_credentials=True,
+        allow_origin_regex=settings.cors_origin_regex,
+        # No cookies/credentials are used (all endpoints are public), so we keep
+        # credentials off — that also keeps us safe from the browser rule that
+        # forbids `Access-Control-Allow-Origin: *` together with credentials.
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )

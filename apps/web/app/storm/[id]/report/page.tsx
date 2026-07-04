@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Button, Card, CardHeader } from "@/components/ui";
+import { useCallback, useEffect, useState } from "react";
+import { Button, Card, CardHeader, PageShell, SectionRule, Skeleton } from "@/components/ui";
+import { ErrorState } from "@/components/feedback";
 import { MarketFitHero } from "@/components/report/MarketFitHero";
 import { BlockerCards } from "@/components/report/BlockerCards";
 import { CriteriaRadar } from "@/components/report/CriteriaRadar";
@@ -21,7 +22,7 @@ import { PriceCurve } from "@/components/report/PriceCurve";
 import { Recommendations } from "@/components/report/Recommendations";
 import { SegmentHeatmap } from "@/components/report/SegmentHeatmap";
 import { TrustPanel } from "@/components/report/TrustPanel";
-import { getReport } from "@/lib/api";
+import { API_TARGET_LABEL, getReport } from "@/lib/api";
 import type { StormReport } from "@/lib/types";
 
 const MARKET_LABELS: Record<string, string> = {
@@ -34,23 +35,12 @@ const MARKET_LABELS: Record<string, string> = {
   custom: "Custom segment",
 };
 
-/** Small section heading to separate the diagnostic dashboard from evidence. */
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-3 pt-2">
-      <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-storm-400">
-        {children}
-      </span>
-      <span className="h-px flex-1 bg-storm-800" />
-    </div>
-  );
-}
-
 export default function ReportPage() {
   const params = useParams<{ id: string }>();
   const stormId = params?.id;
   const [report, setReport] = useState<StormReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     if (!stormId) return;
@@ -67,7 +57,7 @@ export default function ReportPage() {
           timer = setTimeout(poll, 800); // still running — poll until ready
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "failed to load report");
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load the report.");
       }
     }
     poll();
@@ -75,53 +65,78 @@ export default function ReportPage() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [stormId]);
+  }, [stormId, retryKey]);
+
+  const retry = useCallback(() => {
+    setError(null);
+    setReport(null);
+    setRetryKey((k) => k + 1);
+  }, []);
+
+  const downloadJson = useCallback(() => {
+    if (!report) return;
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `personastorm_${report.storm_id}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [report]);
 
   if (error) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-16 text-center">
-        <p className="text-signal-red">{error}</p>
-        <Link href="/" className="mt-6 inline-block">
-          <Button variant="outline">← Run a new storm</Button>
-        </Link>
-      </main>
+      <PageShell className="py-16">
+        <ErrorState
+          title="Couldn't load this report"
+          message={error}
+          detail={`API target: ${API_TARGET_LABEL}`}
+          onRetry={retry}
+          homeLabel="Run a new storm"
+        />
+      </PageShell>
     );
   }
 
   if (!report) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-24 text-center">
-        <p className="animate-pulseglow font-mono text-sm uppercase tracking-[0.2em] text-signal-cyan">
-          aggregating swarm signal…
+      <PageShell className="py-8">
+        <div className="mb-6 flex items-center gap-3">
+          <span className="h-2 w-2 animate-pulseglow rounded-full bg-signal-cyan" />
+          <p className="font-mono text-sm uppercase tracking-[0.2em] text-signal-cyan">
+            aggregating swarm signal…
+          </p>
+        </div>
+        <p className="mb-8 text-xs text-storm-400">
+          If the storm is still streaming, this page fills in automatically when it finishes.
         </p>
-        <p className="mt-3 text-xs text-storm-400">
-          If the storm is still streaming, this page opens automatically when it finishes.
-        </p>
-      </main>
+        {/* skeleton scaffold mirrors the final report layout */}
+        <div className="space-y-6">
+          <Skeleton className="h-52 w-full" />
+          <Skeleton className="h-28 w-full" />
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Skeleton className="h-64 w-full" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+          <Skeleton className="h-40 w-full" />
+        </div>
+      </PageShell>
     );
   }
 
-  function downloadJson() {
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `personastorm_${report!.storm_id}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   return (
-    <main className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+    <PageShell className="space-y-6 py-8">
       {/* header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-storm-400">
             market evaluation · {report.storm_id} ·{" "}
             {MARKET_LABELS[report.target_market] ?? report.target_market} ·{" "}
             {report.persona_count.toLocaleString()} personas
           </p>
-          <h1 className="mt-1 text-3xl font-bold text-white">{report.title}</h1>
+          <h1 className="mt-1.5 text-3xl font-semibold tracking-tight text-storm-100">
+            {report.title}
+          </h1>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={downloadJson}>
@@ -146,7 +161,7 @@ export default function ReportPage() {
       <BlockerCards report={report} />
 
       {/* ── 3 + 4. Criteria radar + weighted breakdown ── */}
-      <SectionLabel>criteria diagnosis</SectionLabel>
+      <SectionRule>criteria diagnosis</SectionRule>
       <div className="grid gap-6 lg:grid-cols-2">
         <CriteriaRadar report={report} />
         <CriteriaBreakdown report={report} />
@@ -159,7 +174,7 @@ export default function ReportPage() {
       <AgeCohortBreakdown report={report} />
 
       {/* ── 7. Focused diagnostic panels ── */}
-      <SectionLabel>adoption drivers</SectionLabel>
+      <SectionRule>adoption drivers</SectionRule>
       <div className="grid gap-6 lg:grid-cols-2">
         <TrustProofPanel report={report} />
         <DifferentiationPanel report={report} />
@@ -171,7 +186,7 @@ export default function ReportPage() {
       <WorkflowFitPanel report={report} />
 
       {/* ── 8. Evidence: segments, objections, kill quote ── */}
-      <SectionLabel>evidence</SectionLabel>
+      <SectionRule>evidence</SectionRule>
       <SegmentHeatmap report={report} />
 
       {/* segment insights */}
@@ -179,9 +194,9 @@ export default function ReportPage() {
         <CardHeader title="Segment insights" />
         <div className="grid gap-3 p-5 sm:grid-cols-2">
           {report.segments.map((s) => (
-            <div key={s.segment} className="rounded-lg border border-storm-800 bg-storm-850 p-4">
+            <div key={s.segment} className="rounded-xl border border-storm-800 bg-storm-850 p-4">
               <div className="flex items-baseline justify-between gap-2">
-                <p className="text-xs font-semibold leading-snug text-white">{s.segment}</p>
+                <p className="text-xs font-semibold leading-snug text-storm-100">{s.segment}</p>
                 <span className="shrink-0 font-mono text-xs text-signal-cyan">
                   {Math.round(s.adoption_rate * 100)}% adopt
                 </span>
@@ -196,10 +211,10 @@ export default function ReportPage() {
       <KillQuoteCard report={report} />
 
       {/* ── Next steps: validation queue + recommendations + trust ── */}
-      <SectionLabel>next steps</SectionLabel>
+      <SectionRule>next steps</SectionRule>
       <NextValidationPanel report={report} />
       <Recommendations report={report} />
       <TrustPanel report={report} />
-    </main>
+    </PageShell>
   );
 }

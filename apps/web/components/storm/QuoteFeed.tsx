@@ -14,7 +14,7 @@ export function QuoteFeed({ quotes }: { quotes: QuoteItem[] }) {
         {quotes.map((q, i) => (
           <div
             key={`${q.persona_id}-${i}`}
-            className="rounded-lg border border-storm-800 bg-storm-850/80 px-3 py-2.5"
+            className="animate-fade-up rounded-xl border border-storm-800 bg-storm-850/70 px-3 py-2.5"
           >
             <div className="mb-1 flex items-center gap-2">
               <StatusDot status={q.status} />

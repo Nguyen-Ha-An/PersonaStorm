@@ -24,3 +24,6 @@ data/runs/*.json
 .idea/
 .vscode/
 *.log
+
+# sdd scratch (progress ledger, briefs, review packages)
+.superpowers/

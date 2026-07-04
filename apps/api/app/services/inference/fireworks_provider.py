@@ -32,12 +32,35 @@ import logging
 import httpx
 
 from ...schemas.persona import Persona
-from ...schemas.reaction import PersonaReaction, status_for
+from ...schemas.reaction import (
+    CoreCriteriaScores,
+    Decision,
+    PersonaReaction,
+    Qualitative,
+    ResearchRecommendation,
+    status_for,
+)
+from ..criteria.classifier import classify_category, is_high_risk
+from ..criteria.registry import CORE_IDS
+from ..criteria.scoring import compute_market_fit
 from ..stimulus_parser import StimulusFeatures
 from .base import PersonaInferenceProvider, ProviderNotConfiguredError
 from .prompts import build_system_prompt, build_user_prompt
 
 logger = logging.getLogger(__name__)
+
+_PRICING_MODELS = {
+    "one_time", "subscription", "usage_based", "seat_based",
+    "enterprise", "freemium", "unknown",
+}
+_BEST_NEXT_TESTS = {
+    "survey", "interview", "landing_page_ab_test", "pricing_test",
+    "ad_test", "usability_test",
+}
+
+
+def _clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
+    return max(lo, min(hi, value))
 
 
 class FireworksProvider(PersonaInferenceProvider):
@@ -81,7 +104,7 @@ class FireworksProvider(PersonaInferenceProvider):
         )
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"]
-        return parse_llm_reaction(content, persona)
+        return parse_llm_reaction(content, persona, features)
 
     async def health_check(self) -> bool:
         try:
@@ -94,12 +117,19 @@ class FireworksProvider(PersonaInferenceProvider):
             return False
 
 
-def parse_llm_reaction(content: str, persona: Persona) -> PersonaReaction:
+def parse_llm_reaction(
+    content: str,
+    persona: Persona,
+    features: StimulusFeatures | None = None,
+) -> PersonaReaction:
     """Parse + validate an LLM JSON reply into a PersonaReaction.
 
-    Shared by Fireworks and vLLM providers. Defensive on purpose: the Response
-    Quality Checker treats schema-invalid outputs as provider errors, so we
-    surface them loudly instead of silently fabricating data.
+    Shared by Fireworks, vLLM, and NIM providers. Defensive on purpose: the
+    Response Quality Checker treats schema-invalid outputs as provider errors,
+    so we surface them loudly instead of silently fabricating data.
+
+    market_fit_score and status are NEVER trusted from the model — they are
+    always recomputed server-side via `compute_market_fit`/`status_for`.
     """
     text = content.strip()
     if text.startswith("```"):
@@ -111,18 +141,82 @@ def parse_llm_reaction(content: str, persona: Persona) -> PersonaReaction:
         raise ValueError(f"provider returned non-JSON content for {persona.persona_id}")
     data = json.loads(text[start:end + 1])
 
-    likelihood = max(0.0, min(1.0, float(data.get("buy_likelihood", 0.5))))
+    if "criteria_scores" not in data or not isinstance(data["criteria_scores"], dict):
+        raise ValueError(
+            f"provider response missing criteria_scores for {persona.persona_id}"
+        )
+    raw_core = data["criteria_scores"]
+    core: dict[str, float] = {
+        cid: _clamp(float(raw_core.get(cid, 0.5))) for cid in CORE_IDS
+    }
+
+    raw_age = data.get("age_specific_scores", {}) or {}
+    age_specific_scores: dict[str, float] = {
+        str(k): _clamp(float(v)) for k, v in raw_age.items()
+    }
+
+    buy_likelihood = _clamp(float(data.get("buy_likelihood", 0.5)))
+    max_price = max(0.0, float(data.get("max_price", 0.0)))
+
+    category = classify_category(features)[0] if features else "generic"
+    high_risk = is_high_risk(features) if features else False
+    is_teen_paid_edu = persona.life_stage == "teen_student" and category == "education_product"
+
+    breakdown = compute_market_fit(
+        core,
+        age_specific_scores,
+        category,
+        persona.life_stage,
+        is_high_risk=high_risk,
+        is_teen_paid_edu=is_teen_paid_edu,
+    )
+
+    status = status_for(buy_likelihood)  # recompute server-side; never trust model status
+
+    pricing_model = data.get("recommended_pricing_model", "unknown")
+    if pricing_model not in _PRICING_MODELS:
+        pricing_model = "unknown"
+
+    qual = data.get("qualitative", {}) or {}
+    qualitative = Qualitative(
+        first_objection=str(qual.get("first_objection", ""))[:280],
+        top_positive_trigger=str(qual.get("top_positive_trigger", ""))[:280],
+        top_negative_trigger=str(qual.get("top_negative_trigger", ""))[:280],
+        dealbreaker=str(qual.get("dealbreaker", ""))[:200],
+        proof_needed=str(qual.get("proof_needed", ""))[:200],
+        emotional_reaction=str(qual.get("emotional_reaction", ""))[:160],
+        would_tell=str(qual.get("would_tell", ""))[:280],
+        quote=str(qual.get("quote", ""))[:400],
+    )
+
+    rr = data.get("research_recommendation", {}) or {}
+    best_next_test = rr.get("best_next_test", "survey")
+    if best_next_test not in _BEST_NEXT_TESTS:
+        best_next_test = "survey"
+    research_recommendation = ResearchRecommendation(
+        should_validate_with_humans=bool(rr.get("should_validate_with_humans", True)),
+        validation_question=str(rr.get("validation_question", ""))[:300],
+        best_next_test=best_next_test,
+    )
+
+    decision = Decision(
+        overall_buy_likelihood=buy_likelihood,
+        market_fit_score=breakdown.market_fit_score,  # NEVER from the model
+        status=status,
+        max_price=max_price,
+        recommended_pricing_model=pricing_model,
+    )
+
     return PersonaReaction(
         persona_id=persona.persona_id,
         segment=persona.segment,
         sub_segment=persona.sub_segment,
-        buy_likelihood=likelihood,
-        status=status_for(likelihood),  # recompute server-side; never trust model status
-        max_price=max(0.0, float(data.get("max_price", 0.0))),
-        first_objection=str(data.get("first_objection", ""))[:240],
-        positive_trigger=str(data.get("positive_trigger", ""))[:240],
-        emotional_reaction=str(data.get("emotional_reaction", ""))[:120],
-        would_tell=str(data.get("would_tell", ""))[:240],
-        quote=str(data.get("quote", ""))[:400],
-        reasoning_summary=str(data.get("reasoning_summary", ""))[:300],
+        life_stage=persona.life_stage,
+        decision=decision,
+        criteria_scores=CoreCriteriaScores(**core),
+        age_specific_scores=age_specific_scores,
+        qualitative=qualitative,
+        research_recommendation=research_recommendation,
+        reasoning_summary=str(data.get("reasoning_summary", ""))[:400],
+        market_fit_breakdown=breakdown,
     )

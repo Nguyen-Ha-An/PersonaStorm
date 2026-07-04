@@ -5,8 +5,12 @@ and on vLLM/MI300X — meaning calibration work is portable across serving
 backends.
 
 Product rules encoded in the prompt:
-- The model reacts AS the persona (persona-conditioning, not persona-training).
-- Output is STRICT JSON matching the PersonaReaction schema.
+- The model reacts AS the persona (persona-conditioning, not persona-training),
+  evaluated through the criteria schema — not a generic assistant giving
+  generic advice.
+- Output is STRICT JSON matching REACTION_JSON_SCHEMA (nested criteria_scores,
+  qualitative, research_recommendation — the model never returns
+  market_fit_score or status; those are always computed server-side).
 - `reasoning_summary` is a 1-sentence public rationale — the prompt explicitly
   forbids chain-of-thought / step-by-step deliberation in the output.
 """
@@ -16,25 +20,69 @@ from __future__ import annotations
 import json
 
 from ...schemas.persona import Persona
+from ..criteria.registry import CORE_IDS
 from ..stimulus_parser import StimulusFeatures
 
 # JSON Schema handed to guided decoding (vLLM guided_json / Fireworks
-# response_format). Mirror of schemas/reaction.py minus server-filled fields.
+# response_format / NIM nvext.guided_json). Mirror of schemas/reaction.py
+# minus the server-computed fields (market_fit_score, status).
 REACTION_JSON_SCHEMA: dict = {
     "type": "object",
     "properties": {
+        "criteria_scores": {
+            "type": "object",
+            "properties": {cid: {"type": "number", "minimum": 0, "maximum": 1} for cid in CORE_IDS},
+            "required": list(CORE_IDS),
+            "additionalProperties": False,
+        },
+        "age_specific_scores": {
+            "type": "object",
+            "additionalProperties": {"type": "number", "minimum": 0, "maximum": 1},
+        },
+        "qualitative": {
+            "type": "object",
+            "properties": {
+                "first_objection": {"type": "string"},
+                "top_positive_trigger": {"type": "string"},
+                "top_negative_trigger": {"type": "string"},
+                "dealbreaker": {"type": "string"},
+                "proof_needed": {"type": "string"},
+                "emotional_reaction": {"type": "string"},
+                "would_tell": {"type": "string"},
+                "quote": {"type": "string"},
+            },
+            "required": [
+                "first_objection", "top_positive_trigger", "top_negative_trigger",
+                "dealbreaker", "proof_needed", "emotional_reaction", "would_tell", "quote",
+            ],
+            "additionalProperties": False,
+        },
         "buy_likelihood": {"type": "number", "minimum": 0, "maximum": 1},
         "max_price": {"type": "number", "minimum": 0},
-        "first_objection": {"type": "string", "maxLength": 240},
-        "positive_trigger": {"type": "string", "maxLength": 240},
-        "emotional_reaction": {"type": "string", "maxLength": 120},
-        "would_tell": {"type": "string", "maxLength": 240},
-        "quote": {"type": "string", "maxLength": 400},
-        "reasoning_summary": {"type": "string", "maxLength": 300},
+        "recommended_pricing_model": {
+            "type": "string",
+            "enum": ["one_time", "subscription", "usage_based", "seat_based",
+                     "enterprise", "freemium", "unknown"],
+        },
+        "research_recommendation": {
+            "type": "object",
+            "properties": {
+                "should_validate_with_humans": {"type": "boolean"},
+                "validation_question": {"type": "string"},
+                "best_next_test": {
+                    "type": "string",
+                    "enum": ["survey", "interview", "landing_page_ab_test",
+                             "pricing_test", "ad_test", "usability_test"],
+                },
+            },
+            "required": ["should_validate_with_humans", "validation_question", "best_next_test"],
+            "additionalProperties": False,
+        },
+        "reasoning_summary": {"type": "string", "maxLength": 400},
     },
     "required": [
-        "buy_likelihood", "max_price", "first_objection", "positive_trigger",
-        "emotional_reaction", "would_tell", "quote", "reasoning_summary",
+        "criteria_scores", "qualitative", "buy_likelihood", "max_price",
+        "recommended_pricing_model", "research_recommendation", "reasoning_summary",
     ],
     "additionalProperties": False,
 }
@@ -42,8 +90,7 @@ REACTION_JSON_SCHEMA: dict = {
 
 def build_system_prompt(persona: Persona) -> str:
     p = persona
-    return f"""You are simulating ONE specific consumer persona reacting to a product stimulus.
-You are NOT an assistant here. Stay strictly in character. React the way THIS person would.
+    return f"""You are simulating this specific persona's market reaction. You are NOT a helpful assistant giving generic advice. Evaluate the product through the criteria schema. Be specific, skeptical when appropriate, and consistent with the persona profile.
 
 PERSONA:
 {json.dumps(p.model_dump(), indent=2)}
@@ -52,14 +99,20 @@ BEHAVIOR RULES:
 - Your price sensitivity of {p.price_sensitivity} strongly caps your max_price relative to your monthly budget (${p.monthly_budget_usd}/mo discretionary).
 - Your skepticism of {p.skepticism} controls how much proof you demand before believing claims.
 - Your dealbreakers are real: if the stimulus trips one, it must show up in your objection.
-- Be specific. Reference concrete parts of the stimulus (features, wording, prices). Never respond with generic filler like "seems useful" or "interesting product".
+- Your life_stage and decision_context (parent approval, budget control, influence sources) shape how you actually decide — respect them.
+- Score every one of the 17 core criteria in criteria_scores, and any relevant age_specific_scores overlay, based on THIS persona reacting to THIS stimulus.
+- Be specific. Reference concrete parts of the stimulus (features, wording, prices).
+- FORBIDDEN: generic filler such as "seems innovative", "some people may like it", or "it depends". Every judgment must tie back to a concrete stimulus detail and a concrete persona trait.
 - You are a synthetic persona. Never claim to be a real human or cite fabricated personal history verifiable in the real world.
 
 OUTPUT RULES:
 - Respond with ONE JSON object only, matching the given schema. No markdown, no commentary.
-- `reasoning_summary` = one short sentence linking your traits to your verdict
+- Do NOT include chain-of-thought or step-by-step reasoning/deliberation anywhere in the output.
+- Do NOT return market_fit_score or status — those are computed by the server, not you.
+- `reasoning_summary` = one short, public-facing sentence linking your traits to your verdict
   (example: "High price sensitivity + no visible pricing makes me assume I can't afford it").
-  Do NOT include step-by-step reasoning or deliberation anywhere in the output."""
+  It is never hidden reasoning, only the one-sentence public explanation.
+- Output ONLY valid JSON."""
 
 
 def build_user_prompt(stimulus: str, stimulus_type: str,

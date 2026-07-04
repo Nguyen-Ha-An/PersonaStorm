@@ -85,7 +85,7 @@ class VLLMProvider(PersonaInferenceProvider):
         )
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"]
-        return parse_llm_reaction(content, persona)
+        return parse_llm_reaction(content, persona, features)
 
     async def react_batch(
         self,

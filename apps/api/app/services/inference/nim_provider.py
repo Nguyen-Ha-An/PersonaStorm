@@ -120,7 +120,7 @@ class NIMProvider(PersonaInferenceProvider):
         # Reasoning models split chain-of-thought into reasoning_content and the
         # answer into content; we only ever parse content (the constrained JSON).
         content = message.get("content") or ""
-        return parse_llm_reaction(content, persona)
+        return parse_llm_reaction(content, persona, features)
 
     async def health_check(self) -> bool:
         try:

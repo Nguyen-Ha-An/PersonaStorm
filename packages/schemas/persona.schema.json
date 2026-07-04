@@ -19,6 +19,24 @@
     "region": { "type": "string" },
     "income_band": { "type": "string" },
     "occupation": { "type": "string" },
+    "life_stage": {
+      "type": "string",
+      "description": "Authoritatively derived from age (never caller-supplied): teen_student (13-17), student_young_adult (18-24), early_career (25-34), parent_family (35-44), established_adult (45-60), older_adult (61+).",
+      "enum": ["teen_student", "student_young_adult", "early_career", "parent_family", "established_adult", "older_adult"]
+    },
+    "decision_context": {
+      "type": "object",
+      "description": "How this persona actually makes the buy/adopt decision. All fields optional; populated deterministically by the generator from life_stage.",
+      "properties": {
+        "needs_parent_approval": { "type": ["boolean", "null"] },
+        "budget_control": { "type": ["string", "null"] },
+        "main_influence_sources": { "type": "array", "items": { "type": "string" } },
+        "risk_owner": { "type": ["string", "null"] },
+        "attention_span": { "type": ["string", "null"] },
+        "school_context": { "type": ["string", "null"] },
+        "decision_horizon": { "type": ["string", "null"] }
+      }
+    },
     "price_sensitivity": { "type": "number", "minimum": 0, "maximum": 1 },
     "skepticism": { "type": "number", "minimum": 0, "maximum": 1 },
     "novelty_seeking": { "type": "number", "minimum": 0, "maximum": 1 },

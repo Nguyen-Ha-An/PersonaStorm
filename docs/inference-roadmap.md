@@ -23,9 +23,36 @@ Two distinct roles:
    swarm through `FireworksProvider`. 1,000 short completions/storm; watch
    rate limits; set `STORM_MAX_CONCURRENCY` ≈ 8–16.
 
+Both roles share one prompt/schema contract (`services/inference/prompts.py`):
+the system prompt tells the model to react AS the persona, evaluated through
+the full 17-criterion + age-overlay schema, and to output only
+`REACTION_JSON_SCHEMA` — criteria scores, qualitative fields, and a
+decision-lite block (`buy_likelihood`, `max_price`,
+`recommended_pricing_model`). The model **never** returns `market_fit_score`
+or `status`; `parse_llm_reaction` always recomputes both server-side via
+`compute_market_fit`, exactly like the mock path (see
+[criteria-system.md](criteria-system.md) §5) — so swapping to a live LLM
+changes reaction quality, never the scoring honesty guarantee.
+
 Activation: `.env` → `INFERENCE_PROVIDER=fireworks`, `FIREWORKS_API_KEY=…`.
 Remaining work: live-key smoke test, retry/backoff on 429, usage metering
 (TODOs marked in fireworks_provider.py).
+
+## Stage 1b — NVIDIA NIM (structured placeholder shipped)
+
+A fourth, OpenAI-compatible provider (`NIMProvider`) targets NVIDIA NIM —
+either the hosted `build.nvidia.com` catalog or a self-hosted NIM container.
+Same `PersonaInferenceProvider` interface, same criteria-aware prompts and
+`REACTION_JSON_SCHEMA`, same server-side `compute_market_fit` recompute.
+Activation: `INFERENCE_PROVIDER=nim`, `NIM_API_KEY=…` (hosted) or
+`NIM_BASE_URL=http://<host>:8000/v1` (self-hosted, key usually not needed),
+`NIM_MODEL` (default `z-ai/glm-5.2`, a reasoning model — `NIM_MAX_TOKENS`
+leaves headroom for reasoning tokens ahead of the JSON payload).
+`NIM_USE_GUIDED_JSON=true` requests strict JSON via `nvext.guided_json`;
+set `false` to fall back to `response_format=json_object` if an
+endpoint/model rejects the NIM extension. Not part of the original design
+spec's two-provider roadmap, but shipped alongside Fireworks/vLLM since it's
+the same swap point and useful for AMD/NVIDIA-agnostic demos.
 
 ## Stage 2 — vLLM on AMD MI300X / ROCm (target architecture)
 

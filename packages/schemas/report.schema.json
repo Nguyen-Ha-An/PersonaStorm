@@ -11,15 +11,69 @@
     "storm_id": { "type": "string" },
     "title": { "type": "string" },
     "summary": { "type": "string" },
+    "product_category": {
+      "type": "string",
+      "default": "generic",
+      "description": "One of the 10 criteria-preset categories, auto-detected or overridden via StormCreateRequest.product_category."
+    },
+
+    "overall": {
+      "type": ["object", "null"],
+      "description": "Headline verdict for the whole run.",
+      "properties": {
+        "market_fit_score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "confidence": { "enum": ["low", "medium", "high"], "description": "Capped at quality.benchmark_confidence; lowered by collapse_risk." },
+        "top_blockers": { "type": "array", "items": { "type": "string" } },
+        "top_strengths": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
     "adoption": {
       "type": "object",
       "required": ["green", "yellow", "red"],
       "properties": {
         "green": { "type": "integer", "minimum": 0 },
         "yellow": { "type": "integer", "minimum": 0 },
-        "red": { "type": "integer", "minimum": 0 }
+        "red": { "type": "integer", "minimum": 0 },
+        "average_buy_likelihood": { "type": "number", "minimum": 0, "maximum": 1 },
+        "average_market_fit_score": { "type": "number", "minimum": 0, "maximum": 1 }
       }
     },
+
+    "criteria_breakdown": {
+      "type": "array",
+      "description": "One entry per core criterion (17 total, registry order).",
+      "items": {
+        "type": "object",
+        "required": ["criterion_id", "label", "average_score", "higher_is_better", "weight"],
+        "properties": {
+          "criterion_id": { "type": "string" },
+          "label": { "type": "string" },
+          "average_score": { "type": "number", "minimum": 0, "maximum": 1 },
+          "higher_is_better": { "type": "boolean" },
+          "weight": { "type": "number", "minimum": 0 },
+          "segment_scores": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": { "segment": { "type": "string" }, "score": { "type": "number" } }
+            }
+          },
+          "interpretation": { "type": "string" }
+        }
+      }
+    },
+    "weakest_criteria": {
+      "type": "array",
+      "description": "Disjoint from strongest_criteria; ranked by weight * deficit, capped at 5.",
+      "items": { "$ref": "#/$defs/criterion_card" }
+    },
+    "strongest_criteria": {
+      "type": "array",
+      "description": "Disjoint from weakest_criteria; ranked by weight * effective score, capped at 5.",
+      "items": { "$ref": "#/$defs/criterion_card" }
+    },
+
     "segments": {
       "type": "array",
       "items": {
@@ -40,6 +94,28 @@
         }
       }
     },
+    "age_cohorts": {
+      "type": "array",
+      "description": "Only life stages actually present in the run appear.",
+      "items": {
+        "type": "object",
+        "required": ["life_stage", "personas", "adoption_rate", "avg_buy_likelihood",
+                     "avg_market_fit_score", "top_barrier", "insight"],
+        "properties": {
+          "life_stage": {
+            "enum": ["teen_student", "student_young_adult", "early_career",
+                     "parent_family", "established_adult", "older_adult"]
+          },
+          "personas": { "type": "integer" },
+          "adoption_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+          "avg_buy_likelihood": { "type": "number", "minimum": 0, "maximum": 1 },
+          "avg_market_fit_score": { "type": "number", "minimum": 0, "maximum": 1 },
+          "top_barrier": { "type": "string" },
+          "insight": { "type": "string" }
+        }
+      }
+    },
+
     "top_objections": {
       "type": "array",
       "items": {
@@ -65,6 +141,7 @@
         }
       }
     },
+
     "kill_quote": { "type": "string" },
     "kill_quote_context": {
       "type": ["object", "null"],
@@ -75,6 +152,7 @@
         "skepticism": { "type": "number" }
       }
     },
+
     "quality": { "$ref": "quality.schema.json" },
     "recommendations": {
       "type": "array",
@@ -88,11 +166,40 @@
         }
       }
     },
+    "next_human_validation": {
+      "type": "array",
+      "description": "Aggregated from every persona's research_recommendation, grouped by best_next_test, top 3 by share of personas.",
+      "items": {
+        "type": "object",
+        "required": ["question", "test_type", "rationale"],
+        "properties": {
+          "question": { "type": "string" },
+          "test_type": {
+            "enum": ["survey", "interview", "landing_page_ab_test", "pricing_test", "ad_test", "usability_test"]
+          },
+          "rationale": { "type": "string" }
+        }
+      }
+    },
+
     "persona_count": { "type": "integer" },
     "stimulus_type": { "type": "string" },
     "target_market": { "type": "string" },
     "avg_max_price": { "type": "number" },
     "generated_at": { "type": "string" },
     "disclaimer": { "type": "string" }
+  },
+  "$defs": {
+    "criterion_card": {
+      "type": "object",
+      "required": ["criterion_id", "label", "average_score", "weight"],
+      "properties": {
+        "criterion_id": { "type": "string" },
+        "label": { "type": "string" },
+        "average_score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "weight": { "type": "number", "minimum": 0 },
+        "interpretation": { "type": "string" }
+      }
+    }
   }
 }

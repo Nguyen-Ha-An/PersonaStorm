@@ -2,26 +2,131 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://personastorm.dev/schemas/reaction.schema.json",
   "title": "PersonaReaction",
-  "description": "reasoning_summary is a short public rationale only — providers must never emit hidden chain-of-thought.",
+  "description": "Nested multi-criteria reaction. reasoning_summary is a short public rationale only — providers must never emit hidden chain-of-thought. market_fit_score (inside `decision`) is ALWAYS computed server-side by compute_market_fit, never invented by a provider. Flat top-level compat fields (buy_likelihood, status, max_price, market_fit_score, first_objection, quote, positive_trigger, segment) are read-only property shims over the nested objects below, kept for backward-compatible consumers (e.g. the SSE `reaction` event) — the nested shape is the authoritative contract.",
   "type": "object",
   "required": [
-    "persona_id", "buy_likelihood", "status", "max_price", "first_objection",
-    "positive_trigger", "emotional_reaction", "would_tell", "quote",
-    "reasoning_summary"
+    "persona_id", "decision", "criteria_scores", "qualitative",
+    "research_recommendation", "reasoning_summary"
   ],
   "properties": {
     "persona_id": { "type": "string" },
     "segment": { "type": "string" },
     "sub_segment": { "type": "string" },
-    "buy_likelihood": { "type": "number", "minimum": 0, "maximum": 1 },
-    "status": { "enum": ["green", "yellow", "red"] },
-    "max_price": { "type": "number", "minimum": 0 },
-    "currency": { "type": "string", "default": "USD" },
-    "first_objection": { "type": "string", "maxLength": 240 },
-    "positive_trigger": { "type": "string", "maxLength": 240 },
-    "emotional_reaction": { "type": "string", "maxLength": 120 },
-    "would_tell": { "type": "string", "maxLength": 240 },
-    "quote": { "type": "string", "maxLength": 400 },
-    "reasoning_summary": { "type": "string", "maxLength": 400 }
+    "life_stage": { "type": "string" },
+
+    "decision": {
+      "type": "object",
+      "description": "The headline verdict.",
+      "required": ["overall_buy_likelihood", "market_fit_score", "status", "max_price"],
+      "properties": {
+        "overall_buy_likelihood": { "type": "number", "minimum": 0, "maximum": 1 },
+        "market_fit_score": { "type": "number", "minimum": 0, "maximum": 1, "description": "System-computed by compute_market_fit; never a model invention." },
+        "status": { "enum": ["green", "yellow", "red"] },
+        "max_price": { "type": "number", "minimum": 0 },
+        "currency": { "type": "string", "default": "USD" },
+        "recommended_pricing_model": {
+          "enum": ["one_time", "subscription", "usage_based", "seat_based", "enterprise", "freemium", "unknown"],
+          "default": "unknown"
+        }
+      }
+    },
+
+    "criteria_scores": {
+      "type": "object",
+      "description": "The 17 core purchase-decision criteria, each 0..1. proof_requirement is a BARRIER (higher = more friction), not a benefit.",
+      "required": [
+        "problem_awareness", "need_intensity", "urgency", "solution_fit",
+        "value_clarity", "differentiation", "trust", "proof_requirement",
+        "pricing_acceptance", "perceived_roi", "ease_of_understanding",
+        "workflow_fit", "switching_willingness", "activation_likelihood",
+        "repeat_usage_potential", "shareability", "retention_potential"
+      ],
+      "properties": {
+        "problem_awareness": { "type": "number", "minimum": 0, "maximum": 1 },
+        "need_intensity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "urgency": { "type": "number", "minimum": 0, "maximum": 1 },
+        "solution_fit": { "type": "number", "minimum": 0, "maximum": 1 },
+        "value_clarity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "differentiation": { "type": "number", "minimum": 0, "maximum": 1 },
+        "trust": { "type": "number", "minimum": 0, "maximum": 1 },
+        "proof_requirement": { "type": "number", "minimum": 0, "maximum": 1, "description": "Barrier: higher_is_better=false." },
+        "pricing_acceptance": { "type": "number", "minimum": 0, "maximum": 1 },
+        "perceived_roi": { "type": "number", "minimum": 0, "maximum": 1 },
+        "ease_of_understanding": { "type": "number", "minimum": 0, "maximum": 1 },
+        "workflow_fit": { "type": "number", "minimum": 0, "maximum": 1 },
+        "switching_willingness": { "type": "number", "minimum": 0, "maximum": 1 },
+        "activation_likelihood": { "type": "number", "minimum": 0, "maximum": 1 },
+        "repeat_usage_potential": { "type": "number", "minimum": 0, "maximum": 1 },
+        "shareability": { "type": "number", "minimum": 0, "maximum": 1 },
+        "retention_potential": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+
+    "age_specific_scores": {
+      "type": "object",
+      "description": "Dynamic keys = this persona's life-stage overlay criteria (e.g. parent_approval, subscription_fatigue). Values 0..1; safety_concern and subscription_fatigue are barriers.",
+      "additionalProperties": { "type": "number", "minimum": 0, "maximum": 1 }
+    },
+
+    "qualitative": {
+      "type": "object",
+      "required": ["first_objection", "top_positive_trigger", "top_negative_trigger",
+                   "dealbreaker", "proof_needed", "emotional_reaction", "would_tell", "quote"],
+      "properties": {
+        "first_objection": { "type": "string", "maxLength": 280 },
+        "top_positive_trigger": { "type": "string", "maxLength": 280 },
+        "top_negative_trigger": { "type": "string", "maxLength": 280 },
+        "dealbreaker": { "type": "string", "maxLength": 200 },
+        "proof_needed": { "type": "string", "maxLength": 200 },
+        "emotional_reaction": { "type": "string", "maxLength": 160 },
+        "would_tell": { "type": "string", "maxLength": 280 },
+        "quote": { "type": "string", "maxLength": 400 }
+      }
+    },
+
+    "research_recommendation": {
+      "type": "object",
+      "description": "Where a real human study would de-risk this reaction most.",
+      "required": ["should_validate_with_humans", "validation_question", "best_next_test"],
+      "properties": {
+        "should_validate_with_humans": { "type": "boolean", "default": true },
+        "validation_question": { "type": "string", "maxLength": 300 },
+        "best_next_test": {
+          "enum": ["survey", "interview", "landing_page_ab_test", "pricing_test", "ad_test", "usability_test"],
+          "default": "survey"
+        }
+      }
+    },
+
+    "reasoning_summary": {
+      "type": "string",
+      "maxLength": 400,
+      "description": "Short public explanation only — never hidden chain-of-thought."
+    },
+
+    "market_fit_breakdown": {
+      "type": ["object", "null"],
+      "description": "Optional audit trail from compute_market_fit; compact form for the eval/trust panel.",
+      "properties": {
+        "market_fit_score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "category_weighted_core_score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "age_overlay_score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "age_overlay_lambda": { "type": "number", "minimum": 0.05, "maximum": 0.35 },
+        "modifier_adjustment": { "type": "number", "minimum": -0.1, "maximum": 0.1 },
+        "modifier_reasons": { "type": "array", "items": { "type": "string" } },
+        "gates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "gate_applied": { "type": "boolean" },
+              "gate_name": { "type": "string" },
+              "reason": { "type": "string" },
+              "score_multiplier": { "type": "number" }
+            }
+          }
+        }
+      }
+    }
   }
 }

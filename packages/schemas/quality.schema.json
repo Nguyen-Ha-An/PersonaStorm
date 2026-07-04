@@ -6,6 +6,7 @@
   "required": [
     "persona_adherence", "product_grounding", "generic_response_rate",
     "duplicate_objection_rate", "objection_entropy", "segment_variance",
+    "age_cohort_variance", "criteria_consistency",
     "collapse_risk", "benchmark_confidence"
   ],
   "properties": {
@@ -17,6 +18,16 @@
     "objection_entropy_score": { "type": "number" },
     "segment_variance": { "enum": ["weak", "moderate", "strong"] },
     "segment_variance_score": { "type": "number" },
+    "age_cohort_variance": {
+      "enum": ["weak", "moderate", "strong"],
+      "description": "stddev of per-life-stage-cohort mean buy_likelihood, same banding as segment_variance."
+    },
+    "criteria_consistency": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Share of personas whose reaction passes all internal-consistency rules (trust_vs_buy, price_vs_wtp, proof_vs_trust, uniform_criteria). Higher is better."
+    },
     "collapse_risk": { "enum": ["low", "medium", "high"] },
     "collapse_risk_score": { "type": "number" },
     "benchmark_confidence": { "enum": ["low", "medium", "high"] },

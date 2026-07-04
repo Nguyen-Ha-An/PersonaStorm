@@ -14,17 +14,27 @@ Gemma (instruction-tuned). Two sizes, two jobs:
 ## Phase 1 — Prompted baseline (no training)
 
 Run the eval suite (evaluation-framework.md) on prompted Gemma with guided
-JSON. This is the yardstick every later phase must beat. Expected gaps:
-persona adherence drift on long trait lists, "helpful assistant" tone leaking
-into quotes, WTP anchoring too tightly to sticker price.
+JSON against the full 17-criterion + age-overlay schema
+(`REACTION_JSON_SCHEMA` in `services/inference/prompts.py`). This is the
+yardstick every later phase must beat. Expected gaps: persona adherence drift
+on long trait lists, "helpful assistant" tone leaking into quotes, WTP
+anchoring too tightly to sticker price, and criteria that don't move
+independently of each other (a LoRA target: `criteria_consistency` and
+per-criterion variance are both measurable today via
+`services/quality/{consistency_checker,metrics}.py`, so this phase has a real
+baseline number, not a vibe).
 
 ## Phase 2 — SFT LoRA for schema + persona voice
 
 - **Data 1: synthetic instruction data for schema following.** Generate
-  (persona, stimulus, reaction) triples with a strong teacher model; filter
-  every sample through the quality metrics (adherence ≥ 0.7, grounding = yes,
-  zero generic phrases). ~20-50k examples. The persona generator already
-  exports unlimited structured personas (`scripts/seed_personas.py`).
+  (persona, stimulus, reaction) triples with a strong teacher model — reaction
+  meaning the full nested shape: 17 `criteria_scores`, life-stage
+  `age_specific_scores`, `qualitative`, `research_recommendation`
+  (`market_fit_score`/`status` excluded — those stay server-computed even
+  post-training). Filter every sample through the quality metrics (adherence
+  ≥ 0.7, grounding = yes, zero generic phrases, passes `check_consistency`).
+  ~20-50k examples. The persona generator already exports unlimited
+  structured personas (`scripts/seed_personas.py`).
 - **Data 2: objection language from product/app reviews.** Public review
   corpora (app stores, G2-style, Reddit) are mined for *how real people
   phrase objections* per category — style transfer material, not labels.

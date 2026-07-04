@@ -98,3 +98,12 @@ def test_workflow_fit_not_overwritten_by_overlay():
     # workflow_fit is a core criterion registered by Task 1; overlay
     # re-registration must not change its group/description.
     assert reg.CRITERION_BY_ID["workflow_fit"].group == "adoption"
+
+
+def test_sea_genz_now_produces_teens():
+    from app.services.persona import PersonaGenerator
+    personas, _ = PersonaGenerator(seed=7).generate("sea_genz", 400)
+    teens = [p for p in personas if p.life_stage == "teen_student"]
+    assert teens, "sea_genz should now include some teen_student personas"
+    assert all(p.age <= 17 for p in teens)
+    assert all(p.decision_context.needs_parent_approval is True for p in teens)

@@ -81,9 +81,9 @@ PRESETS: dict[str, PresetSpec] = {
         label="SEA Gen Z",
         sub_segments=[
             SubSegmentSpec(
-                name="SEA Gen Z budget-conscious student",
+                name="SEA Gen Z budget-conscious student (high-school & college)",
                 weight=0.35,
-                age_range=(18, 23),
+                age_range=(16, 23),
                 regions=["Vietnam urban", "Philippines urban", "Indonesia urban", "Thailand urban"],
                 income_bands=[("student / family supported", (5, 25)),
                               ("part-time income", (10, 40))],

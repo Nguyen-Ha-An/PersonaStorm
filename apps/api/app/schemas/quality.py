@@ -30,6 +30,15 @@ class QualityMetrics(BaseModel):
     segment_variance: Strength
     segment_variance_score: float = Field(..., ge=0.0)
 
+    # Variance of mean buy_likelihood across life-stage cohorts (teen_student,
+    # early_career, parent_family, ...) — same weak/moderate/strong mapping as
+    # segment_variance, computed over life_stage groups instead of segments.
+    age_cohort_variance: Strength
+
+    # Share of personas whose reaction passes all internal-consistency rules
+    # (see services/quality/consistency_checker.py). 0..1, higher is better.
+    criteria_consistency: float = Field(..., ge=0.0, le=1.0)
+
     collapse_risk: Level
     collapse_risk_score: float = Field(..., ge=0.0, le=1.0)
 

@@ -13,7 +13,8 @@ REPORT_KEYS = {
 QUALITY_KEYS = {
     "persona_adherence", "product_grounding", "generic_response_rate",
     "duplicate_objection_rate", "objection_entropy", "segment_variance",
-    "collapse_risk", "benchmark_confidence",
+    "collapse_risk", "benchmark_confidence", "age_cohort_variance",
+    "criteria_consistency",
 }
 
 

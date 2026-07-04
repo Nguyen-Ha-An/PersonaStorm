@@ -72,3 +72,10 @@ def test_segment_variance_measured():
     # us_smb has 4 sub-segments with different trait profiles -> variance visible
     assert q.segment_variance_score > 0.0
     assert q.segment_variance in ("weak", "moderate", "strong")
+
+
+def test_new_quality_fields_present_and_valid():
+    personas, reactions, features = _healthy_run()
+    q = compute_quality(personas, reactions, features)
+    assert q.age_cohort_variance in ("weak", "moderate", "strong")
+    assert 0.0 <= q.criteria_consistency <= 1.0

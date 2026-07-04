@@ -33,6 +33,7 @@ from ...utils.text import (
     stddev,
 )
 from ..stimulus_parser import StimulusFeatures
+from .consistency_checker import criteria_consistency_score
 
 GENERIC_PHRASES = [
     "seems useful", "sounds useful", "interesting product", "sounds good",
@@ -58,6 +59,8 @@ def compute_quality(
     entropy_norm = _objection_entropy(reactions)
     dup_rate = _duplicate_rate(reactions)
     seg_var = _segment_variance(reactions)
+    age_var = _age_cohort_variance(reactions)
+    consistency = criteria_consistency_score(personas, reactions)
 
     # ---- collapse risk: verbatim duplication + low theme entropy + likelihood
     # concentration. NOTE the deliberate distinction: many personas raising the
@@ -74,9 +77,17 @@ def compute_quality(
         )
 
     entropy_level = "low" if entropy_norm < 0.45 else "medium" if entropy_norm < 0.70 else "high"
-    var_level = "weak" if seg_var < 0.03 else "moderate" if seg_var < 0.07 else "strong"
+    var_level = _variance_strength(seg_var)
+    age_var_level = _variance_strength(age_var)
 
     bench_level, bench_cat = _benchmark_confidence(features, benchmark_dir, notes)
+
+    if consistency < 0.6:
+        notes.append(
+            f"Internal consistency low: only {consistency:.0%} of personas pass all "
+            "consistency rules (trust/buy, price/WTP, proof/trust, uniform criteria) — "
+            "many reactions contradict themselves."
+        )
 
     notes.append(
         f"Metrics computed over {n} reactions across "
@@ -92,6 +103,8 @@ def compute_quality(
         objection_entropy_score=round(entropy_norm, 3),
         segment_variance=var_level,
         segment_variance_score=round(seg_var, 4),
+        age_cohort_variance=age_var_level,
+        criteria_consistency=round(consistency, 3),
         collapse_risk=collapse_level,
         collapse_risk_score=round(collapse_score, 3),
         benchmark_confidence=bench_level,
@@ -198,12 +211,30 @@ def _duplicate_rate(reactions: list[PersonaReaction], sample_size: int = 300) ->
     return 1.0 - len(set(keys)) / len(keys)
 
 
-def _segment_variance(reactions: list[PersonaReaction]) -> float:
-    by_seg: dict[str, list[float]] = {}
+def _variance_strength(var: float) -> str:
+    """Shared weak/moderate/strong mapping for any stddev-of-group-means
+    variance score (segment_variance and age_cohort_variance both use it)."""
+    return "weak" if var < 0.03 else "moderate" if var < 0.07 else "strong"
+
+
+def _grouped_mean_variance(reactions: list[PersonaReaction], key) -> float:
+    """stddev of per-group mean buy_likelihood, grouped by `key(reaction)`."""
+    by_group: dict[str, list[float]] = {}
     for r in reactions:
-        by_seg.setdefault(r.segment or "unknown", []).append(r.buy_likelihood)
-    means = [sum(v) / len(v) for v in by_seg.values() if v]
+        by_group.setdefault(key(r) or "unknown", []).append(r.buy_likelihood)
+    means = [sum(v) / len(v) for v in by_group.values() if v]
     return stddev(means) if len(means) >= 2 else 0.0
+
+
+def _segment_variance(reactions: list[PersonaReaction]) -> float:
+    return _grouped_mean_variance(reactions, key=lambda r: r.segment)
+
+
+def _age_cohort_variance(reactions: list[PersonaReaction]) -> float:
+    """Do life-stage cohorts (teen_student, early_career, parent_family, ...)
+    actually respond differently? Same stddev-of-means shape as
+    _segment_variance, grouped by life_stage instead of segment."""
+    return _grouped_mean_variance(reactions, key=lambda r: r.life_stage)
 
 
 def _likelihood_concentration(reactions: list[PersonaReaction]) -> float:

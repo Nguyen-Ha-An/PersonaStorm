@@ -4,7 +4,17 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button, Card, CardHeader } from "@/components/ui";
-import { AdoptionBar } from "@/components/report/AdoptionBar";
+import { MarketFitHero } from "@/components/report/MarketFitHero";
+import { BlockerCards } from "@/components/report/BlockerCards";
+import { CriteriaRadar } from "@/components/report/CriteriaRadar";
+import { CriteriaBreakdown } from "@/components/report/CriteriaBreakdown";
+import { StrengthCards } from "@/components/report/StrengthCards";
+import { AgeCohortBreakdown } from "@/components/report/AgeCohortBreakdown";
+import { TrustProofPanel } from "@/components/report/TrustProofPanel";
+import { DifferentiationPanel } from "@/components/report/DifferentiationPanel";
+import { PricingFitPanel } from "@/components/report/PricingFitPanel";
+import { WorkflowFitPanel } from "@/components/report/WorkflowFitPanel";
+import { NextValidationPanel } from "@/components/report/NextValidationPanel";
 import { KillQuoteCard } from "@/components/report/KillQuoteCard";
 import { ObjectionsTable } from "@/components/report/ObjectionsTable";
 import { PriceCurve } from "@/components/report/PriceCurve";
@@ -23,6 +33,18 @@ const MARKET_LABELS: Record<string, string> = {
   early_adopters: "Early adopters",
   custom: "Custom segment",
 };
+
+/** Small section heading to separate the diagnostic dashboard from evidence. */
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 pt-2">
+      <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-storm-400">
+        {children}
+      </span>
+      <span className="h-px flex-1 bg-storm-800" />
+    </div>
+  );
+}
 
 export default function ReportPage() {
   const params = useParams<{ id: string }>();
@@ -95,7 +117,7 @@ export default function ReportPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-storm-400">
-            wind tunnel report · {report.storm_id} ·{" "}
+            market evaluation · {report.storm_id} ·{" "}
             {MARKET_LABELS[report.target_market] ?? report.target_market} ·{" "}
             {report.persona_count.toLocaleString()} personas
           </p>
@@ -111,26 +133,46 @@ export default function ReportPage() {
         </div>
       </div>
 
-      {/* executive summary + adoption */}
+      {/* ── 1. Verdict: market-fit diagnosis + adoption forecast ── */}
+      <MarketFitHero report={report} />
+
+      {/* executive summary */}
       <Card>
         <CardHeader title="Executive summary" />
-        <div className="space-y-5 p-6">
-          <p className="text-sm leading-relaxed text-storm-200">{report.summary}</p>
-          <AdoptionBar report={report} />
-        </div>
+        <p className="p-6 text-sm leading-relaxed text-storm-200">{report.summary}</p>
       </Card>
 
-      {/* kill quote */}
-      <KillQuoteCard report={report} />
+      {/* ── 2. What's blocking adoption ── */}
+      <BlockerCards report={report} />
 
-      {/* heatmap + price curve */}
+      {/* ── 3 + 4. Criteria radar + weighted breakdown ── */}
+      <SectionLabel>criteria diagnosis</SectionLabel>
       <div className="grid gap-6 lg:grid-cols-2">
-        <SegmentHeatmap report={report} />
-        <PriceCurve report={report} />
+        <CriteriaRadar report={report} />
+        <CriteriaBreakdown report={report} />
       </div>
 
-      {/* objections */}
-      <ObjectionsTable report={report} />
+      {/* ── 5. Strengths to lead with ── */}
+      <StrengthCards report={report} />
+
+      {/* ── 6. Adoption by life stage ── */}
+      <AgeCohortBreakdown report={report} />
+
+      {/* ── 7. Focused diagnostic panels ── */}
+      <SectionLabel>adoption drivers</SectionLabel>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <TrustProofPanel report={report} />
+        <DifferentiationPanel report={report} />
+      </div>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <PricingFitPanel report={report} />
+        <PriceCurve report={report} />
+      </div>
+      <WorkflowFitPanel report={report} />
+
+      {/* ── 8. Evidence: segments, objections, kill quote ── */}
+      <SectionLabel>evidence</SectionLabel>
+      <SegmentHeatmap report={report} />
 
       {/* segment insights */}
       <Card>
@@ -150,7 +192,12 @@ export default function ReportPage() {
         </div>
       </Card>
 
-      {/* recommendations + trust */}
+      <ObjectionsTable report={report} />
+      <KillQuoteCard report={report} />
+
+      {/* ── Next steps: validation queue + recommendations + trust ── */}
+      <SectionLabel>next steps</SectionLabel>
+      <NextValidationPanel report={report} />
       <Recommendations report={report} />
       <TrustPanel report={report} />
     </main>

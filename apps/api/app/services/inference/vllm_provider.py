@@ -36,7 +36,7 @@ from ...schemas.persona import Persona
 from ...schemas.reaction import PersonaReaction
 from ..stimulus_parser import StimulusFeatures
 from .base import PersonaInferenceProvider, ProviderNotConfiguredError
-from .fireworks_provider import parse_llm_reaction
+from .llm_common import parse_llm_reaction
 from .prompts import REACTION_JSON_SCHEMA, build_system_prompt, build_user_prompt
 
 logger = logging.getLogger(__name__)

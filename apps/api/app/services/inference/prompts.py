@@ -1,6 +1,6 @@
-"""Prompt construction for the real LLM providers (Fireworks / vLLM-Gemma).
+"""Prompt construction for the real LLM providers (NVIDIA / vLLM-Gemma).
 
-Kept provider-agnostic so the exact same prompts run on Fireworks-hosted Gemma
+Kept provider-agnostic so the exact same prompts run on NVIDIA-hosted models
 and on vLLM/MI300X — meaning calibration work is portable across serving
 backends.
 
@@ -23,8 +23,8 @@ from ...schemas.persona import Persona
 from ..criteria.registry import CORE_IDS
 from ..stimulus_parser import StimulusFeatures
 
-# JSON Schema handed to guided decoding (vLLM guided_json / Fireworks
-# response_format / NIM nvext.guided_json). Mirror of schemas/reaction.py
+# JSON Schema handed to guided decoding (vLLM guided_json / NVIDIA
+# nvext.guided_json). Mirror of schemas/reaction.py
 # minus the server-computed fields (market_fit_score, status).
 REACTION_JSON_SCHEMA: dict = {
     "type": "object",

@@ -2,7 +2,7 @@
 
 THE swap point of the whole system (engineering rule #5). Route handlers and
 the storm runner only ever see this interface; whether reactions come from the
-local mock, Fireworks-hosted Gemma, or vLLM on an AMD MI300X is decided by
+local mock, NVIDIA-hosted Gemma, or vLLM on an AMD MI300X is decided by
 INFERENCE_PROVIDER in the environment. Nothing above this layer changes.
 """
 

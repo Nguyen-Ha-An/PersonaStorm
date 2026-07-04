@@ -3,7 +3,7 @@ import json
 import pytest
 
 from app.schemas.persona import Persona
-from app.services.inference.fireworks_provider import parse_llm_reaction
+from app.services.inference.llm_common import parse_llm_reaction
 from app.services.criteria.scoring import compute_market_fit
 from app.services.criteria.classifier import classify_category, is_high_risk
 from app.services.criteria.registry import CORE_IDS

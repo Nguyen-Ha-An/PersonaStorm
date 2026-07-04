@@ -19,27 +19,26 @@ class Settings(BaseSettings):
     """Environment-driven settings. Every field can be overridden via env vars."""
 
     # --- inference -----------------------------------------------------------
-    # mock      -> deterministic local provider, no GPU / network needed (P0 demo)
-    # fireworks -> Fireworks-hosted Gemma (analyst/aggregator-grade model)
-    # vllm      -> OpenAI-compatible vLLM server (target: AMD MI300X + ROCm)
-    # nim       -> NVIDIA NIM (hosted build.nvidia.com or self-hosted container)
-    inference_provider: Literal["mock", "fireworks", "vllm", "nim"] = "mock"
+    # mock   -> deterministic local provider, no GPU / network needed (P0 demo)
+    # vllm   -> OpenAI-compatible vLLM server (target: AMD MI300X + ROCm)
+    # nvidia -> NVIDIA NIM (hosted build.nvidia.com or self-hosted container)
+    inference_provider: Literal["mock", "nvidia", "vllm"] = "mock"
 
-    fireworks_api_key: str | None = None
-    fireworks_base_url: str = "https://api.fireworks.ai/inference/v1"
-    fireworks_model: str = "accounts/fireworks/models/gemma-3-27b-it"
+    # analyst/aggregator agent (executive summary, objection cluster labeling,
+    # recommendations rewriting) — separate knob from the persona swarm provider.
+    analyst_provider: Literal["mock", "nvidia"] = "mock"
 
     vllm_base_url: str = "http://localhost:8001/v1"
     vllm_model: str = "google/gemma-3-27b-it"
     vllm_api_key: str = "not-needed"  # vLLM ignores it unless --api-key is set
 
     # NVIDIA NIM — OpenAI-compatible. Default targets the hosted API catalog;
-    # point nim_base_url at a self-hosted NIM container's /v1 to run on-GPU.
-    nim_api_key: str | None = None
-    nim_base_url: str = "https://integrate.api.nvidia.com/v1"
-    nim_model: str = "z-ai/glm-5.2"
-    nim_use_guided_json: bool = True  # nvext.guided_json; False -> json_object mode
-    nim_max_tokens: int = 2048  # reasoning model: leave headroom so JSON isn't truncated
+    # point nvidia_base_url at a self-hosted NIM container's /v1 to run on-GPU.
+    nvidia_api_key: str | None = None
+    nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
+    nvidia_model: str = "z-ai/glm-5.2"
+    nvidia_use_guided_json: bool = True  # nvext.guided_json; False -> json_object mode
+    nvidia_max_tokens: int = 2048  # reasoning model: leave headroom so JSON isn't truncated
 
     # --- swarm pacing --------------------------------------------------------
     # The mock provider is instant, so we pace batches to make the live grid

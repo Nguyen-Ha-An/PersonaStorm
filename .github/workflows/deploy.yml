@@ -114,7 +114,7 @@ jobs:
 
       - name: Set up Supabase CLI
         if: steps.migrations.outputs.has_migrations == 'true'
-        uses: supabase/setup-cli@v3
+        uses: supabase/setup-cli@v1
         with:
           version: latest
 

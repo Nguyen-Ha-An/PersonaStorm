@@ -88,13 +88,28 @@ def build_criteria_breakdown(
 def diagnose_weakness(
     breakdowns: list[CriterionBreakdown], category: str
 ) -> tuple[list[CriterionCard], list[CriterionCard], list[str], list[str]]:
-    """Rank criteria by importance * deficit and by importance * effective.
+    """Partition criteria into disjoint weakness/strength pools, then rank each.
 
     Returns (weakest_criteria, strongest_criteria, top_blockers, top_strengths).
-    - weakest: highest `weight * (1 - effective(cid, avg))` (biggest weighted gap)
-    - strongest: highest `weight * effective(cid, avg)` (biggest weighted asset)
-    - top_blockers / top_strengths: the top-3 LABELS of each list.
-    Uses `registry.effective` so barriers rank correctly.
+
+    The split is relative, not an absolute 0.5 cutoff: criteria are ordered by
+    their barrier-aware `effective` score (low -> high) and divided at the
+    median rank, so the bottom half of THIS run's spread is the weakness pool
+    and the top half is the strength pool. This keeps both lists non-empty
+    whenever there are >= 2 criteria (guaranteed here, there are always 17),
+    even for a run where every criterion happens to score above/below a fixed
+    absolute midpoint — unlike a fixed effective<=0.5 threshold, which can
+    empty out one pool entirely for a lopsidedly strong or weak product.
+    Within each pool:
+    - weakest: ranked by `weight * deficit` (deficit = 1 - effective) descending.
+    - strongest: ranked by `weight * effective` descending.
+    Because the split is a partition of the same 17 criteria into two
+    non-overlapping halves, a criterion can never appear in both pools (e.g. a
+    high-proof_requirement barrier has a low `effective` score, so it always
+    sorts into the bottom/weakness half — `effective` already inverts barrier
+    polarity). Each resulting list is capped at 5; top_blockers / top_strengths
+    take the top-3 LABELS of each. If a pool has fewer members than the cap
+    (small `breakdowns` input), the resulting list is simply shorter.
     """
 
     def card(b: CriterionBreakdown) -> CriterionCard:
@@ -109,15 +124,24 @@ def diagnose_weakness(
     scored = []
     for b in breakdowns:
         eff = registry.effective(b.criterion_id, b.average_score)
-        weight = b.weight
-        deficit = 1.0 - eff
-        scored.append((b, eff, weight * deficit, weight * eff))
+        scored.append((b, eff))
 
-    weakest = sorted(scored, key=lambda s: -s[2])[:5]
-    strongest = sorted(scored, key=lambda s: -s[3])[:5]
+    # Order by effective score ascending; the bottom half is the weakness
+    # pool, the top half is the strength pool. Split at the median rank so
+    # both pools exist regardless of the absolute score distribution.
+    ranked = sorted(scored, key=lambda s: s[1])
+    split = len(ranked) // 2
+    weakness_pool = ranked[:split]
+    strength_pool = ranked[split:]
 
-    weakest_cards = [card(b) for b, *_ in weakest]
-    strongest_cards = [card(b) for b, *_ in strongest]
-    top_blockers = [b.label for b, *_ in weakest[:3]]
-    top_strengths = [b.label for b, *_ in strongest[:3]]
+    weakest_scored = [(b, b.weight * (1.0 - eff)) for b, eff in weakness_pool]
+    strongest_scored = [(b, b.weight * eff) for b, eff in strength_pool]
+
+    weakest = sorted(weakest_scored, key=lambda s: -s[1])[:5]
+    strongest = sorted(strongest_scored, key=lambda s: -s[1])[:5]
+
+    weakest_cards = [card(b) for b, _ in weakest]
+    strongest_cards = [card(b) for b, _ in strongest]
+    top_blockers = [b.label for b, _ in weakest[:3]]
+    top_strengths = [b.label for b, _ in strongest[:3]]
     return weakest_cards, strongest_cards, top_blockers, top_strengths

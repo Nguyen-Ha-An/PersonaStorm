@@ -65,7 +65,9 @@ class StormCreateRequest(BaseModel):
 
 class StormCreateResponse(BaseModel):
     storm_id: str
-    status: str = "created"
+    status: str = "running"
+    price_credits: int = 0
+    wallet_balance_after: int | None = None
 
 
 class StormMeta(BaseModel):
@@ -79,5 +81,6 @@ class StormMeta(BaseModel):
     persona_count: int
     completed: int = 0
     report_ready: bool = False
+    price_credits: int = 0
     error: str | None = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())

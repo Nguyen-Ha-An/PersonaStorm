@@ -28,6 +28,33 @@ list that always points to real-human validation. No persona is a real
 human, and no chain-of-thought is ever exposed — only short, honest,
 user-facing rationale.
 
+## Dashboard SaaS: auth, wallets, pricing & admin
+
+PersonaStorm ships as a real dashboard product on top of the wind-tunnel engine:
+
+- **Supabase Auth** — email/password login & signup. Every user gets a
+  **profile**, a **credit wallet**, and **100 starter credits**.
+- **Credit billing** — each run is priced by an editable pricing rule
+  (`base + ceil(personas/100)·per100 + analyst_report`; a 1,000-persona run =
+  65 credits) and charged **atomically** before it starts. Insufficient balance
+  is blocked with a clear price preview; a run that fails is auto-refunded.
+- **Protected dashboard** — `/dashboard`, `/storm/new` (live price preview),
+  `/storm/[id]` (live stream), the market report, `/wallet` (balance +
+  transaction history), and `/account`. Storms are **owned** — you can only see
+  your own runs (admins see all).
+- **Admin console** (`/admin`) — manage users, adjust wallets, change roles,
+  browse all storm runs, and edit the active pricing rule.
+
+Security model: the browser holds only the Supabase **anon** key and its access
+token; the FastAPI backend verifies that token, owns every wallet mutation
+through a service-role RPC, and enforces ownership/roles. RLS is enabled on all
+tables and no client can write a balance. Full setup (Supabase project, backend
+env, admin bootstrap): [docs/deployment.md](docs/deployment.md).
+
+> Running the SaaS layer needs a Supabase project (`SUPABASE_*` on the backend,
+> `NEXT_PUBLIC_SUPABASE_*` on the frontend). Without them the API still boots
+> using an in-memory dev gateway so the engine and test suite run offline.
+
 ## How the criteria engine works
 
 Every persona evaluates the stimulus across **17 core market criteria**
@@ -82,11 +109,16 @@ personastorm/
 │   └── app/services/criteria/     registry · presets · age_overlays · scoring · classifier
 │   └── app/services/aggregation/  criteria_aggregation · age_analysis · report_builder · objections · pricing
 │   └── app/services/quality/      metrics · consistency_checker · collapse
+│   └── app/services/     billing (pricing) · supabase_gateway (auth/wallet/admin) · storm_runner
+│   └── app/routers/      storm · account · billing · admin · health
 ├── apps/web        Next.js 14 frontend (TypeScript, Tailwind, Recharts)
+│   └── app/(app)/        protected dashboard: dashboard · storm/new · storm/[id] · wallet · account · admin
+│   └── lib/              supabase client · auth context · api client
+├── supabase/migrations/  SaaS schema (profiles · wallets · transactions · storm_runs · pricing_rules) + RLS
 ├── packages/schemas  JSON Schema contract (mirrors Pydantic + TS types)
 ├── data/           sample inputs, benchmark samples, persona exports, runs
-├── scripts/        seed_personas.py · run_local_demo.py · evaluate_outputs.py
-└── docs/           architecture · criteria-system · api-contract ·
+├── scripts/        create_admin_user.py · seed_personas.py · run_local_demo.py · evaluate_outputs.py
+└── docs/           architecture · criteria-system · api-contract · deployment ·
                     inference/training roadmaps · evaluation framework · demo script
 ```
 
@@ -140,6 +172,12 @@ key needed.
 | `PERSONA_SEED` | `1337` | reproducible storms |
 | `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | browser origins allowed to call the API — add your Vercel domain in production |
 | `NEXT_PUBLIC_API_BASE` | `http://localhost:8000` *(dev only)* | frontend → API origin. **Local dev:** leave unset (defaults to localhost). **Production:** required — set it to your deployed FastAPI backend URL. A production build with this unset shows a clear config banner instead of failing against localhost. See [docs/deployment.md](docs/deployment.md). |
+| `SUPABASE_URL` / `SUPABASE_ANON_KEY` | — | backend Supabase project URL + anon key (auth/db). Unset → in-memory dev gateway. |
+| `SUPABASE_SERVICE_ROLE_KEY` | — | **secret** — backend-only; bypasses RLS, owns wallet mutations. Never in frontend env. |
+| `SUPABASE_JWT_SECRET` | — | **secret** — HS256 secret used to verify Supabase access tokens. |
+| `API_ENV` | `dev` | set `prod` to refuse unverified tokens when the JWT secret is missing. |
+| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | — | frontend Supabase client (anon key only). Required for login/signup in production. |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_FULL_NAME` | — | used by `scripts/create_admin_user.py` to bootstrap the first admin. |
 
 ## Switching providers
 

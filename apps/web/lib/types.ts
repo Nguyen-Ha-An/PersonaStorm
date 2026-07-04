@@ -33,6 +33,104 @@ export interface StormCreateRequest {
 export interface StormCreateResponse {
   storm_id: string;
   status: string;
+  price_credits: number;
+  wallet_balance_after: number | null;
+}
+
+// ---- auth / wallet / billing -----------------------------------------------
+
+export type UserRole = "user" | "admin";
+
+export interface Wallet {
+  balance_credits: number;
+  lifetime_spent_credits: number;
+}
+
+export interface Me {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: UserRole;
+  created_at: string | null;
+  wallet: Wallet;
+}
+
+export interface WalletTransaction {
+  id: string;
+  type: "credit_grant" | "storm_charge" | "refund" | "admin_adjustment";
+  amount_credits: number;
+  balance_after: number;
+  description: string | null;
+  storm_id: string | null;
+  created_at: string;
+}
+
+export interface Pricing {
+  name: string;
+  base_run_credits: number;
+  credits_per_100_personas: number;
+  analyst_report_credits: number;
+}
+
+export interface QuoteRequest {
+  persona_count: number;
+  include_analyst_report: boolean;
+}
+
+export interface Quote {
+  persona_count: number;
+  base_run_credits: number;
+  credits_per_100_personas: number;
+  analyst_report_credits: number;
+  total_credits: number;
+  wallet_balance: number;
+  balance_after: number;
+  has_enough_credits: boolean;
+}
+
+export interface StormHistoryItem {
+  id: string;
+  title: string;
+  status: string;
+  stimulus_type: string;
+  target_market: string;
+  persona_count: number;
+  price_credits: number;
+  created_at: string | null;
+  completed_at: string | null;
+}
+
+// ---- admin -----------------------------------------------------------------
+
+export interface AdminUser {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  role: UserRole;
+  created_at: string | null;
+  balance_credits: number;
+  lifetime_spent_credits: number;
+  total_storms: number;
+  total_spent_credits: number;
+}
+
+export interface AdminUserDetail extends AdminUser {
+  recent_transactions: WalletTransaction[];
+  recent_storms: StormHistoryItem[];
+}
+
+export interface AdminStormRun {
+  id: string;
+  user_id: string;
+  user_email: string | null;
+  title: string;
+  status: string;
+  stimulus_type: string;
+  target_market: string;
+  persona_count: number;
+  price_credits: number;
+  created_at: string | null;
+  completed_at: string | null;
 }
 
 export interface StormMeta {
@@ -44,6 +142,7 @@ export interface StormMeta {
   persona_count: number;
   completed: number;
   report_ready: boolean;
+  price_credits: number;
   error: string | null;
   created_at: string;
 }

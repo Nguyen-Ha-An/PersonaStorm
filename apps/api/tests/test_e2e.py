@@ -38,8 +38,12 @@ def test_health(client):
 def test_full_storm_flow(client):
     resp = client.post("/api/storm/create", json=create_payload())
     assert resp.status_code == 200, resp.text
-    storm_id = resp.json()["storm_id"]
-    assert resp.json()["status"] == "created"
+    body = resp.json()
+    storm_id = body["storm_id"]
+    assert body["status"] == "running"
+    # billing metadata: a 60-persona run costs 20 credits (10 + 1*5 + 5)
+    assert body["price_credits"] == 20
+    assert body["wallet_balance_after"] == 80
 
     report = _wait_for_report(client, storm_id)
     assert REPORT_KEYS <= set(report.keys())

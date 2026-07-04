@@ -17,6 +17,7 @@ import asyncio
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Any, AsyncGenerator
 
 from ..config import Settings
@@ -33,16 +34,32 @@ from .persona import PersonaGenerator
 from .quality import RunningCollapseMonitor, compute_quality
 from .stimulus_parser import StimulusFeatures, parse_stimulus
 from .storage import JSONFileStorage
+from .supabase_gateway import SupabaseGateway
 from collections import Counter
 
 logger = logging.getLogger(__name__)
 
 
+def new_storm_id() -> str:
+    return f"storm_{uuid.uuid4().hex[:12]}"
+
+
 class StormRun:
-    def __init__(self, request: StormCreateRequest, seed: int):
-        self.id = f"storm_{uuid.uuid4().hex[:12]}"
+    def __init__(
+        self,
+        request: StormCreateRequest,
+        seed: int,
+        *,
+        storm_id: str | None = None,
+        owner_id: str | None = None,
+        price_credits: int = 0,
+    ):
+        self.id = storm_id or new_storm_id()
         self.request = request
         self.seed = seed
+        # Billing / ownership metadata for the SaaS layer.
+        self.owner_id = owner_id
+        self.price_credits = price_credits
         self.status: StormStatus = StormStatus.created
         self.error: str | None = None
         self.created_at = time.time()
@@ -122,6 +139,7 @@ class StormRun:
             persona_count=self.request.persona_count,
             completed=len(self.reactions),
             report_ready=self.report is not None,
+            price_credits=self.price_credits,
             error=self.error,
         )
 
@@ -140,8 +158,9 @@ class StormRun:
 class StormManager:
     """Owns all runs + provider selection. Created once at app startup."""
 
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, gateway: SupabaseGateway | None = None):
         self.settings = settings
+        self.gateway = gateway
         self.runs: dict[str, StormRun] = {}
         self.storage = JSONFileStorage(settings.runs_dir)
         self._tasks: set[asyncio.Task] = set()
@@ -153,9 +172,22 @@ class StormManager:
         self.analyst: AnalystProvider = get_analyst(settings)
 
     # ------------------------------------------------------------------ create
-    def create(self, request: StormCreateRequest) -> StormRun:
+    def create(
+        self,
+        request: StormCreateRequest,
+        *,
+        storm_id: str | None = None,
+        owner_id: str | None = None,
+        price_credits: int = 0,
+    ) -> StormRun:
         seed = request.seed if request.seed is not None else self.settings.persona_seed
-        run = StormRun(request, seed=seed)
+        run = StormRun(
+            request,
+            seed=seed,
+            storm_id=storm_id,
+            owner_id=owner_id,
+            price_credits=price_credits,
+        )
         self.runs[run.id] = run
         task = asyncio.create_task(self._execute(run), name=f"storm-{run.id}")
         self._tasks.add(task)
@@ -244,6 +276,7 @@ class StormManager:
 
             # 7) Persist (best-effort)
             self.storage.save_run(run.id, run.to_persist_dict())
+            await self._record_completion(run)
             logger.info("storm %s complete: %s", run.id, run.progress_snapshot())
 
         except Exception as exc:  # noqa: BLE001 — surface any failure to clients
@@ -251,6 +284,53 @@ class StormManager:
             run.status = StormStatus.failed
             run.error = str(exc)
             run.notify()
+            await self._record_failure(run, exc)
+
+    # -------------------------------------------------------- billing / DB sync
+    async def _record_completion(self, run: StormRun) -> None:
+        """Mark the storm_runs row complete and store the final report JSON.
+        Best-effort: a DB hiccup must never fail a storm the user already paid
+        for and saw finish."""
+        if self.gateway is None or run.owner_id is None:
+            return
+        try:
+            report_json = run.report.model_dump(mode="json") if run.report else None
+            await self.gateway.update_storm(
+                run.id,
+                {
+                    "status": "complete",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "report_json": report_json,
+                },
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("failed to record completion for %s", run.id)
+
+    async def _record_failure(self, run: StormRun, exc: Exception) -> None:
+        """Mark the storm failed and refund the credits the user was charged.
+        The charge happens up-front at create time; a run that never produced a
+        report should not cost the user anything."""
+        if self.gateway is None or run.owner_id is None:
+            return
+        try:
+            await self.gateway.update_storm(
+                run.id, {"status": "failed", "error": str(exc)[:1000]}
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("failed to mark storm %s failed", run.id)
+        if run.price_credits and run.price_credits > 0:
+            try:
+                await self.gateway.adjust_wallet(
+                    run.owner_id,
+                    run.price_credits,
+                    "refund",
+                    description=f"Refund — storm {run.id} failed",
+                    storm_id=run.id,
+                    actor_user_id=run.owner_id,
+                )
+                logger.info("refunded %s credits for failed storm %s", run.price_credits, run.id)
+            except Exception:  # noqa: BLE001
+                logger.exception("failed to refund credits for storm %s", run.id)
 
     # ------------------------------------------------------------------ stream
     async def event_stream(self, run: StormRun) -> AsyncGenerator[tuple[str, dict], None]:

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { Button, Card, CardHeader, PageShell, SectionRule, Skeleton } from "@/components/ui";
+import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import { Button, Card, CardHeader, SectionRule, Skeleton } from "@/components/ui";
 import { ErrorState } from "@/components/feedback";
 import { MarketFitHero } from "@/components/report/MarketFitHero";
 import { BlockerCards } from "@/components/report/BlockerCards";
@@ -54,7 +55,7 @@ export default function ReportPage() {
         if (r) {
           setReport(r);
         } else {
-          timer = setTimeout(poll, 800); // still running — poll until ready
+          timer = setTimeout(poll, 800);
         }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load the report.");
@@ -86,21 +87,22 @@ export default function ReportPage() {
 
   if (error) {
     return (
-      <PageShell className="py-16">
+      <DashboardShell title="Report">
         <ErrorState
           title="Couldn't load this report"
           message={error}
           detail={`API target: ${API_TARGET_LABEL}`}
           onRetry={retry}
+          homeHref="/storm/new"
           homeLabel="Run a new storm"
         />
-      </PageShell>
+      </DashboardShell>
     );
   }
 
   if (!report) {
     return (
-      <PageShell className="py-8">
+      <DashboardShell title="Market evaluation" subtitle="aggregating swarm signal…">
         <div className="mb-6 flex items-center gap-3">
           <span className="h-2 w-2 animate-pulseglow rounded-full bg-signal-cyan" />
           <p className="font-mono text-sm uppercase tracking-[0.2em] text-signal-cyan">
@@ -110,7 +112,6 @@ export default function ReportPage() {
         <p className="mb-8 text-xs text-storm-400">
           If the storm is still streaming, this page fills in automatically when it finishes.
         </p>
-        {/* skeleton scaffold mirrors the final report layout */}
         <div className="space-y-6">
           <Skeleton className="h-52 w-full" />
           <Skeleton className="h-28 w-full" />
@@ -120,101 +121,88 @@ export default function ReportPage() {
           </div>
           <Skeleton className="h-40 w-full" />
         </div>
-      </PageShell>
+      </DashboardShell>
     );
   }
 
+  const actions = (
+    <div className="flex gap-2">
+      <Button variant="outline" size="sm" onClick={downloadJson}>
+        ⬇ JSON
+      </Button>
+      <Link href="/storm/new" className="hidden sm:block">
+        <Button variant="outline" size="sm">
+          + New storm
+        </Button>
+      </Link>
+    </div>
+  );
+
   return (
-    <PageShell className="space-y-6 py-8">
-      {/* header */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-storm-400">
-            market evaluation · {report.storm_id} ·{" "}
-            {MARKET_LABELS[report.target_market] ?? report.target_market} ·{" "}
-            {report.persona_count.toLocaleString()} personas
-          </p>
-          <h1 className="mt-1.5 text-3xl font-semibold tracking-tight text-storm-100">
-            {report.title}
-          </h1>
+    <DashboardShell
+      title={report.title}
+      subtitle={`${MARKET_LABELS[report.target_market] ?? report.target_market} · ${report.persona_count.toLocaleString()} personas · ${report.storm_id}`}
+      actions={actions}
+      width="wide"
+    >
+      <div className="space-y-6">
+        <MarketFitHero report={report} />
+
+        <Card>
+          <CardHeader title="Executive summary" />
+          <p className="p-6 text-sm leading-relaxed text-storm-200">{report.summary}</p>
+        </Card>
+
+        <BlockerCards report={report} />
+
+        <SectionRule>criteria diagnosis</SectionRule>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <CriteriaRadar report={report} />
+          <CriteriaBreakdown report={report} />
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={downloadJson}>
-            ⬇ Download JSON
-          </Button>
-          <Link href="/">
-            <Button variant="outline">+ New storm</Button>
-          </Link>
+
+        <StrengthCards report={report} />
+        <AgeCohortBreakdown report={report} />
+
+        <SectionRule>adoption drivers</SectionRule>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <TrustProofPanel report={report} />
+          <DifferentiationPanel report={report} />
         </div>
-      </div>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <PricingFitPanel report={report} />
+          <PriceCurve report={report} />
+        </div>
+        <WorkflowFitPanel report={report} />
 
-      {/* ── 1. Verdict: market-fit diagnosis + adoption forecast ── */}
-      <MarketFitHero report={report} />
+        <SectionRule>evidence</SectionRule>
+        <SegmentHeatmap report={report} />
 
-      {/* executive summary */}
-      <Card>
-        <CardHeader title="Executive summary" />
-        <p className="p-6 text-sm leading-relaxed text-storm-200">{report.summary}</p>
-      </Card>
-
-      {/* ── 2. What's blocking adoption ── */}
-      <BlockerCards report={report} />
-
-      {/* ── 3 + 4. Criteria radar + weighted breakdown ── */}
-      <SectionRule>criteria diagnosis</SectionRule>
-      <div className="grid gap-6 lg:grid-cols-2">
-        <CriteriaRadar report={report} />
-        <CriteriaBreakdown report={report} />
-      </div>
-
-      {/* ── 5. Strengths to lead with ── */}
-      <StrengthCards report={report} />
-
-      {/* ── 6. Adoption by life stage ── */}
-      <AgeCohortBreakdown report={report} />
-
-      {/* ── 7. Focused diagnostic panels ── */}
-      <SectionRule>adoption drivers</SectionRule>
-      <div className="grid gap-6 lg:grid-cols-2">
-        <TrustProofPanel report={report} />
-        <DifferentiationPanel report={report} />
-      </div>
-      <div className="grid gap-6 lg:grid-cols-2">
-        <PricingFitPanel report={report} />
-        <PriceCurve report={report} />
-      </div>
-      <WorkflowFitPanel report={report} />
-
-      {/* ── 8. Evidence: segments, objections, kill quote ── */}
-      <SectionRule>evidence</SectionRule>
-      <SegmentHeatmap report={report} />
-
-      {/* segment insights */}
-      <Card>
-        <CardHeader title="Segment insights" />
-        <div className="grid gap-3 p-5 sm:grid-cols-2">
-          {report.segments.map((s) => (
-            <div key={s.segment} className="rounded-xl border border-storm-800 bg-storm-850 p-4">
-              <div className="flex items-baseline justify-between gap-2">
-                <p className="text-xs font-semibold leading-snug text-storm-100">{s.segment}</p>
-                <span className="shrink-0 font-mono text-xs text-signal-cyan">
-                  {Math.round(s.adoption_rate * 100)}% adopt
-                </span>
+        <Card>
+          <CardHeader title="Segment insights" />
+          <div className="grid gap-3 p-5 sm:grid-cols-2">
+            {report.segments.map((sg) => (
+              <div key={sg.segment} className="rounded-xl border border-storm-800 bg-storm-850 p-4">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-xs font-semibold leading-snug text-storm-100">{sg.segment}</p>
+                  <span className="shrink-0 font-mono text-xs text-signal-cyan">
+                    {Math.round(sg.adoption_rate * 100)}% adopt
+                  </span>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-storm-300">{sg.insight}</p>
               </div>
-              <p className="mt-2 text-xs leading-relaxed text-storm-300">{s.insight}</p>
-            </div>
-          ))}
-        </div>
-      </Card>
+            ))}
+          </div>
+        </Card>
 
-      <ObjectionsTable report={report} />
-      <KillQuoteCard report={report} />
+        <ObjectionsTable report={report} />
+        <KillQuoteCard report={report} />
 
-      {/* ── Next steps: validation queue + recommendations + trust ── */}
-      <SectionRule>next steps</SectionRule>
-      <NextValidationPanel report={report} />
-      <Recommendations report={report} />
-      <TrustPanel report={report} />
-    </PageShell>
+        <SectionRule>next steps</SectionRule>
+        <NextValidationPanel report={report} />
+        <Recommendations report={report} />
+        <TrustPanel report={report} />
+      </div>
+    </DashboardShell>
   );
 }

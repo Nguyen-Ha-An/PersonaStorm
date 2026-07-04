@@ -26,6 +26,20 @@ const MARKETS: { value: TargetMarket; label: string }[] = [
 
 const COUNTS = [100, 250, 500, 1000];
 
+const CATEGORIES: { value: string; label: string }[] = [
+  { value: "auto", label: "Auto-detect" },
+  { value: "ai_tool", label: "AI tool" },
+  { value: "b2b_saas", label: "B2B SaaS" },
+  { value: "consumer_app", label: "Consumer app" },
+  { value: "ecommerce_product", label: "E-commerce product" },
+  { value: "education_product", label: "Education product" },
+  { value: "marketplace", label: "Marketplace" },
+  { value: "social_product", label: "Social product" },
+  { value: "hardware_product", label: "Hardware product" },
+  { value: "luxury_product", label: "Luxury product" },
+  { value: "generic", label: "Generic" },
+];
+
 export default function LandingPage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
@@ -33,6 +47,7 @@ export default function LandingPage() {
   const [stimulusType, setStimulusType] = useState<StimulusType>("product_concept");
   const [market, setMarket] = useState<TargetMarket>("us_smb");
   const [customDesc, setCustomDesc] = useState("");
+  const [category, setCategory] = useState("auto");
   const [count, setCount] = useState(1000);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +66,7 @@ export default function LandingPage() {
         stimulus: stimulus.trim(),
         target_market: market,
         custom_segment_description: market === "custom" ? customDesc.trim() : undefined,
+        product_category: category === "auto" ? undefined : category,
         persona_count: count,
       });
       router.push(`/storm/${resp.storm_id}`);
@@ -77,8 +93,7 @@ export default function LandingPage() {
           1,000 synthetic personas · one calibrated model · live objection radar
         </p>
         <h1 className="mx-auto max-w-3xl text-4xl font-bold leading-tight text-white sm:text-5xl">
-          Put your idea in the wind tunnel{" "}
-          <span className="text-storm-300">before the market does.</span>
+          PersonaStorm <span className="text-storm-300">— the product wind tunnel.</span>
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-storm-300">
           Paste a product concept, landing page, ad, or pricing table. PersonaStorm streams
@@ -175,6 +190,20 @@ export default function LandingPage() {
                   {COUNTS.map((c) => (
                     <option key={c} value={c}>
                       {c.toLocaleString()} personas
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="category">Product category</Label>
+                <Select
+                  id="category"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                >
+                  {CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
                     </option>
                   ))}
                 </Select>

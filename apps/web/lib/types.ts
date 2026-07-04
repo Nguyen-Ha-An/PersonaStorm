@@ -25,6 +25,7 @@ export interface StormCreateRequest {
   stimulus: string;
   target_market: TargetMarket;
   custom_segment_description?: string;
+  product_category?: string;
   persona_count: number;
   seed?: number;
 }
@@ -84,6 +85,8 @@ export interface QualityMetrics {
   objection_entropy_score: number;
   segment_variance: Strength;
   segment_variance_score: number;
+  age_cohort_variance: Strength;
+  criteria_consistency: number;
   collapse_risk: Level;
   collapse_risk_score: number;
   benchmark_confidence: Level;
@@ -130,18 +133,72 @@ export interface KillQuoteContext {
   skepticism: number;
 }
 
+export interface Overall {
+  market_fit_score: number;
+  confidence: Level;
+  top_blockers: string[];
+  top_strengths: string[];
+}
+
+export interface CriterionBreakdown {
+  criterion_id: string;
+  label: string;
+  average_score: number;
+  higher_is_better: boolean;
+  weight: number;
+  segment_scores: { segment: string; score: number }[];
+  interpretation: string;
+}
+
+export interface CriterionCard {
+  criterion_id: string;
+  label: string;
+  average_score: number;
+  weight: number;
+  interpretation: string;
+}
+
+export interface AgeCohortReport {
+  life_stage: string;
+  personas: number;
+  adoption_rate: number;
+  avg_buy_likelihood: number;
+  avg_market_fit_score: number;
+  top_barrier: string;
+  insight: string;
+}
+
+export interface NextValidation {
+  question: string;
+  test_type: string;
+  rationale: string;
+}
+
 export interface StormReport {
   storm_id: string;
   title: string;
   summary: string;
-  adoption: { green: number; yellow: number; red: number };
+  product_category: string;
+  adoption: {
+    green: number;
+    yellow: number;
+    red: number;
+    average_buy_likelihood: number;
+    average_market_fit_score: number;
+  };
+  overall: Overall;
   segments: SegmentReport[];
+  criteria_breakdown: CriterionBreakdown[];
+  weakest_criteria: CriterionCard[];
+  strongest_criteria: CriterionCard[];
+  age_cohorts: AgeCohortReport[];
   top_objections: ObjectionCluster[];
   price_sensitivity: PricePoint[];
   kill_quote: string;
   kill_quote_context: KillQuoteContext | null;
   quality: QualityMetrics;
   recommendations: Recommendation[];
+  next_human_validation: NextValidation[];
   persona_count: number;
   stimulus_type: string;
   target_market: string;

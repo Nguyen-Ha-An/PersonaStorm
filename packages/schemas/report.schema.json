@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://personastorm.dev/schemas/report.schema.json",
+  "title": "StormReport",
+  "type": "object",
+  "required": [
+    "storm_id", "title", "summary", "adoption", "segments", "top_objections",
+    "price_sensitivity", "kill_quote", "quality", "recommendations", "disclaimer"
+  ],
+  "properties": {
+    "storm_id": { "type": "string" },
+    "title": { "type": "string" },
+    "summary": { "type": "string" },
+    "adoption": {
+      "type": "object",
+      "required": ["green", "yellow", "red"],
+      "properties": {
+        "green": { "type": "integer", "minimum": 0 },
+        "yellow": { "type": "integer", "minimum": 0 },
+        "red": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "segments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["segment", "personas", "green", "yellow", "red",
+                     "adoption_rate", "top_objection", "insight"],
+        "properties": {
+          "segment": { "type": "string" },
+          "personas": { "type": "integer" },
+          "green": { "type": "integer" },
+          "yellow": { "type": "integer" },
+          "red": { "type": "integer" },
+          "adoption_rate": { "type": "number" },
+          "avg_buy_likelihood": { "type": "number" },
+          "avg_max_price": { "type": "number" },
+          "top_objection": { "type": "string" },
+          "insight": { "type": "string" }
+        }
+      }
+    },
+    "top_objections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["label", "count", "share", "example_quote"],
+        "properties": {
+          "label": { "type": "string" },
+          "count": { "type": "integer" },
+          "share": { "type": "number" },
+          "example_quote": { "type": "string" },
+          "top_segments": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "price_sensitivity": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["price", "share_willing"],
+        "properties": {
+          "price": { "type": "number" },
+          "share_willing": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "kill_quote": { "type": "string" },
+    "kill_quote_context": {
+      "type": ["object", "null"],
+      "properties": {
+        "persona_id": { "type": "string" },
+        "segment": { "type": "string" },
+        "buy_likelihood": { "type": "number" },
+        "skepticism": { "type": "number" }
+      }
+    },
+    "quality": { "$ref": "quality.schema.json" },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "detail", "priority"],
+        "properties": {
+          "title": { "type": "string" },
+          "detail": { "type": "string" },
+          "priority": { "enum": ["now", "next", "later"] }
+        }
+      }
+    },
+    "persona_count": { "type": "integer" },
+    "stimulus_type": { "type": "string" },
+    "target_market": { "type": "string" },
+    "avg_max_price": { "type": "number" },
+    "generated_at": { "type": "string" },
+    "disclaimer": { "type": "string" }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "_comment": "Registry of reference objection distributions per product category. P0 ships small ILLUSTRATIVE samples (hand-compiled from public review themes, clearly synthetic-adjacent). benchmark_confidence stays capped at 'medium' until real calibration studies replace these — see docs/evaluation-framework.md.",
+  "saas_b2b": { "file": "saas_b2b.json", "samples": 2, "source": "illustrative" },
+  "consumer_app": { "file": "consumer_app.json", "samples": 2, "source": "illustrative" },
+  "ecommerce": { "file": "ecommerce.json", "samples": 1, "source": "illustrative" }
+}

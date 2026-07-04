@@ -1,0 +1,65 @@
+"""Inference provider abstraction.
+
+THE swap point of the whole system (engineering rule #5). Route handlers and
+the storm runner only ever see this interface; whether reactions come from the
+local mock, Fireworks-hosted Gemma, or vLLM on an AMD MI300X is decided by
+INFERENCE_PROVIDER in the environment. Nothing above this layer changes.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from abc import ABC, abstractmethod
+
+from ...schemas.persona import Persona
+from ...schemas.reaction import PersonaReaction
+from ..stimulus_parser import StimulusFeatures
+
+
+class ProviderNotConfiguredError(RuntimeError):
+    """Raised when a real provider is selected but its env config is missing."""
+
+
+class PersonaInferenceProvider(ABC):
+    """One persona in, one structured reaction out."""
+
+    name: str = "base"
+
+    @abstractmethod
+    async def react(
+        self,
+        persona: Persona,
+        stimulus: str,
+        stimulus_type: str,
+        features: StimulusFeatures | None = None,
+    ) -> PersonaReaction:
+        """Produce a structured reaction for a single persona.
+
+        `features` is the pre-parsed stimulus (parse once per storm, not once
+        per persona). Providers may ignore it and re-derive from `stimulus`.
+        """
+
+    async def react_batch(
+        self,
+        personas: list[Persona],
+        stimulus: str,
+        stimulus_type: str,
+        features: StimulusFeatures | None = None,
+        concurrency: int = 8,
+    ) -> list[PersonaReaction]:
+        """Default batching: bounded-concurrency fan-out over react().
+
+        Real GPU serving should override this — vLLM's continuous batching on
+        MI300X makes a single large batched request far more efficient than
+        N sequential HTTP calls (see docs/inference-roadmap.md).
+        """
+        sem = asyncio.Semaphore(concurrency)
+
+        async def _one(p: Persona) -> PersonaReaction:
+            async with sem:
+                return await self.react(p, stimulus, stimulus_type, features)
+
+        return list(await asyncio.gather(*(_one(p) for p in personas)))
+
+    async def health_check(self) -> bool:
+        return True

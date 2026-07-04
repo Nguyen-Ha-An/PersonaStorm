@@ -1,0 +1,36 @@
+# PersonaStorm — full stack, one command:  docker compose up --build
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      INFERENCE_PROVIDER: ${INFERENCE_PROVIDER:-mock}
+      PERSONA_SEED: ${PERSONA_SEED:-1337}
+      STORM_BATCH_SIZE: ${STORM_BATCH_SIZE:-25}
+      STORM_BATCH_INTERVAL_MS: ${STORM_BATCH_INTERVAL_MS:-350}
+      FIREWORKS_API_KEY: ${FIREWORKS_API_KEY:-}
+      FIREWORKS_MODEL: ${FIREWORKS_MODEL:-accounts/fireworks/models/gemma-3-27b-it}
+      VLLM_BASE_URL: ${VLLM_BASE_URL:-}
+      VLLM_MODEL: ${VLLM_MODEL:-google/gemma-3-27b-it}
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    volumes:
+      - storm-runs:/data/runs
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # The browser calls the API directly, so this must be the HOST-visible
+        # origin (not the compose-internal http://api:8000).
+        NEXT_PUBLIC_API_BASE: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  storm-runs:

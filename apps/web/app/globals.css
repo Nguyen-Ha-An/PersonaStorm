@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-storm-950 text-storm-200 antialiased;
+  font-feature-settings: "ss01", "cv05";
+}
+
+/* Instrument-panel grid backdrop */
+.bg-tunnel {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(34, 211, 238, 0.08), transparent),
+    linear-gradient(rgba(43, 58, 92, 0.14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(43, 58, 92, 0.14) 1px, transparent 1px);
+  background-size: 100% 100%, 36px 36px, 36px 36px;
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.3);
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  @apply bg-storm-700 rounded-full;
+}
+
+.glow-green { box-shadow: 0 0 6px rgba(52, 211, 153, 0.55); }
+.glow-yellow { box-shadow: 0 0 6px rgba(251, 191, 36, 0.5); }
+.glow-red { box-shadow: 0 0 6px rgba(251, 113, 133, 0.5); }

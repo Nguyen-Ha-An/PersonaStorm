@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://personastorm.dev/schemas/reaction.schema.json",
+  "title": "PersonaReaction",
+  "description": "reasoning_summary is a short public rationale only — providers must never emit hidden chain-of-thought.",
+  "type": "object",
+  "required": [
+    "persona_id", "buy_likelihood", "status", "max_price", "first_objection",
+    "positive_trigger", "emotional_reaction", "would_tell", "quote",
+    "reasoning_summary"
+  ],
+  "properties": {
+    "persona_id": { "type": "string" },
+    "segment": { "type": "string" },
+    "sub_segment": { "type": "string" },
+    "buy_likelihood": { "type": "number", "minimum": 0, "maximum": 1 },
+    "status": { "enum": ["green", "yellow", "red"] },
+    "max_price": { "type": "number", "minimum": 0 },
+    "currency": { "type": "string", "default": "USD" },
+    "first_objection": { "type": "string", "maxLength": 240 },
+    "positive_trigger": { "type": "string", "maxLength": 240 },
+    "emotional_reaction": { "type": "string", "maxLength": 120 },
+    "would_tell": { "type": "string", "maxLength": 240 },
+    "quote": { "type": "string", "maxLength": 400 },
+    "reasoning_summary": { "type": "string", "maxLength": 400 }
+  }
+}

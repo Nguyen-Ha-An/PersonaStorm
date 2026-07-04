@@ -1,0 +1,26 @@
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# node / next
+node_modules/
+.next/
+out/
+npm-debug.log*
+
+# env & secrets
+.env
+.env.local
+.env*.local
+
+# storm run artifacts (regenerable)
+data/runs/*.json
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/
+*.log

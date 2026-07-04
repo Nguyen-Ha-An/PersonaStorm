@@ -1,0 +1,30 @@
+{
+  "category": "saas_b2b",
+  "description": "Reference objection-theme distributions for B2B SaaS launches. ILLUSTRATIVE P0 data compiled from common public review themes (G2/Capterra-style), used only to sanity-check whether a storm's objection mix is in a plausible range.",
+  "reference_sets": [
+    {
+      "name": "smb_saas_tools_composite",
+      "objection_theme_shares": {
+        "pricing & affordability": 0.24,
+        "setup time & complexity": 0.18,
+        "integration fit": 0.16,
+        "proof & evidence": 0.14,
+        "subscription & lock-in": 0.11,
+        "trust & credibility": 0.09,
+        "data privacy": 0.08
+      }
+    },
+    {
+      "name": "ai_saas_tools_composite",
+      "objection_theme_shares": {
+        "AI hype skepticism": 0.22,
+        "proof & evidence": 0.20,
+        "pricing & affordability": 0.18,
+        "data privacy": 0.14,
+        "integration fit": 0.12,
+        "setup time & complexity": 0.08,
+        "subscription & lock-in": 0.06
+      }
+    }
+  ]
+}

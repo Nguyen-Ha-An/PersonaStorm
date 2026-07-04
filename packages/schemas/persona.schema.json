@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://personastorm.dev/schemas/persona.schema.json",
+  "title": "Persona",
+  "type": "object",
+  "required": [
+    "persona_id", "preset", "segment", "sub_segment", "age", "region",
+    "income_band", "occupation", "price_sensitivity", "skepticism",
+    "novelty_seeking", "brand_trust", "social_influence", "risk_tolerance",
+    "privacy_sensitivity", "category_familiarity", "research_style",
+    "buying_trigger", "dealbreakers", "monthly_budget_usd"
+  ],
+  "properties": {
+    "persona_id": { "type": "string", "examples": ["SEA_GENZ_0421"] },
+    "preset": { "type": "string" },
+    "segment": { "type": "string" },
+    "sub_segment": { "type": "string" },
+    "age": { "type": "integer", "minimum": 13, "maximum": 90 },
+    "region": { "type": "string" },
+    "income_band": { "type": "string" },
+    "occupation": { "type": "string" },
+    "price_sensitivity": { "type": "number", "minimum": 0, "maximum": 1 },
+    "skepticism": { "type": "number", "minimum": 0, "maximum": 1 },
+    "novelty_seeking": { "type": "number", "minimum": 0, "maximum": 1 },
+    "brand_trust": { "type": "number", "minimum": 0, "maximum": 1 },
+    "social_influence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "risk_tolerance": { "type": "number", "minimum": 0, "maximum": 1 },
+    "privacy_sensitivity": { "type": "number", "minimum": 0, "maximum": 1 },
+    "category_familiarity": { "enum": ["low", "medium", "high"] },
+    "research_style": { "type": "string" },
+    "buying_trigger": { "type": "string" },
+    "dealbreakers": {
+      "type": "array", "items": { "type": "string" }, "minItems": 1, "maxItems": 8
+    },
+    "monthly_budget_usd": { "type": "number", "minimum": 0 }
+  }
+}

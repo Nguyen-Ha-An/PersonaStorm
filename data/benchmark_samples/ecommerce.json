@@ -1,0 +1,17 @@
+{
+  "category": "ecommerce",
+  "description": "Reference objection-theme distribution for DTC ecommerce offers. ILLUSTRATIVE P0 data — see index.json.",
+  "reference_sets": [
+    {
+      "name": "dtc_products_composite",
+      "objection_theme_shares": {
+        "pricing & affordability": 0.28,
+        "proof & evidence": 0.22,
+        "trust & credibility": 0.18,
+        "audience fit": 0.14,
+        "free trial & try-before-buy": 0.10,
+        "data privacy": 0.08
+      }
+    }
+  ]
+}

@@ -1,0 +1,271 @@
+"""Storm Runner — orchestrates the full pipeline for one run:
+
+  request -> Input Parser -> Persona Space Builder -> Diversity Validator
+          -> batched swarm inference -> live collapse monitoring
+          -> quality metrics -> aggregation -> persisted report
+
+Concurrency model: one asyncio background task per storm; SSE subscribers read
+the run's reaction list with their own cursor and await a change event. This
+supports N concurrent viewers per storm and reconnects (a new subscriber
+replays from 0, then tails). No external queue needed at P0 scale; the
+architecture doc covers the Redis/worker upgrade path.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import time
+import uuid
+from typing import Any, AsyncGenerator
+
+from ..config import Settings
+from ..schemas.persona import Persona
+from ..schemas.reaction import PersonaReaction
+from ..schemas.report import StormReport
+from ..schemas.storm import StormCreateRequest, StormMeta, StormStatus
+from ..utils.text import normalize_objection
+from .aggregation import build_report
+from .inference import MockPersonaProvider, PersonaInferenceProvider, get_provider
+from .persona import PersonaGenerator
+from .quality import RunningCollapseMonitor, compute_quality
+from .stimulus_parser import StimulusFeatures, parse_stimulus
+from .storage import JSONFileStorage
+from collections import Counter
+
+logger = logging.getLogger(__name__)
+
+
+class StormRun:
+    def __init__(self, request: StormCreateRequest, seed: int):
+        self.id = f"storm_{uuid.uuid4().hex[:12]}"
+        self.request = request
+        self.seed = seed
+        self.status: StormStatus = StormStatus.created
+        self.error: str | None = None
+        self.created_at = time.time()
+
+        self.personas: list[Persona] = []
+        self.reactions: list[PersonaReaction] = []
+        self.features: StimulusFeatures | None = None
+        self.diversity: dict[str, Any] | None = None
+        self.report: StormReport | None = None
+
+        # live aggregates for progress events
+        self.wtp_sum = 0.0
+        self.status_counts = {"green": 0, "yellow": 0, "red": 0}
+        self._objection_counts: Counter[str] = Counter()
+        self._objection_raw: dict[str, str] = {}
+        self.collapse = RunningCollapseMonitor()
+
+        self._change = asyncio.Event()
+
+    # ---------------------------------------------------------------- signaling
+    def notify(self) -> None:
+        """Wake all stream subscribers. Same-loop only — safe with asyncio."""
+        self._change.set()
+        self._change = asyncio.Event()
+
+    async def wait_change(self, timeout: float = 5.0) -> None:
+        ev = self._change
+        try:
+            await asyncio.wait_for(ev.wait(), timeout)
+        except asyncio.TimeoutError:
+            pass  # heartbeat tick
+
+    # ---------------------------------------------------------------- mutation
+    def add_reaction(self, r: PersonaReaction) -> None:
+        self.reactions.append(r)
+        self.status_counts[r.status] += 1
+        self.wtp_sum += r.max_price
+        if r.first_objection.strip():
+            key = normalize_objection(r.first_objection)
+            self._objection_counts[key] += 1
+            self._objection_raw.setdefault(key, r.first_objection)
+        self.collapse.update(r)
+
+    # ---------------------------------------------------------------- snapshots
+    def top_objection(self) -> str:
+        if not self._objection_counts:
+            return ""
+        key = self._objection_counts.most_common(1)[0][0]
+        return self._objection_raw.get(key, "")
+
+    def progress_snapshot(self) -> dict[str, Any]:
+        done = len(self.reactions)
+        return {
+            "status": self.status.value,
+            "completed": done,
+            "total": self.request.persona_count,
+            "green": self.status_counts["green"],
+            "yellow": self.status_counts["yellow"],
+            "red": self.status_counts["red"],
+            "avg_max_price": round(self.wtp_sum / done, 2) if done else 0.0,
+            "top_objection": self.top_objection(),
+            "collapse_risk": self.collapse.level,
+            "elapsed_ms": int((time.time() - self.created_at) * 1000),
+        }
+
+    def meta(self) -> StormMeta:
+        return StormMeta(
+            storm_id=self.id,
+            title=self.request.title,
+            status=self.status,
+            stimulus_type=self.request.stimulus_type,
+            target_market=self.request.target_market,
+            persona_count=self.request.persona_count,
+            completed=len(self.reactions),
+            report_ready=self.report is not None,
+            error=self.error,
+        )
+
+    def to_persist_dict(self) -> dict[str, Any]:
+        return {
+            "storm_id": self.id,
+            "seed": self.seed,
+            "request": self.request.model_dump(mode="json"),
+            "diversity": self.diversity,
+            "personas": [p.model_dump() for p in self.personas],
+            "reactions": [r.model_dump() for r in self.reactions],
+            "report": self.report.model_dump(mode="json") if self.report else None,
+        }
+
+
+class StormManager:
+    """Owns all runs + provider selection. Created once at app startup."""
+
+    def __init__(self, settings: Settings):
+        self.settings = settings
+        self.runs: dict[str, StormRun] = {}
+        self.storage = JSONFileStorage(settings.runs_dir)
+        self._tasks: set[asyncio.Task] = set()
+        # Fail fast on misconfiguration: build the provider at startup, not
+        # mid-storm. For mock we rebuild per-run so per-request seeds work.
+        self.provider: PersonaInferenceProvider = get_provider(settings)
+
+    # ------------------------------------------------------------------ create
+    def create(self, request: StormCreateRequest) -> StormRun:
+        seed = request.seed if request.seed is not None else self.settings.persona_seed
+        run = StormRun(request, seed=seed)
+        self.runs[run.id] = run
+        task = asyncio.create_task(self._execute(run), name=f"storm-{run.id}")
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        return run
+
+    def get(self, storm_id: str) -> StormRun | None:
+        return self.runs.get(storm_id)
+
+    def _provider_for(self, run: StormRun) -> PersonaInferenceProvider:
+        if isinstance(self.provider, MockPersonaProvider):
+            return MockPersonaProvider(seed=run.seed)  # per-run reproducibility
+        return self.provider
+
+    # ----------------------------------------------------------------- pipeline
+    async def _execute(self, run: StormRun) -> None:
+        s = self.settings
+        try:
+            # 1) Input Parser
+            run.features = parse_stimulus(
+                run.request.stimulus, run.request.title, run.request.stimulus_type.value
+            )
+
+            # 2) Persona Space Builder + 3) Diversity Validator
+            run.status = StormStatus.generating_personas
+            run.notify()
+            generator = PersonaGenerator(seed=run.seed)
+            personas, diversity = generator.generate(
+                run.request.target_market.value,
+                run.request.persona_count,
+                run.request.custom_segment_description,
+            )
+            run.personas = personas
+            run.diversity = diversity.to_dict()
+            if diversity.warnings:
+                logger.warning("diversity warnings for %s: %s", run.id, diversity.warnings)
+
+            # 4) Persona Reaction Engine — batched swarm inference
+            run.status = StormStatus.running
+            run.notify()
+            provider = self._provider_for(run)
+            batch, interval = s.storm_batch_size, s.storm_batch_interval_ms / 1000.0
+            for i in range(0, len(personas), batch):
+                chunk = personas[i:i + batch]
+                reactions = await provider.react_batch(
+                    chunk, run.request.stimulus, run.request.stimulus_type.value,
+                    run.features, concurrency=s.storm_max_concurrency,
+                )
+                for r in reactions:
+                    run.add_reaction(r)
+                run.notify()
+                # Pacing exists for demo readability with the instant mock;
+                # real providers are paced by actual inference latency.
+                if provider.name == "mock" and interval > 0:
+                    await asyncio.sleep(interval)
+
+            # 5) Quality Checker + Collapse Detector (full-run pass)
+            run.status = StormStatus.aggregating
+            run.notify()
+            quality = compute_quality(
+                run.personas, run.reactions, run.features,
+                benchmark_dir=s.data_dir / "benchmark_samples",
+            )
+
+            # 6) Aggregator / Analyst -> final report
+            run.report = build_report(
+                run.id, run.request, run.personas, run.reactions, run.features, quality
+            )
+            run.status = StormStatus.complete
+            run.notify()
+
+            # 7) Persist (best-effort)
+            self.storage.save_run(run.id, run.to_persist_dict())
+            logger.info("storm %s complete: %s", run.id, run.progress_snapshot())
+
+        except Exception as exc:  # noqa: BLE001 — surface any failure to clients
+            logger.exception("storm %s failed", run.id)
+            run.status = StormStatus.failed
+            run.error = str(exc)
+            run.notify()
+
+    # ------------------------------------------------------------------ stream
+    async def event_stream(self, run: StormRun) -> AsyncGenerator[tuple[str, dict], None]:
+        """Yields (event_name, payload). Route layer turns these into SSE.
+        New subscribers replay history first, then tail — reconnect-safe."""
+        yield "init", {
+            "storm_id": run.id,
+            "title": run.request.title,
+            "persona_count": run.request.persona_count,
+            "target_market": run.request.target_market.value,
+            "status": run.status.value,
+        }
+        cursor = 0
+        while True:
+            drained = False
+            while cursor < len(run.reactions):
+                r = run.reactions[cursor]
+                yield "reaction", {
+                    "persona_id": r.persona_id,
+                    "index": cursor,
+                    "segment": r.segment,
+                    "buy_likelihood": r.buy_likelihood,
+                    "max_price": r.max_price,
+                    "status": r.status,
+                    "first_objection": r.first_objection,
+                    "quote": r.quote,
+                }
+                cursor += 1
+                drained = True
+            if drained or run.status in (StormStatus.complete, StormStatus.failed):
+                yield "progress", run.progress_snapshot()
+            if run.status == StormStatus.complete:
+                yield "complete", {
+                    "storm_id": run.id,
+                    "report_ready": True,
+                    "adoption": run.status_counts,
+                }
+                return
+            if run.status == StormStatus.failed:
+                yield "error", {"message": run.error or "storm failed"}
+                return
+            await run.wait_change(timeout=5.0)

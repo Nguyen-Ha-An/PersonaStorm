@@ -1,0 +1,28 @@
+{
+  "category": "consumer_app",
+  "description": "Reference objection-theme distributions for consumer apps. ILLUSTRATIVE P0 data — see index.json.",
+  "reference_sets": [
+    {
+      "name": "subscription_consumer_apps_composite",
+      "objection_theme_shares": {
+        "subscription & lock-in": 0.26,
+        "pricing & affordability": 0.22,
+        "free trial & try-before-buy": 0.15,
+        "proof & evidence": 0.13,
+        "data privacy": 0.12,
+        "audience fit": 0.12
+      }
+    },
+    {
+      "name": "family_apps_composite",
+      "objection_theme_shares": {
+        "data privacy": 0.24,
+        "pricing & affordability": 0.20,
+        "setup time & complexity": 0.18,
+        "subscription & lock-in": 0.16,
+        "proof & evidence": 0.12,
+        "audience fit": 0.10
+      }
+    }
+  ]
+}

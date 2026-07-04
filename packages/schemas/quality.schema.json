@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://personastorm.dev/schemas/quality.schema.json",
+  "title": "QualityMetrics",
+  "type": "object",
+  "required": [
+    "persona_adherence", "product_grounding", "generic_response_rate",
+    "duplicate_objection_rate", "objection_entropy", "segment_variance",
+    "collapse_risk", "benchmark_confidence"
+  ],
+  "properties": {
+    "persona_adherence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "product_grounding": { "type": "number", "minimum": 0, "maximum": 1 },
+    "generic_response_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+    "duplicate_objection_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+    "objection_entropy": { "enum": ["low", "medium", "high"] },
+    "objection_entropy_score": { "type": "number" },
+    "segment_variance": { "enum": ["weak", "moderate", "strong"] },
+    "segment_variance_score": { "type": "number" },
+    "collapse_risk": { "enum": ["low", "medium", "high"] },
+    "collapse_risk_score": { "type": "number" },
+    "benchmark_confidence": { "enum": ["low", "medium", "high"] },
+    "benchmark_category": { "type": ["string", "null"] },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  }
+}

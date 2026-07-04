@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     nvidia_model: str = "z-ai/glm-5.2"
     nvidia_use_guided_json: bool = True  # nvext.guided_json; False -> json_object mode
     nvidia_max_tokens: int = 2048  # reasoning model: leave headroom so JSON isn't truncated
+    # analyst report narration is longer than a single persona reaction, and GLM-5.2
+    # reasoning tokens count against max_tokens, so give it more headroom than nvidia_max_tokens.
+    analyst_max_tokens: int = 4096
 
     # --- swarm pacing --------------------------------------------------------
     # The mock provider is instant, so we pace batches to make the live grid

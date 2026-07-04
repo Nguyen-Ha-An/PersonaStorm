@@ -26,7 +26,7 @@ def get_analyst(settings: Settings) -> AnalystProvider:
                 settings.nvidia_api_key,
                 settings.nvidia_base_url,
                 settings.nvidia_model,
-                max_tokens=settings.nvidia_max_tokens,
+                max_tokens=settings.analyst_max_tokens,
             )
         except ProviderNotConfiguredError as exc:
             logger.warning(

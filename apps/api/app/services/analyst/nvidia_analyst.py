@@ -155,5 +155,6 @@ class NvidiaAnalyst(AnalystProvider):
             logger.warning(
                 "NVIDIA analyst unavailable, using local report builder: %s", exc
             )
+            report = report.model_copy(deep=True)
             report.quality.notes = [*report.quality.notes, _FALLBACK_NOTE]
             return report

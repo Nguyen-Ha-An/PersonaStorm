@@ -230,3 +230,45 @@ def test_nvidia_analyst_requires_api_key_for_hosted_url():
 def test_analyst_provider_is_abstract_base():
     assert issubclass(MockAnalyst, AnalystProvider)
     assert issubclass(NvidiaAnalyst, AnalystProvider)
+
+
+# --------------------------------------------------------------------------- config
+
+
+def test_settings_analyst_max_tokens_default():
+    # analyst report narration is longer than a single persona reaction, and
+    # GLM-5.2 reasoning tokens count against the budget, so it gets its own
+    # (larger) knob rather than reusing nvidia_max_tokens.
+    settings = Settings()
+    assert settings.analyst_max_tokens == 4096
+
+
+# --------------------------------------------------------------------------- copy-on-failure
+
+
+def test_nvidia_analyst_failure_path_does_not_mutate_original_report():
+    """enhance_report must never mutate the caller's original report object,
+    even on the fallback/failure branch — only the returned copy gets the
+    fallback note appended to quality.notes."""
+    report = _build_sample_report()
+    original_notes = list(report.quality.notes)
+
+    analyst = NvidiaAnalyst("nvapi-test", "https://integrate.api.nvidia.com/v1", "z-ai/glm-5.2")
+
+    async def _boom(*args, **kwargs):
+        raise RuntimeError("network exploded")
+
+    analyst._client.post = _boom
+
+    out = asyncio.run(analyst.enhance_report(report))
+
+    assert report.quality.notes == original_notes, (
+        "original report's quality.notes must be unchanged after a failed "
+        "enhance_report call"
+    )
+    assert out is not report
+    assert out.quality.notes != report.quality.notes
+    assert any(
+        "local report builder" in n.lower() or "unavailable" in n.lower()
+        for n in out.quality.notes
+    )

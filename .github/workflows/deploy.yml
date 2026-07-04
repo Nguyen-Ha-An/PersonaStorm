@@ -177,13 +177,10 @@ jobs:
       - name: Pull Vercel project settings
         run: vercel pull --yes --environment=production --cwd apps/web --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG
 
-      - name: Build Vercel output
-        run: vercel build --prod --cwd apps/web --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG
-
-      - name: Deploy prebuilt output to Vercel production
+      - name: Deploy web to Vercel production
         id: deploy
         run: |
-          deployment_url=$(vercel deploy --prebuilt --prod --archive=tgz --cwd apps/web --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG)
+          deployment_url=$(vercel deploy --prod --yes --cwd apps/web --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG)
           echo "deployment_url=$deployment_url" >> "$GITHUB_OUTPUT"
           echo "### Vercel production deployment" >> "$GITHUB_STEP_SUMMARY"
           echo "$deployment_url" >> "$GITHUB_STEP_SUMMARY"

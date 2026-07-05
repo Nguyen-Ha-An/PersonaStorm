@@ -86,7 +86,19 @@ function LoginForm() {
         )}
 
         {linkError && (
-          <Alert tone="yellow" title="Email link issue" className="mt-5">
+          <Alert
+            tone="yellow"
+            title="Email link issue"
+            className="mt-5"
+            actions={
+              <Link
+                href="/signup"
+                className="text-xs font-semibold text-signal-cyan hover:underline"
+              >
+                Request a new confirmation email
+              </Link>
+            }
+          >
             {linkError}
           </Alert>
         )}

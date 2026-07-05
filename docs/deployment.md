@@ -280,14 +280,17 @@ signup** and change the button to use the `token_hash` flow the app implements a
 `/auth/confirm`:
 
 ```html
-<a href="{{ .RedirectTo }}/auth/confirm?token_hash={{ .TokenHash }}&type=email">
+<a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email">
   Confirm email address
 </a>
 ```
 
-- `{{ .RedirectTo }}` is the redirect passed by `signUp` (i.e. built from
-  `NEXT_PUBLIC_SITE_URL`), so the link lands on the production domain — **never
-  hardcode localhost here**.
+- `{{ .SiteURL }}` is the project **Site URL** you set above
+  (`https://personastorm.nguyenhaan.id.vn`), so the button links straight at the
+  app domain — **never hardcode localhost here**. Use `{{ .SiteURL }}`, **not**
+  `{{ .RedirectTo }}`: this app passes `emailRedirectTo=<site>/auth/callback`, so
+  `{{ .RedirectTo }}/auth/confirm` would resolve to `/auth/callback/auth/confirm`
+  and 404.
 - `{{ .TokenHash }}` is the single-use token the `/auth/confirm` route exchanges
   with `verifyOtp`. On success it routes to `/dashboard`; on a stale/used link it
   routes to `/login?error=otp_expired`.

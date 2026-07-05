@@ -77,6 +77,23 @@ export default function ResetPasswordPage() {
     }
   }
 
+  // Without Supabase configured, no recovery session ever arrives — say so
+  // directly instead of spinning to a misleading "link expired" after 4s.
+  if (!configured) {
+    return (
+      <AuthShell>
+        <Card className="p-7">
+          <h1 className="text-xl font-semibold tracking-tight text-storm-100">Set a new password</h1>
+          <Alert tone="yellow" title="Authentication is not configured" className="mt-5">
+            Set <span className="font-mono text-storm-100">NEXT_PUBLIC_SUPABASE_URL</span> and{" "}
+            <span className="font-mono text-storm-100">NEXT_PUBLIC_SUPABASE_ANON_KEY</span> to enable
+            password reset.
+          </Alert>
+        </Card>
+      </AuthShell>
+    );
+  }
+
   if (phase === "expired") {
     return (
       <AuthShell>
@@ -117,14 +134,6 @@ export default function ResetPasswordPage() {
       <Card className="p-7">
         <h1 className="text-xl font-semibold tracking-tight text-storm-100">Set a new password</h1>
         <p className="mt-1 text-sm text-storm-400">Choose a new password for your account.</p>
-
-        {!configured && (
-          <Alert tone="yellow" title="Authentication is not configured" className="mt-5">
-            Set <span className="font-mono text-storm-100">NEXT_PUBLIC_SUPABASE_URL</span> and{" "}
-            <span className="font-mono text-storm-100">NEXT_PUBLIC_SUPABASE_ANON_KEY</span> to enable
-            password reset.
-          </Alert>
-        )}
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>

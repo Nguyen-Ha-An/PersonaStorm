@@ -6,12 +6,13 @@
  * Supabase can be configured so the confirmation email button points at THIS
  * app instead of the Supabase `/auth/v1/verify` URL:
  *
- *   <a href="{{ .RedirectTo }}/auth/confirm?token_hash={{ .TokenHash }}&type=email">
+ *   <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email">
  *
- * `{{ .RedirectTo }}` is the URL we pass as `emailRedirectTo` on signUp, so with
- * NEXT_PUBLIC_SITE_URL set the button lands on the production domain. Here we
- * exchange the one-time `token_hash` for a session with verifyOtp — no secret
- * is exposed (token_hash is single-use and intended for exactly this).
+ * Use `{{ .SiteURL }}` (the dashboard Site URL = bare origin), NOT
+ * `{{ .RedirectTo }}`: signUp passes `emailRedirectTo=<site>/auth/callback`, so
+ * `{{ .RedirectTo }}/auth/confirm` would nest to `/auth/callback/auth/confirm`
+ * and 404. Here we exchange the one-time `token_hash` for a session with
+ * verifyOtp — no secret is exposed (token_hash is single-use, intended for this).
  *
  * Like /auth/callback this is a CLIENT component: the session it establishes is
  * persisted to localStorage by the browser client, which is what the app reads.

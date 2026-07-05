@@ -14,6 +14,14 @@ Verification path (documented tradeoff):
     development against a dev Supabase (or the in-memory gateway) still works.
     In prod a missing secret is a hard 401 — we never accept unverified tokens
     in production.
+
+NOTE (reference service only): this module supports the legacy shared-secret
+HS256 verification path only. Supabase projects that use the modern asymmetric
+JWT signing keys (ES256/RS256) issue tokens this offline verifier cannot check,
+so the reference API would 401 them. That is intentional here — apps/api is
+local/dev/reference only. The PRODUCTION path is the Next.js Route Handlers in
+apps/web/lib/server/supabaseAdmin.ts (verifyAccessToken), which is
+algorithm-aware and validates asymmetric-signed tokens remotely via GoTrue.
 """
 
 from __future__ import annotations

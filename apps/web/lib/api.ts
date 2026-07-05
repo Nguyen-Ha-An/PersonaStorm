@@ -3,6 +3,7 @@ import type {
   AdminStormRun,
   AdminUser,
   AdminUserDetail,
+  DashboardData,
   Me,
   Pricing,
   Quote,
@@ -41,9 +42,18 @@ export class ApiError extends Error {
   }
 }
 
-async function authHeaders(): Promise<Record<string, string>> {
+/**
+ * The access token for a PROTECTED call. If there is no Supabase session we
+ * throw a clean auth error immediately instead of firing an unauthenticated
+ * request that the server would 401 — so the UI reacts deterministically (show
+ * "session expired", never a misleading "connected" with fake data).
+ */
+async function requireAccessToken(): Promise<string> {
   const token = await getAccessToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  if (!token) {
+    throw new ApiError("Your session has expired. Please log in again.", "auth", 401);
+  }
+  return token;
 }
 
 /** Wrap fetch so a dropped connection to our own server becomes an actionable message. */
@@ -85,17 +95,21 @@ async function handle<T>(resp: Response): Promise<T> {
   return resp.json() as Promise<T>;
 }
 
-/** GET helper with auth. */
+/** GET helper for a protected endpoint (requires a live session). */
 async function apiGet<T>(path: string): Promise<T> {
-  return handle<T>(await safeFetch(`${API_BASE}${path}`, { headers: await authHeaders() }));
+  const token = await requireAccessToken();
+  return handle<T>(
+    await safeFetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${token}` } }),
+  );
 }
 
-/** JSON body mutation helper with auth. */
+/** JSON body mutation helper for a protected endpoint (requires a live session). */
 async function apiSend<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const token = await requireAccessToken();
   return handle<T>(
     await safeFetch(`${API_BASE}${path}`, {
       method,
-      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
   );
@@ -118,6 +132,10 @@ export async function checkBackendHealth(): Promise<BackendHealth> {
   }
 }
 
+// ── dashboard ───────────────────────────────────────────────────────────────
+/** One authenticated call for the whole dashboard: user + wallet + pricing + stats. */
+export const getDashboard = () => apiGet<DashboardData>("/dashboard");
+
 // ── account / wallet ────────────────────────────────────────────────────────
 export const getMe = () => apiGet<Me>("/me");
 export const getWallet = () => apiGet<Wallet>("/wallet");
@@ -135,8 +153,9 @@ export const getStormHistory = () => apiGet<StormHistoryItem[]>("/storm/history"
 
 /** Returns the report, or null while the storm is still running (HTTP 202). */
 export async function getReport(stormId: string): Promise<StormReport | null> {
+  const token = await requireAccessToken();
   const resp = await safeFetch(`${API_BASE}/storm/${stormId}/report`, {
-    headers: await authHeaders(),
+    headers: { Authorization: `Bearer ${token}` },
   });
   if (resp.status === 202) return null;
   return handle<StormReport>(resp);

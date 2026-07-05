@@ -29,6 +29,14 @@ export interface Gateway {
   ensureAndGetProfile(userId: string, email: string, fullName: string | null): Promise<Row>;
   getProfile(userId: string): Promise<Row | null>;
   getWallet(userId: string): Promise<Row>;
+  /**
+   * Ensure the user's wallet exists, granting `starterCredits` exactly once if
+   * (and only if) this call created it. Never lowers an existing balance and
+   * never writes a duplicate starter transaction — safe to call on every
+   * request. The DB trigger provisions new signups; this repairs users whose
+   * rows are missing (predate the trigger, or the trigger failed).
+   */
+  ensureWalletWithStarter(userId: string, starterCredits: number): Promise<Row>;
   listTransactions(userId: string, limit?: number): Promise<Row[]>;
   adjustWallet(
     userId: string,
@@ -47,6 +55,8 @@ export interface Gateway {
   setRole(userId: string, role: string): Promise<void>;
   adminListStorms(limit?: number): Promise<Row[]>;
   countAdmins(): Promise<number>;
+  /** Total storm_runs owned by a user (for accurate dashboard counts). */
+  countUserStorms(userId: string): Promise<number>;
 }
 
 function nowIso(): string {
@@ -108,6 +118,25 @@ class InMemoryGateway implements Gateway {
       this.wallets.set(userId, w);
     }
     return { ...w };
+  }
+
+  async ensureWalletWithStarter(userId: string, starterCredits: number): Promise<Row> {
+    const existing = this.wallets.get(userId);
+    if (existing) return { ...existing };
+    const wallet = {
+      id: cryptoRandom(), user_id: userId,
+      balance_credits: Math.max(0, starterCredits), lifetime_spent_credits: 0,
+      created_at: nowIso(), updated_at: nowIso(),
+    };
+    this.wallets.set(userId, wallet);
+    if (starterCredits > 0) {
+      this.transactions.push({
+        id: cryptoRandom(), user_id: userId, wallet_id: wallet.id, type: "credit_grant",
+        amount_credits: starterCredits, balance_after: starterCredits,
+        description: "Starter credits", storm_id: null, created_by: userId, created_at: nowIso(),
+      });
+    }
+    return { ...wallet };
   }
 
   async listTransactions(userId: string, limit = 50): Promise<Row[]> {
@@ -234,6 +263,12 @@ class InMemoryGateway implements Gateway {
     for (const p of this.profiles.values()) if (p.role === "admin") n += 1;
     return n;
   }
+
+  async countUserStorms(userId: string): Promise<number> {
+    let n = 0;
+    for (const s of this.storms.values()) if (s.user_id === userId) n += 1;
+    return n;
+  }
 }
 
 // ===========================================================================
@@ -272,6 +307,32 @@ class HttpGateway implements Gateway {
     if (created[0]) return created[0];
     const again = await this.admin.get("wallets", { user_id: `eq.${userId}`, select: "*", limit: "1" });
     return again[0] ?? { user_id: userId, balance_credits: 0, lifetime_spent_credits: 0 };
+  }
+
+  async ensureWalletWithStarter(userId: string, starterCredits: number): Promise<Row> {
+    // Fast path: an existing wallet is returned untouched (never lower a balance).
+    const existing = await this.admin.get("wallets", { user_id: `eq.${userId}`, select: "*", limit: "1" });
+    if (existing[0]) return existing[0];
+
+    // Attempt to create the wallet. ignore-duplicates means a concurrent request
+    // that already created it yields an empty result — only the creator grants
+    // the starter credits, so the grant (and its audit row) happens exactly once.
+    const created = await this.admin.mutate("POST", "wallets", {
+      params: { on_conflict: "user_id" },
+      json: { user_id: userId, balance_credits: 0 },
+      prefer: "resolution=ignore-duplicates,return=representation",
+    });
+
+    if (created[0] && starterCredits > 0) {
+      // adjust_wallet_balance is atomic + writes the credit_grant audit row.
+      await this.adjustWallet(userId, starterCredits, "credit_grant", {
+        description: "Starter credits",
+        actorUserId: userId,
+      });
+    }
+
+    const row = await this.admin.get("wallets", { user_id: `eq.${userId}`, select: "*", limit: "1" });
+    return row[0] ?? { user_id: userId, balance_credits: 0, lifetime_spent_credits: 0 };
   }
 
   async listTransactions(userId: string, limit = 50): Promise<Row[]> {
@@ -398,14 +459,28 @@ class HttpGateway implements Gateway {
   async countAdmins(): Promise<number> {
     const resp = await this.admin.getWithHeaders("profiles", { role: "eq.admin", select: "id" }, { Prefer: "count=exact" });
     if (resp.status >= 300) throw new SupabaseError(`count_admins -> ${resp.status}`);
-    const contentRange = resp.headers.get("content-range") ?? "";
-    if (contentRange.includes("/")) {
-      const total = Number(contentRange.split("/").pop());
-      if (Number.isFinite(total)) return total;
-    }
-    const rows = (await resp.json()) as any[];
-    return rows.length;
+    return parseExactCount(resp, await resp.clone().json().catch(() => []));
   }
+
+  async countUserStorms(userId: string): Promise<number> {
+    const resp = await this.admin.getWithHeaders(
+      "storm_runs",
+      { user_id: `eq.${userId}`, select: "id" },
+      { Prefer: "count=exact" },
+    );
+    if (resp.status >= 300) throw new SupabaseError(`count_user_storms -> ${resp.status}`);
+    return parseExactCount(resp, await resp.clone().json().catch(() => []));
+  }
+}
+
+/** Extract the total row count from a PostgREST `count=exact` response. */
+function parseExactCount(resp: Response, fallbackRows: any[]): number {
+  const contentRange = resp.headers.get("content-range") ?? "";
+  if (contentRange.includes("/")) {
+    const total = Number(contentRange.split("/").pop());
+    if (Number.isFinite(total)) return total;
+  }
+  return Array.isArray(fallbackRows) ? fallbackRows.length : 0;
 }
 
 // A single in-memory gateway persists for the life of the (dev) server process.

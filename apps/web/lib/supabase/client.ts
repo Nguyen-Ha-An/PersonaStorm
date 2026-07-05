@@ -15,9 +15,22 @@
  */
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import {
+  getPublicSupabaseAnonKey,
+  validateSupabaseUrl,
+} from "./config";
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+// Validate + normalize the project URL through the single source of truth. A
+// value that carries a path (/rest/v1, /auth/v1, /storage/v1) is stripped to
+// the bare origin AND surfaced loudly so the misconfiguration is fixed — a
+// pathed URL silently breaks GoTrue and PostgREST.
+const urlCheck = validateSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
+if (!urlCheck.ok && urlCheck.url) {
+  // Present but malformed (e.g. includes /rest/v1): warn, keep the bare origin.
+  console.error(`[personastorm] ${urlCheck.error}`);
+}
+const url = urlCheck.url || undefined;
+const anonKey = getPublicSupabaseAnonKey() || undefined;
 
 export const SUPABASE_CONFIGURED = Boolean(url && anonKey);
 

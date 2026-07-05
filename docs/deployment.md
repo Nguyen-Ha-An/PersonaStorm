@@ -129,7 +129,7 @@ total_credits = base_run_credits
 |---|---:|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | yes | Supabase project URL — **only** `https://<ref>.supabase.co`, no `/rest/v1`, `/auth/v1`, `/storage/v1` path |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Supabase **anon** key (never the service role key) |
-| `NEXT_PUBLIC_SITE_URL` | yes (prod) | Canonical site URL used to build every auth redirect (`emailRedirectTo` / `redirectTo`). Production: `https://personastorm.nguyenhaan.id.vn`. If unset, falls back to `NEXT_PUBLIC_VERCEL_URL` → `window.location.origin` → `http://localhost:3000` (dev only). **Never localhost in production.** |
+| `NEXT_PUBLIC_SITE_URL` | recommended | Canonical site URL used to build every auth redirect (`emailRedirectTo` / `redirectTo`). Production: `https://personastorm.nguyenhaan.id.vn`. The production deploy **defaults** this to that domain when the secret is unset (so a missing secret never blocks the deploy and never uses localhost); set the secret only to override. In the app itself, if unset it falls back to `NEXT_PUBLIC_VERCEL_URL` → `window.location.origin` → `http://localhost:3000` (dev only). **Never localhost in production.** |
 
 ### Server-side (Vercel — read at request time by Route Handlers, never in the browser)
 
@@ -184,7 +184,7 @@ VERCEL_PROJECT_ID
 
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY
-NEXT_PUBLIC_SITE_URL       # https://personastorm.nguyenhaan.id.vn — auth redirect base
+NEXT_PUBLIC_SITE_URL       # OPTIONAL — defaults to https://personastorm.nguyenhaan.id.vn; set only to override
 
 SUPABASE_URL
 SUPABASE_SERVICE_ROLE_KEY
@@ -206,15 +206,19 @@ ANALYST_PROVIDER
 ```
 
 **Synced into Vercel** (safe frontend + server-side): `NEXT_PUBLIC_SUPABASE_URL`,
-`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL`, `SUPABASE_URL` (falls back
-to the public URL), `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`,
-`INFERENCE_PROVIDER`, `ANALYST_PROVIDER`, `NVIDIA_API_KEY`, `NVIDIA_BASE_URL`,
-`NVIDIA_MODEL`.
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL` (defaults to the production
+domain if the secret is unset), `SUPABASE_URL` (falls back to the public URL),
+`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `INFERENCE_PROVIDER`,
+`ANALYST_PROVIDER`, `NVIDIA_API_KEY`, `NVIDIA_BASE_URL`, `NVIDIA_MODEL`.
 
-The production deploy fails loud if `NEXT_PUBLIC_SITE_URL` is missing, not a valid
-`https` URL, or points at `localhost`, and if `NEXT_PUBLIC_SUPABASE_URL` carries an
-API path (`/rest/v1`, `/auth/v1`, `/storage/v1`) — see the "Validate auth redirect
-+ Supabase URL format (production)" step in the workflow.
+`NEXT_PUBLIC_SITE_URL` is **not required** — the production deploy defaults it to
+`https://personastorm.nguyenhaan.id.vn` (the `PROD_SITE_URL_DEFAULT` workflow env)
+when the secret is unset, so a missing secret never blocks the deploy and never
+falls back to localhost. When the secret **is** set, the deploy still fails loud if
+it is not a valid `https` URL or points at `localhost`, and it always fails if
+`NEXT_PUBLIC_SUPABASE_URL` carries an API path (`/rest/v1`, `/auth/v1`,
+`/storage/v1`) — see the "Validate auth redirect + Supabase URL format
+(production)" step in the workflow.
 
 **NEVER synced into Vercel** (used only by the Supabase CLI / admin bootstrap):
 `SUPABASE_DB_PASSWORD`, `SUPABASE_ACCESS_TOKEN`, `VERCEL_TOKEN`, `ADMIN_PASSWORD`.

@@ -6,11 +6,9 @@ import { checkBackendHealth, type BackendHealth } from "@/lib/api";
 import { SUPABASE_CONFIGURED } from "@/lib/supabase/client";
 
 /**
- * Compact health chip for the topbar. The browser can no longer inspect
- * whether the backend is configured at build time (BACKEND_API_BASE is a
- * server-only secret), so this probes the same-origin health proxy once on
- * mount. Purely informational — the real errors surface where an action
- * actually fails.
+ * Compact health chip for the topbar. Probes the same-origin PersonaStorm
+ * server API (`/api/health`) once on mount. Purely informational — the real
+ * errors surface where an action actually fails.
  */
 export function ApiStatusBadge() {
   const [backend, setBackend] = useState<BackendHealth | "checking">("checking");
@@ -32,9 +30,7 @@ export function ApiStatusBadge() {
       ? "Checking…"
       : backend === "ok"
         ? "Connected"
-        : backend === "unavailable"
-          ? "Backend not configured"
-          : "Backend unreachable";
+        : "API unreachable";
 
   return (
     <span

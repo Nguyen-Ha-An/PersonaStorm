@@ -1,6 +1,35 @@
-# PersonaStorm — full stack, one command:  docker compose up --build
+# PersonaStorm — Vercel full-stack app, run locally:  docker compose up --build
+#
+# `web` is the whole app: the Next.js frontend AND the API Route Handlers
+# (apps/web/app/api/*). It needs Supabase env vars to do anything real; with
+# none set it uses an in-memory dev gateway (data not persisted across restarts).
+#
+# `api` is the OPTIONAL FastAPI reference service (the original Python engine).
+# It is NOT part of production and `web` does not depend on it — run it only if
+# you want the reference API / OpenAPI docs at :8000.
 services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+    environment:
+      # Server-side only (the API Route Handlers). Never NEXT_PUBLIC_.
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
+      INFERENCE_PROVIDER: ${INFERENCE_PROVIDER:-mock}
+      ANALYST_PROVIDER: ${ANALYST_PROVIDER:-mock}
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      PERSONA_SEED: ${PERSONA_SEED:-1337}
+    ports:
+      - "3000:3000"
+
+  # Optional reference service — not required by `web`, not deployed in production.
   api:
+    profiles: ["reference"]
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -9,29 +38,9 @@ services:
     environment:
       INFERENCE_PROVIDER: ${INFERENCE_PROVIDER:-mock}
       PERSONA_SEED: ${PERSONA_SEED:-1337}
-      STORM_BATCH_SIZE: ${STORM_BATCH_SIZE:-25}
-      STORM_BATCH_INTERVAL_MS: ${STORM_BATCH_INTERVAL_MS:-350}
-      FIREWORKS_API_KEY: ${FIREWORKS_API_KEY:-}
-      FIREWORKS_MODEL: ${FIREWORKS_MODEL:-accounts/fireworks/models/gemma-3-27b-it}
-      VLLM_BASE_URL: ${VLLM_BASE_URL:-}
-      VLLM_MODEL: ${VLLM_MODEL:-google/gemma-3-27b-it}
       CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
     volumes:
       - storm-runs:/data/runs
-
-  web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-    environment:
-      # The Next.js SERVER (not the browser) calls the backend now, so this
-      # can safely be the compose-internal hostname — it never reaches the
-      # browser bundle.
-      BACKEND_API_BASE: http://api:8000
-    ports:
-      - "3000:3000"
-    depends_on:
-      - api
 
 volumes:
   storm-runs:

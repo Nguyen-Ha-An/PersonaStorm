@@ -1,12 +1,18 @@
-# PersonaStorm API
+# PersonaStorm API (reference / local dev only)
+
+> **⚠️ Not used in production.** PersonaStorm is now a **Vercel full-stack app**:
+> the production backend API runs as Next.js Route Handlers under
+> `apps/web/app/api/*`, and the engine has been ported to TypeScript in
+> `apps/web/lib/server/`. This FastAPI service is kept only as the reference
+> implementation, for local experiments, and for the offline pytest suite. You
+> do **not** need to deploy it, and there is no `BACKEND_API_BASE` — see
+> [docs/deployment.md](../../docs/deployment.md). The Render/Railway instructions
+> below are historical and no longer required.
 
 FastAPI backend for PersonaStorm — the persona-swarm engine, SSE streaming,
 Supabase-backed auth/billing/admin. See the [repo root README](../../README.md)
 for the full product description and [docs/deployment.md](../../docs/deployment.md)
-for the complete deployment guide (frontend + backend + Supabase together).
-
-This service is **not** deployed by the Vercel frontend deployment — it must
-be deployed separately, to any host that can run a long-lived ASGI process.
+for the current (Vercel + Supabase) deployment guide.
 
 ## Run locally
 

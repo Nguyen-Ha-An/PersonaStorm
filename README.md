@@ -46,14 +46,21 @@ PersonaStorm ships as a real dashboard product on top of the wind-tunnel engine:
   browse all storm runs, and edit the active pricing rule.
 
 Security model: the browser holds only the Supabase **anon** key and its access
-token; the FastAPI backend verifies that token, owns every wallet mutation
-through a service-role RPC, and enforces ownership/roles. RLS is enabled on all
-tables and no client can write a balance. Full setup (Supabase project, backend
-env, admin bootstrap): [docs/deployment.md](docs/deployment.md).
+token; the **Next.js API Route Handlers** (running server-side on Vercel) verify
+that token, own every wallet mutation through a service-role RPC, and enforce
+ownership/roles. RLS is enabled on all tables and no client can write a balance.
+Full setup (Supabase project, env vars, admin bootstrap):
+[docs/deployment.md](docs/deployment.md).
 
-> Running the SaaS layer needs a Supabase project (`SUPABASE_*` on the backend,
-> `NEXT_PUBLIC_SUPABASE_*` on the frontend). Without them the API still boots
-> using an in-memory dev gateway so the engine and test suite run offline.
+> **PersonaStorm is a Vercel full-stack app** — the backend API is Next.js Route
+> Handlers under `apps/web/app/api/*`, not a separate service. Production needs
+> only **Vercel + Supabase**: there is no `BACKEND_API_BASE`, no
+> `NEXT_PUBLIC_API_BASE`, and no FastAPI deployment. The `apps/api` FastAPI
+> service stays for local/dev/reference and the offline test suite only.
+
+> Running the SaaS layer needs a Supabase project (`SUPABASE_*` server-side on
+> Vercel, `NEXT_PUBLIC_SUPABASE_*` on the frontend). Without them the server
+> falls back to an in-memory dev gateway so the engine and test suite run offline.
 
 ## How the criteria engine works
 
@@ -105,61 +112,60 @@ described across the criteria schema. Full rationale:
 
 ```
 personastorm/
-├── apps/api        FastAPI backend (Python 3.11+, Pydantic v2, SSE)
-│   └── app/services/criteria/     registry · presets · age_overlays · scoring · classifier
-│   └── app/services/aggregation/  criteria_aggregation · age_analysis · report_builder · objections · pricing
-│   └── app/services/quality/      metrics · consistency_checker · collapse
-│   └── app/services/     billing (pricing) · supabase_gateway (auth/wallet/admin) · storm_runner
-│   └── app/routers/      storm · account · billing · admin · health
-├── apps/web        Next.js 14 frontend (TypeScript, Tailwind, Recharts)
-│   └── app/(app)/        protected dashboard: dashboard · storm/new · storm/[id] · wallet · account · admin
-│   └── app/api/backend/  same-origin proxy to FastAPI (BACKEND_API_BASE, server-side only)
-│   └── lib/              supabase client · auth context · api client (calls the proxy, not FastAPI directly)
+├── apps/web        Next.js 14 FULL-STACK app on Vercel (TypeScript, Tailwind, Recharts)
+│   └── app/(app)/           protected dashboard: dashboard · storm/new · storm/[id] · wallet · account · admin
+│   └── app/api/             the backend API — same-origin Route Handlers (health · me · wallet ·
+│                            billing/quote · storm/* · admin/*)
+│   └── lib/server/          server-only backend: auth · supabaseAdmin · gateway · pricing · wallet ·
+│                            stormStore · stormEngine + engine/ (criteria · persona · providers ·
+│                            aggregation · quality) — the TypeScript port of the engine
+│   └── lib/                 supabase browser client · auth context · api client (same-origin /api/*)
+├── apps/api        FastAPI backend — LOCAL/DEV/REFERENCE ONLY (not deployed in production)
+│   └── app/services/…       the original Python engine the TypeScript port mirrors
 ├── supabase/migrations/  SaaS schema (profiles · wallets · transactions · storm_runs · pricing_rules) + RLS
 ├── packages/schemas  JSON Schema contract (mirrors Pydantic + TS types)
 ├── data/           sample inputs, benchmark samples, persona exports, runs
 ├── scripts/        create_admin_user.py · seed_personas.py · run_local_demo.py · evaluate_outputs.py
-├── render.yaml     Render Blueprint to deploy apps/api (see apps/api/README.md)
 └── docs/           architecture · criteria-system · api-contract · deployment ·
                     inference/training roadmaps · evaluation framework · demo script
 ```
 
-> **Deployment status:** the Next.js frontend deploys to Vercel; the FastAPI
-> backend (`apps/api`) does **not** — it must be deployed separately (see
-> [apps/api/README.md](apps/api/README.md) for Render/Railway/Docker steps),
-> then its public URL set as the `BACKEND_API_BASE` secret. Until then, the
-> deployed frontend still works for login/signup/dashboard (Supabase-only) —
-> only storm/billing/admin calls show a clear "backend not configured" state.
+> **Deployment:** the whole app deploys to **Vercel** — frontend **and** the API
+> Route Handlers (`apps/web/app/api/*`) as serverless functions. **Supabase** is
+> Auth + Postgres. There is no separate backend to deploy and no
+> `BACKEND_API_BASE` / `NEXT_PUBLIC_API_BASE`. The `apps/api` FastAPI service is
+> kept for local development, reference, and the offline pytest suite only.
 > Full picture: [docs/deployment.md](docs/deployment.md).
 
 ## Quickstart (local, no GPU, no keys)
 
-Requirements: **Python 3.11+** and **Node 18.17+**.
+Requirements: **Node 18.17+** (Python 3.11+ is only needed for the optional
+`apps/api` reference service / test suite).
 
 ```bash
-# 1) backend — http://localhost:8000  (docs at /docs)
-cd apps/api
-uv venv --python 3.11 .venv
-uv pip install -r requirements.txt
-.venv/bin/python -m uvicorn app.main:app --reload --port 8000
-
-# 2) frontend — http://localhost:3000
+# The full app — frontend AND the API Route Handlers — http://localhost:3000
 cd apps/web
 npm install
 npm run dev
 ```
 
-(No `uv`? Any Python 3.11+ virtualenv works: `python3.11 -m venv .venv && .venv/bin/pip install -r requirements.txt`.)
+With no Supabase env vars set, the server uses an in-memory dev gateway + dev
+auth, so the engine, storms, and dashboard all work offline (data isn't
+persisted across restarts — dev only). Set `NEXT_PUBLIC_SUPABASE_*` and
+`SUPABASE_*` (see `.env.example`) to use a real Supabase project.
 
 Open http://localhost:3000, click a sample (e.g. **"AI SaaS concept"** —
 PersonaPilot, an AI-SaaS product-concept sample with clear tiered pricing),
-**Run Storm**. Or use the `Makefile`: `make api`, `make web`, `make test`,
-`make demo`, `make up`.
+**Run Storm**.
 
-Docker instead:
+The original Python engine still runs as a reference / test suite:
 
 ```bash
-docker compose up --build   # web :3000, api :8000
+cd apps/api
+uv venv --python 3.11 .venv           # or: python3.11 -m venv .venv
+uv pip install -r requirements.txt
+.venv/bin/python -m uvicorn app.main:app --reload --port 8000   # optional, reference only
+.venv/bin/python -m pytest -q          # the calibration/scoring test suite
 ```
 
 ## Environment variables
@@ -180,13 +186,13 @@ key needed.
 | `VLLM_MODEL` | `google/gemma-3-27b-it` | model or LoRA adapter name |
 | `STORM_BATCH_SIZE` / `STORM_BATCH_INTERVAL_MS` | `25` / `350` | demo pacing (mock only) |
 | `PERSONA_SEED` | `1337` | reproducible storms |
-| `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | browser origins allowed to call the API directly — no longer needed for the official frontend (it proxies server-to-server, see below), only for direct/other clients |
-| `BACKEND_API_BASE` (frontend, server-side only) | `http://localhost:8000` *(dev only)* | Read by `apps/web/app/api/backend/[...path]/route.ts`, the same-origin proxy the browser calls instead of the FastAPI backend directly. **Local dev:** leave unset (defaults to localhost). **Production:** required for storm/billing/admin actions to work — set it to your deployed FastAPI backend URL. **Not** prefixed with `NEXT_PUBLIC_`: it's never inlined into the browser bundle, so login/signup/dashboard work even before it's set. See [docs/deployment.md](docs/deployment.md). |
-| `SUPABASE_URL` / `SUPABASE_ANON_KEY` | — | backend Supabase project URL + anon key (auth/db). Unset → in-memory dev gateway. |
-| `SUPABASE_SERVICE_ROLE_KEY` | — | **secret** — backend-only; bypasses RLS, owns wallet mutations. Never in frontend env. |
-| `SUPABASE_JWT_SECRET` | — | **secret** — HS256 secret used to verify Supabase access tokens. |
+| `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | only used by the optional `apps/api` reference service. The Vercel app's API is same-origin, so CORS never applies to it. |
+| `SUPABASE_URL` / `SUPABASE_ANON_KEY` | — | **server-side (Vercel)** Supabase project URL + anon key. `SUPABASE_URL` falls back to `NEXT_PUBLIC_SUPABASE_URL`. Unset → in-memory dev gateway. |
+| `SUPABASE_SERVICE_ROLE_KEY` | — | **secret** — server-side only; bypasses RLS, owns wallet mutations. Never `NEXT_PUBLIC_`, never in the browser. |
+| `SUPABASE_JWT_SECRET` | — | **secret** — HS256 secret to verify access tokens offline. If unset, tokens are validated remotely via Supabase GoTrue. |
 | `API_ENV` | `dev` | set `prod` to refuse unverified tokens when the JWT secret is missing. |
 | `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | — | frontend Supabase client (anon key only). Required for login/signup in production. |
+| ~~`BACKEND_API_BASE`~~ / ~~`NEXT_PUBLIC_API_BASE`~~ | **removed** | No longer used. The API is same-origin Next.js Route Handlers on Vercel — there is no external backend URL. |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_FULL_NAME` | — | used by `scripts/create_admin_user.py` to bootstrap the first admin. |
 
 ## Switching providers

@@ -66,9 +66,9 @@ jobs:
 
       - name: Build web app
         working-directory: apps/web
-        # No backend URL needed at build time — the browser never talks to the
-        # FastAPI backend directly. BACKEND_API_BASE is read server-side, at
-        # request time, by the /api/backend proxy route (apps/web/app/api/backend).
+        # PersonaStorm is a Vercel full-stack app: the API is Next.js Route
+        # Handlers under apps/web/app/api/*. No external backend URL exists, so
+        # nothing backend-related is needed at build time.
         run: npm run build
 
   # Deploys Supabase migrations to the PRODUCTION database. Runs only on a push
@@ -189,32 +189,49 @@ jobs:
 
       # GitHub Actions secrets are the source of truth for Vercel's env, not the
       # Vercel dashboard — this pushes them in on every deploy so the dashboard
-      # never silently drifts out of sync (or starts out empty). BACKEND_API_BASE
-      # is optional for previews: skip it quietly if unset rather than failing
-      # the whole preview deploy — storm/billing/admin just show a clear
-      # "not configured" state until a backend exists.
+      # never silently drifts out of sync (or starts out empty). Values are only
+      # ever piped via stdin (never echoed); the loop prints names only. Vars
+      # that are unset are skipped quietly. SUPABASE_URL falls back to
+      # NEXT_PUBLIC_SUPABASE_URL (the project URL is not a secret). The secrets
+      # that must NEVER be synced to Vercel — SUPABASE_DB_PASSWORD,
+      # SUPABASE_ACCESS_TOKEN, VERCEL_TOKEN, ADMIN_PASSWORD — are simply not
+      # listed here.
       - name: Sync Vercel environment variables (preview)
         working-directory: apps/web
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          BACKEND_API_BASE: ${{ secrets.BACKEND_API_BASE }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
+          INFERENCE_PROVIDER: ${{ secrets.INFERENCE_PROVIDER }}
+          ANALYST_PROVIDER: ${{ secrets.ANALYST_PROVIDER }}
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          NVIDIA_BASE_URL: ${{ secrets.NVIDIA_BASE_URL }}
+          NVIDIA_MODEL: ${{ secrets.NVIDIA_MODEL }}
         run: |
           set -eu
           sync_env() {
-            name="$1"; value="$2"
+            name="$1"; value="$2"; target="$3"
             if [ -z "$value" ]; then
               echo "  - $name: not set (GitHub secret missing) — skipping"
               return 0
             fi
-            vercel env rm "$name" preview --yes --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG >/dev/null 2>&1 || true
-            printf '%s' "$value" | vercel env add "$name" preview --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG >/dev/null
-            echo "  - $name: synced to Vercel (preview)"
+            vercel env rm "$name" "$target" --yes --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG >/dev/null 2>&1 || true
+            printf '%s' "$value" | vercel env add "$name" "$target" --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG >/dev/null
+            echo "  - $name: synced to Vercel ($target)"
           }
           echo "Syncing GitHub secrets into Vercel (preview environment):"
-          sync_env NEXT_PUBLIC_SUPABASE_URL "$NEXT_PUBLIC_SUPABASE_URL"
-          sync_env NEXT_PUBLIC_SUPABASE_ANON_KEY "$NEXT_PUBLIC_SUPABASE_ANON_KEY"
-          sync_env BACKEND_API_BASE "$BACKEND_API_BASE"
+          sync_env NEXT_PUBLIC_SUPABASE_URL "$NEXT_PUBLIC_SUPABASE_URL" preview
+          sync_env NEXT_PUBLIC_SUPABASE_ANON_KEY "$NEXT_PUBLIC_SUPABASE_ANON_KEY" preview
+          sync_env SUPABASE_URL "${SUPABASE_URL:-$NEXT_PUBLIC_SUPABASE_URL}" preview
+          sync_env SUPABASE_SERVICE_ROLE_KEY "$SUPABASE_SERVICE_ROLE_KEY" preview
+          sync_env SUPABASE_JWT_SECRET "$SUPABASE_JWT_SECRET" preview
+          sync_env INFERENCE_PROVIDER "$INFERENCE_PROVIDER" preview
+          sync_env ANALYST_PROVIDER "$ANALYST_PROVIDER" preview
+          sync_env NVIDIA_API_KEY "$NVIDIA_API_KEY" preview
+          sync_env NVIDIA_BASE_URL "$NVIDIA_BASE_URL" preview
+          sync_env NVIDIA_MODEL "$NVIDIA_MODEL" preview
 
       - name: Pull Vercel preview environment
         working-directory: apps/web
@@ -278,42 +295,28 @@ jobs:
             exit 1
           fi
 
-      # BACKEND_API_BASE is read server-side by the /api/backend proxy route,
-      # never baked into the browser bundle. Production deploys require it —
-      # without it every storm/billing/admin action would 503 in production
-      # with no way for the deployer to notice until a user hits it. Fail loud
-      # here instead. (Login/signup/dashboard don't need it — see
-      # docs/deployment.md if you intend to ship the frontend before the
-      # backend is deployed and want to bypass this gate.)
-      - name: Validate BACKEND_API_BASE (required for production)
-        env:
-          BACKEND_API_BASE: ${{ secrets.BACKEND_API_BASE }}
-        run: |
-          if [ -z "${BACKEND_API_BASE:-}" ]; then
-            echo "Missing required GitHub secret: BACKEND_API_BASE"
-            echo "Deploy apps/api first (see apps/api/README.md — Render or Railway), then set"
-            echo "BACKEND_API_BASE to the public FastAPI URL, e.g. https://personastorm-api.onrender.com"
-            exit 1
-          fi
-
-      # Login/signup/dashboard are Supabase-only, but they still need these two
-      # to actually authenticate — a production deploy without them ships a
-      # site where nobody can log in. Fail loud here rather than silently
-      # deploying a broken auth flow.
-      - name: Validate Supabase frontend secrets (required for production)
+      # PersonaStorm is a Vercel full-stack app — there is no external backend
+      # and no BACKEND_API_BASE to validate. A production deploy needs the
+      # Supabase FRONTEND secrets (so users can log in) and the Supabase SERVER
+      # secrets (so the Route Handlers can verify tokens and own wallet
+      # mutations). Fail loud if any are missing rather than shipping a broken
+      # deploy. NVIDIA_* are optional (mock provider is the default).
+      - name: Validate required Supabase secrets (production)
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           missing=0
-          for name in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY; do
+          for name in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY; do
             if [ -z "${!name}" ]; then
               echo "Missing required GitHub secret: $name"
               missing=1
             fi
           done
           if [ "$missing" -ne 0 ]; then
-            echo "Set these from your Supabase project (Settings -> API). Anon key only — never the service role key."
+            echo "Set the frontend keys from Supabase Settings -> API (anon key only, never the service role)."
+            echo "Set SUPABASE_SERVICE_ROLE_KEY (server-side only) so Route Handlers can own wallet mutations."
             exit 1
           fi
 
@@ -339,31 +342,49 @@ jobs:
 
       # GitHub Actions secrets are the source of truth for Vercel's env, not the
       # Vercel dashboard — this pushes them in on every deploy so the dashboard
-      # never silently drifts out of sync (or starts out empty, as it did before
-      # this step existed). Only these three ever get synced — see the "Never
-      # sync" list in docs/deployment.md for what must never appear here.
+      # never silently drifts out of sync (or starts out empty). Values are only
+      # ever piped via stdin (never echoed); the loop prints names only.
+      # NEVER-SYNC list (deliberately absent below): SUPABASE_DB_PASSWORD,
+      # SUPABASE_ACCESS_TOKEN, VERCEL_TOKEN, ADMIN_PASSWORD. Public NEXT_PUBLIC_*
+      # keys and server-side SUPABASE_*/NVIDIA_* are synced; SUPABASE_URL falls
+      # back to NEXT_PUBLIC_SUPABASE_URL. Server-side vars must NOT be prefixed
+      # with NEXT_PUBLIC_ (they are not, here or in the app).
       - name: Sync Vercel environment variables (production)
         working-directory: apps/web
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          BACKEND_API_BASE: ${{ secrets.BACKEND_API_BASE }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
+          INFERENCE_PROVIDER: ${{ secrets.INFERENCE_PROVIDER }}
+          ANALYST_PROVIDER: ${{ secrets.ANALYST_PROVIDER }}
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          NVIDIA_BASE_URL: ${{ secrets.NVIDIA_BASE_URL }}
+          NVIDIA_MODEL: ${{ secrets.NVIDIA_MODEL }}
         run: |
           set -eu
           sync_env() {
-            name="$1"; value="$2"
+            name="$1"; value="$2"; target="$3"
             if [ -z "$value" ]; then
               echo "  - $name: not set (GitHub secret missing) — skipping"
               return 0
             fi
-            vercel env rm "$name" production --yes --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG >/dev/null 2>&1 || true
-            printf '%s' "$value" | vercel env add "$name" production --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG >/dev/null
-            echo "  - $name: synced to Vercel (production)"
+            vercel env rm "$name" "$target" --yes --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG >/dev/null 2>&1 || true
+            printf '%s' "$value" | vercel env add "$name" "$target" --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG >/dev/null
+            echo "  - $name: synced to Vercel ($target)"
           }
           echo "Syncing GitHub secrets into Vercel (production environment):"
-          sync_env NEXT_PUBLIC_SUPABASE_URL "$NEXT_PUBLIC_SUPABASE_URL"
-          sync_env NEXT_PUBLIC_SUPABASE_ANON_KEY "$NEXT_PUBLIC_SUPABASE_ANON_KEY"
-          sync_env BACKEND_API_BASE "$BACKEND_API_BASE"
+          sync_env NEXT_PUBLIC_SUPABASE_URL "$NEXT_PUBLIC_SUPABASE_URL" production
+          sync_env NEXT_PUBLIC_SUPABASE_ANON_KEY "$NEXT_PUBLIC_SUPABASE_ANON_KEY" production
+          sync_env SUPABASE_URL "${SUPABASE_URL:-$NEXT_PUBLIC_SUPABASE_URL}" production
+          sync_env SUPABASE_SERVICE_ROLE_KEY "$SUPABASE_SERVICE_ROLE_KEY" production
+          sync_env SUPABASE_JWT_SECRET "$SUPABASE_JWT_SECRET" production
+          sync_env INFERENCE_PROVIDER "$INFERENCE_PROVIDER" production
+          sync_env ANALYST_PROVIDER "$ANALYST_PROVIDER" production
+          sync_env NVIDIA_API_KEY "$NVIDIA_API_KEY" production
+          sync_env NVIDIA_BASE_URL "$NVIDIA_BASE_URL" production
+          sync_env NVIDIA_MODEL "$NVIDIA_MODEL" production
 
       - name: Pull Vercel production environment
         working-directory: apps/web
@@ -383,7 +404,7 @@ jobs:
         working-directory: apps/web
         run: |
           set -o pipefail
-          deployment_url=$(vercel deploy --prod --yes --debug --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG 2>&1 | tee vercel-deploy.log | tail -n 1)
+          deployment_url=$(vercel deploy --prod --yes --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG 2>&1 | tee vercel-deploy.log | tail -n 1)
           echo "deployment_url=$deployment_url" >> "$GITHUB_OUTPUT"
           echo "### Vercel production deployment" >> "$GITHUB_STEP_SUMMARY"
           echo "$deployment_url" >> "$GITHUB_STEP_SUMMARY"

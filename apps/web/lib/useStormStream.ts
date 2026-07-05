@@ -1,14 +1,13 @@
 "use client";
 
 /**
- * SSE client for the same-origin proxy route /api/backend/storm/{id}/stream
- * (which forwards to the FastAPI backend's /api/storm/{id}/stream — see
- * apps/web/app/api/backend/[...path]/route.ts).
+ * SSE client for the same-origin route /api/storm/{id}/stream
+ * (apps/web/app/api/storm/[id]/stream/route.ts). PersonaStorm is a Vercel
+ * full-stack app — this is a Next.js Route Handler, not an external backend.
  *
  * Auth: EventSource can't set an Authorization header, so we fetch the Supabase
- * access token first and pass it as `?access_token=` (the proxy forwards it
- * verbatim, and the backend accepts it there for the stream endpoint only,
- * still enforcing storm ownership).
+ * access token first and pass it as `?access_token=` (the server route accepts
+ * it only on this /stream path, still enforcing storm ownership).
  *
  * Performance: reaction events arrive in bursts (25/batch). Applying each via
  * setState would re-render the 1,000-cell grid hundreds of times, so events

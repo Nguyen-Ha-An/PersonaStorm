@@ -18,17 +18,14 @@ import type {
 } from "./types";
 
 /**
- * The browser never talks to the FastAPI backend directly — every request
- * goes to this same-origin proxy (`apps/web/app/api/backend/[...path]/route.ts`),
- * which forwards it server-side to `BACKEND_API_BASE`. That variable is a
- * server-only secret (never `NEXT_PUBLIC_*`), so:
- *   - the browser never needs to know the backend's real address
- *   - there is no CORS to configure for this frontend (same-origin call)
- *   - a missing/unreachable backend degrades to a clear 503/502, not a raw
- *     "Failed to fetch" — and login/signup/dashboard (Supabase-only) keep
- *     working even if the backend was never deployed.
+ * PersonaStorm is a Vercel full-stack app: the browser calls SAME-ORIGIN
+ * Next.js Route Handlers under `apps/web/app/api/*` — there is no external
+ * backend and no `BACKEND_API_BASE` / `NEXT_PUBLIC_API_BASE`. The route
+ * handlers run on the server, verify the Supabase access token, own every
+ * wallet mutation, and run the storm engine. Because every call is same-origin,
+ * there is no CORS to configure and production never falls back to localhost.
  */
-const PROXY_BASE = "/api/backend";
+const API_BASE = "/api";
 
 export type ApiErrorKind = "auth" | "payment" | "forbidden" | "backend_unavailable" | "network" | "http";
 
@@ -54,10 +51,8 @@ async function safeFetch(url: string, init?: RequestInit): Promise<Response> {
   try {
     return await fetch(url, init);
   } catch {
-    // This is a same-origin request; a network-level failure here means the
-    // browser itself is offline or this app's server is unreachable — not
-    // (necessarily) the FastAPI backend, which the proxy route reports on
-    // separately via its own 502/503 JSON body.
+    // Same-origin request: a network-level failure here means the browser is
+    // offline or this app's own Vercel deployment is unreachable.
     throw new ApiError("Could not reach PersonaStorm. Check your connection and try again.", "network");
   }
 }
@@ -92,13 +87,13 @@ async function handle<T>(resp: Response): Promise<T> {
 
 /** GET helper with auth. */
 async function apiGet<T>(path: string): Promise<T> {
-  return handle<T>(await safeFetch(`${PROXY_BASE}${path}`, { headers: await authHeaders() }));
+  return handle<T>(await safeFetch(`${API_BASE}${path}`, { headers: await authHeaders() }));
 }
 
 /** JSON body mutation helper with auth. */
 async function apiSend<T>(method: string, path: string, body?: unknown): Promise<T> {
   return handle<T>(
-    await safeFetch(`${PROXY_BASE}${path}`, {
+    await safeFetch(`${API_BASE}${path}`, {
       method,
       headers: { "Content-Type": "application/json", ...(await authHeaders()) },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -107,15 +102,14 @@ async function apiSend<T>(method: string, path: string, body?: unknown): Promise
 }
 
 /**
- * Lightweight backend reachability probe (proxies to FastAPI's public
- * GET /api/health). Used for a status chip, not for gating any user action —
- * every real call already handles its own 503/502 clearly.
+ * Lightweight same-origin API reachability probe (GET /api/health). Used for a
+ * status chip only — every real call already handles its own errors clearly.
  */
 export type BackendHealth = "ok" | "unavailable" | "unreachable";
 
 export async function checkBackendHealth(): Promise<BackendHealth> {
   try {
-    const resp = await fetch(`${PROXY_BASE}/health`, { cache: "no-store" });
+    const resp = await fetch(`${API_BASE}/health`, { cache: "no-store" });
     if (resp.status === 503) return "unavailable";
     if (!resp.ok) return "unreachable";
     return "ok";
@@ -141,7 +135,7 @@ export const getStormHistory = () => apiGet<StormHistoryItem[]>("/storm/history"
 
 /** Returns the report, or null while the storm is still running (HTTP 202). */
 export async function getReport(stormId: string): Promise<StormReport | null> {
-  const resp = await safeFetch(`${PROXY_BASE}/storm/${stormId}/report`, {
+  const resp = await safeFetch(`${API_BASE}/storm/${stormId}/report`, {
     headers: await authHeaders(),
   });
   if (resp.status === 202) return null;
@@ -149,17 +143,15 @@ export async function getReport(stormId: string): Promise<StormReport | null> {
 }
 
 /**
- * Build the SSE stream URL — same-origin, proxied through our own Next.js
- * route so the browser never needs the backend's real address. EventSource
- * cannot set an Authorization header, so the access token travels as a query
- * parameter; the proxy forwards it verbatim, and the FastAPI backend only
- * ever honors that query parameter on this one `/stream` path (see
- * apps/api/app/auth.py) — it is rejected everywhere else, so a token that
- * leaks via a URL in this one spot can't be replayed against other endpoints.
+ * Build the SSE stream URL — same-origin (`/api/storm/{id}/stream`).
+ * EventSource cannot set an Authorization header, so the access token travels
+ * as a query parameter; the server route only honors `?access_token=` on this
+ * one `/stream` path (it is rejected everywhere else), so a token that leaks
+ * via a URL here can't be replayed against other endpoints.
  */
 export function streamUrl(stormId: string, token: string | null): string {
   const q = token ? `?access_token=${encodeURIComponent(token)}` : "";
-  return `${PROXY_BASE}/storm/${stormId}/stream${q}`;
+  return `${API_BASE}/storm/${stormId}/stream${q}`;
 }
 
 // ── admin ───────────────────────────────────────────────────────────────────

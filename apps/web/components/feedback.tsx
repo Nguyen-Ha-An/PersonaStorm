@@ -83,12 +83,11 @@ export function Alert({
 }
 
 /**
- * Banner shown when the backend proxy reports the FastAPI backend is not
- * configured or unreachable. Unlike the old build-time NEXT_PUBLIC_API_BASE
- * check, the browser has no way to know this statically anymore — the real
- * backend address is a server-only secret (BACKEND_API_BASE) — so this probes
- * the same-origin health proxy once on mount. Renders nothing while checking
- * or once healthy, so it never flashes on a working deployment.
+ * Banner shown if the same-origin PersonaStorm server API is unreachable.
+ * PersonaStorm is a Vercel full-stack app — the API runs as Next.js Route
+ * Handlers on the same origin, so there is no external backend URL to
+ * configure. This probes `/api/health` once on mount and renders nothing while
+ * checking or once healthy, so it never flashes on a working deployment.
  */
 export function ApiConfigAlert() {
   const [health, setHealth] = useState<BackendHealth | "checking">("checking");
@@ -106,23 +105,10 @@ export function ApiConfigAlert() {
   if (health === "checking" || health === "ok") return null;
 
   return (
-    <Alert tone="yellow" title="PersonaStorm backend is not configured or unreachable">
-      {health === "unavailable" ? (
-        <>
-          The FastAPI backend hasn&rsquo;t been deployed yet, or{" "}
-          <span className="font-mono text-storm-100">BACKEND_API_BASE</span> isn&rsquo;t set. If
-          deployed, set <span className="font-mono text-storm-100">BACKEND_API_BASE</span> in
-          Vercel (or your host&rsquo;s environment variables) to the backend&rsquo;s URL. For local
-          development, run FastAPI on <span className="font-mono text-storm-100">http://localhost:8000</span>.
-        </>
-      ) : (
-        <>
-          The backend didn&rsquo;t respond. Verify it is running and reachable, and that{" "}
-          <span className="font-mono text-storm-100">BACKEND_API_BASE</span> is correct.
-        </>
-      )}{" "}
-      Login, signup, and the dashboard still work — only storm/billing/admin actions need the
-      backend.
+    <Alert tone="yellow" title="PersonaStorm server API is unreachable">
+      The PersonaStorm server API didn&rsquo;t respond. Check the Vercel deployment status and,
+      if this persists, the Vercel function logs and required environment variables
+      (Supabase URL / service role key). Login and signup use Supabase directly and may still work.
     </Alert>
   );
 }

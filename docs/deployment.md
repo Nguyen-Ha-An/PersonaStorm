@@ -1,131 +1,114 @@
 # Deployment: GitHub Actions → Supabase + Vercel
 
-This repo now includes `.github/workflows/deploy.yml` to run CI and deploy from GitHub Actions.
-
-The workflow is designed for the current monorepo layout:
-
-- `apps/web` → Next.js frontend deployed to Vercel
-- `apps/api` → FastAPI backend tested in CI, but **not deployed by this workflow**
-- `supabase/migrations/*.sql` → Supabase database migrations pushed with the Supabase CLI, when migration files exist
-
-> Important: the production Vercel frontend still needs `BACKEND_API_BASE` (a
-> **server-side**, non-`NEXT_PUBLIC_` variable) set to a deployed FastAPI
-> backend URL. Deploy the API separately to Render, Railway, Fly.io, a VPS, or
-> another container host, then set that URL in Vercel. See "Frontend API
-> routing" below — the browser never calls the backend directly, so this can
-> be set at any time without a frontend rebuild.
-
----
-
-## Backend deployment status: not deployed yet — read this first
-
-As of this writing, **only the Next.js frontend is deployed (to Vercel)**.
-The FastAPI backend in `apps/api` is not deployed anywhere yet, and there is
-no real backend URL to point anything at. Concretely:
-
-- **The FastAPI backend is not deployed by the Vercel frontend deployment.**
-  Vercel only ever builds and hosts `apps/web` — it has no knowledge of
-  `apps/api` and never runs it.
-- **You must deploy `apps/api` to a backend host** — Render (blueprint at
-  `render.yaml`, repo root) or Railway are the two documented options; see
-  [apps/api/README.md](../apps/api/README.md) for exact steps for either, or
-  any other host that can run `uvicorn app.main:app`.
-- **After deploying, copy the public backend URL** (e.g.
-  `https://personastorm-api.onrender.com`) **into the `BACKEND_API_BASE`
-  GitHub Actions secret** (repo → Settings → Secrets and variables → Actions).
-- **The frontend calls `/api/backend/...`** (same-origin, browser-visible)
-  **and the Next.js proxy route forwards it to `BACKEND_API_BASE`**
-  (server-side only, never seen by the browser) — see "Frontend API routing"
-  below for the full mechanism.
-
-Until `BACKEND_API_BASE` is set, the deployed frontend is **not** broken —
-login, signup, and the dashboard shell all work (they only need Supabase).
-Only storm creation, wallet, billing, and admin calls return a clear `503`
-until the backend exists and the secret is set. The production Vercel deploy
-job in CI (`vercel-production-deploy`) **fails on purpose** with a clear
-message if `BACKEND_API_BASE` is missing — see "What runs automatically"
-below — so a missing backend is loud in CI, not silently broken in the field.
-
-### Verify a backend deployment before wiring it up
-
-Once `apps/api` is deployed somewhere, confirm it's actually reachable and
-healthy before setting `BACKEND_API_BASE`:
-
-```bash
-curl https://your-backend-domain.com/api/health
-# {"status":"ok","service":"personastorm-api","version":"0.1.0","inference_provider":"mock","active_storms":0,"time":"..."}
-
-curl https://your-backend-domain.com/openapi.json
-# should return the FastAPI-generated OpenAPI schema (a large JSON document), not an error
-```
-
-If either fails, fix the backend deployment first — do not set
-`BACKEND_API_BASE` to a URL that doesn't answer `/api/health` yet.
-
----
-
-## Frontend API routing: same-origin proxy (BFF), not a direct browser call
-
-The browser **never** calls the FastAPI backend directly. Every frontend data
-call goes to a same-origin Next.js route:
+PersonaStorm is a **Vercel full-stack Next.js app**. Production runs on exactly
+two managed services:
 
 ```text
 Browser
-  → GET/POST /api/backend/<path>              (same origin — no CORS, no exposed backend URL)
-  → apps/web/app/api/backend/[...path]/route.ts  (runs on the Next.js SERVER)
-  → ${BACKEND_API_BASE}/api/<path>               (the real FastAPI backend)
+  → Vercel Next.js frontend
+  → Next.js Route Handlers under apps/web/app/api/*   (the backend API)
+  → Supabase Auth / Postgres (RLS, wallets, storm_runs, pricing_rules, reports)
+  → NVIDIA or mock inference provider
 ```
 
-Why: an earlier version read `NEXT_PUBLIC_API_BASE` in the browser, which
-meant (a) the backend's real address was baked into the public bundle, (b) a
-missing value broke the entire frontend build/UX with a raw "Failed to
-fetch — is the API running on port 8000?", and (c) you couldn't deploy the
-frontend before knowing the backend's URL. The proxy fixes all three:
+There is **no separate backend to deploy** and **no backend URL to configure**.
+The API is same-origin Route Handlers that run as Vercel serverless functions.
+`BACKEND_API_BASE` and `NEXT_PUBLIC_API_BASE` are gone — if you have them set
+anywhere, remove them.
 
-- `BACKEND_API_BASE` is read **only** in `route.ts`, server-side, at request
-  time — never inlined into the browser bundle, never `NEXT_PUBLIC_*`.
-- **Local dev**: if `BACKEND_API_BASE` is unset, the proxy falls back to
-  `http://localhost:8000` (matching `uvicorn app.main:app --reload --port
-  8000`), so `npm run dev` + a local FastAPI just works with zero config.
-- **Production**: if `BACKEND_API_BASE` is missing, the app does **not**
-  crash — login, signup, and the dashboard shell (all Supabase-backed) keep
-  working. Only storm/billing/admin calls hit the proxy's `/api/backend/*`
-  route, which returns a clear `503` JSON body: `{"detail": "PersonaStorm
-  backend is not configured. Set BACKEND_API_BASE in Vercel or deploy the
-  FastAPI backend."}` — never the old raw fetch error.
-- The live storm stream (SSE) is proxied too, at `/api/backend/storm/{id}/stream`
-  — the route streams the backend's response through unbuffered. See
-  "Streaming (SSE) limitation" below for the one real tradeoff this implies.
-- Because the backend is now called server-to-server (Next.js server →
-  FastAPI), **CORS no longer applies** to the official frontend at all — it's
-  same-origin all the way from the browser's point of view. `CORS_ORIGINS` on
-  the backend still matters if you call the API directly (curl, another
-  client, the `/docs` page), just not for this frontend anymore.
+> **Why Supabase never gave you a "backend URL".** Supabase is Auth + Postgres
+> (+ RLS, RPCs, storage). It is **not** a host for the Python FastAPI app. The
+> earlier architecture assumed a separately-deployed FastAPI service reachable
+> at `BACKEND_API_BASE`, but that service was never deployed anywhere — hence
+> the confusion. The backend logic now lives inside the Next.js app itself, so
+> Vercel hosts both the frontend and the API.
+
+The old FastAPI service in `apps/api` **remains for local development,
+reference, and the offline test suite** — it is not part of the production
+deployment and does not need to be deployed anywhere.
 
 ---
 
-## SaaS layer: Supabase Auth, wallets, pricing & admin
+## What Vercel and Supabase each host
 
-PersonaStorm is a dashboard SaaS: users sign up, get a credit wallet, pay
-credits per storm run, and admins manage users/wallets/pricing. This is backed
-by Supabase Auth + Postgres.
+- **Vercel hosts the whole app**: the Next.js frontend **and** the API Route
+  Handlers under `apps/web/app/api/*` (they run as serverless functions on the
+  same origin — no CORS, no exposed backend address).
+- **Supabase hosts Auth + Postgres only**. The GitHub Action also runs the
+  database migrations here (`supabase db push`). Supabase does **not** run any
+  Python/FastAPI server.
 
-### Data model (see `supabase/migrations/`)
+---
+
+## The API routes
+
+All implemented under `apps/web/app/api/`:
+
+```text
+GET  /api/health                         → { "status": "ok", "service": "personastorm-vercel-api" }
+GET  /api/me                             → current user profile + wallet
+GET  /api/wallet                         → wallet balance
+GET  /api/wallet/transactions            → the caller's transaction history
+GET  /api/pricing                        → active pricing rule
+POST /api/billing/quote                  → price a run + affordability
+POST /api/storm/create                   → price → charge → run engine → store report
+GET  /api/storm/history                  → the caller's runs
+GET  /api/storm/[id]                     → run status (owner/admin only)
+GET  /api/storm/[id]/report              → final report (owner/admin only)
+GET  /api/storm/[id]/stream              → SSE replay (owner/admin only; ?access_token=)
+GET  /api/admin/users                    → list users (admin)
+GET  /api/admin/users/[id]               → user detail (admin)
+POST /api/admin/users/[id]/wallet-adjust → adjust a wallet (admin)
+POST /api/admin/users/[id]/role          → change a role (admin)
+GET  /api/admin/storm-runs               → all runs (admin)
+GET  /api/admin/pricing                  → get pricing (admin)
+POST /api/admin/pricing                  → edit pricing (admin)
+```
+
+Every route runs on the server, verifies the Supabase access token
+(`Authorization: Bearer …`, or `?access_token=` for the SSE stream only), and
+enforces ownership/roles. The browser only ever holds the Supabase **anon** key
+and its access token.
+
+### Streaming on serverless — how it works (and its one limitation)
+
+A Vercel serverless function cannot hold in-memory storm state or run a
+background task across invocations. So a run executes **synchronously at create
+time**: `POST /api/storm/create` prices, charges the wallet atomically, runs the
+full engine (personas → reactions → scoring → report), and stores both the
+report and the per-persona reaction events. The live page's
+`GET /api/storm/[id]/stream` then **replays** those stored events as staged
+`init` / `reaction` / `progress` / `complete` SSE messages, paced so the persona
+grid still animates like a live storm.
+
+- **No double-charge**: charging happens only in `/storm/create`. The stream and
+  report endpoints are read-only, so a refresh, reconnect, or report view never
+  charges again.
+- **Limitation**: with `INFERENCE_PROVIDER=mock` (the default) a 1,000-persona
+  run computes in well under a second, so create returns quickly. With
+  `INFERENCE_PROVIDER=nvidia`, 1,000 sequential hosted-LLM calls inside one
+  serverless invocation can exceed the function's execution limit — keep
+  `mock` on Vercel unless you have raised `maxDuration` and a rate-limit-friendly
+  endpoint. The report/stream shapes are identical either way.
+
+---
+
+## SaaS data model (see `supabase/migrations/`)
 
 | Table | Purpose |
 |---|---|
 | `profiles` | one row per auth user; `role` is `user` or `admin` |
 | `wallets` | credit balance + lifetime spent, one per user |
 | `wallet_transactions` | immutable audit log; every balance change writes a row |
-| `storm_runs` | ownership + billing metadata per run (+ optional durable `report_json`) |
+| `storm_runs` | ownership + billing metadata + durable `report_json` + `reactions_json` (stream replay) |
 | `pricing_rules` | the credit pricing formula, editable by admins |
 
-Key database objects: `is_admin()`, an `updated_at` trigger, a `handle_new_user`
-trigger that provisions `profiles` + `wallets` + **100 starter credits** on
-signup, and `adjust_wallet_balance(...)` — the single atomic, row-locking entry
-point for any balance change. **`EXECUTE` on `adjust_wallet_balance` is revoked
-from `anon`/`authenticated`** so only the backend (service role) can move
-credits; a browser client cannot credit itself.
+Key objects: `is_admin()`, an `updated_at` trigger, a `handle_new_user` trigger
+(provisions `profiles` + `wallets` + **100 starter credits** on signup), and
+`adjust_wallet_balance(...)` — the single atomic, row-locking entry point for
+any balance change. `EXECUTE` on `adjust_wallet_balance` is revoked from
+`anon`/`authenticated`, so only the service role (the Route Handlers) can move
+credits; a browser client can never credit itself.
 
 Pricing formula (default rule 10 / 5 / 5, analyst report included):
 
@@ -136,266 +119,156 @@ total_credits = base_run_credits
 # 100 personas = 20, 250 = 30, 500 = 40, 1000 = 65
 ```
 
-### One-time Supabase setup
+---
 
-1. Create a Supabase project.
-2. Apply the migrations — either push from GitHub Actions (below) or locally:
-   ```bash
-   supabase link --project-ref <project-ref>
-   supabase db push
-   ```
-3. Create the first admin (see "How to create the first admin" below).
+## Environment variables
 
-### Backend environment variables (server-side only)
-
-Set these where the FastAPI backend runs (Render/Railway/Fly.io/VPS):
+### Frontend (public — safe to expose; inlined into the browser bundle)
 
 | Variable | Required | Purpose |
 |---|---:|---|
-| `SUPABASE_URL` | yes | `https://<project-ref>.supabase.co` |
-| `SUPABASE_ANON_KEY` | yes | anon public key |
-| `SUPABASE_SERVICE_ROLE_KEY` | yes | **secret** — bypasses RLS; server-side only, never in frontend env |
-| `SUPABASE_JWT_SECRET` | yes | **secret** — HS256 secret to verify access tokens (Settings → API → JWT Secret) |
-| `API_ENV` | recommended | set to `prod` so the API refuses unverified tokens |
-| `CORS_ORIGINS` | yes | include your Vercel domain |
-
-> If the Supabase backend variables are unset, the API falls back to an
-> in-memory gateway and dev auth so it still boots and `pytest` runs — but
-> real login, billing, and persistence require them in production.
-
-### Frontend (Vercel) environment variables
-
-| Variable | Required | Purpose |
-|---|---:|---|
-| `BACKEND_API_BASE` | yes (production) | **Server-side only** — deployed FastAPI backend origin. Read by the `/api/backend` proxy route; NOT prefixed with `NEXT_PUBLIC_`, so it never reaches the browser. |
 | `NEXT_PUBLIC_SUPABASE_URL` | yes | Supabase project URL (browser auth client) |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Supabase **anon** key (never the service role key) |
 
-### How to create the first admin
+### Server-side (Vercel — read at request time by Route Handlers, never in the browser)
 
-After migrations are applied, run the bootstrap script against your project
-using the **service role** key (server-side, in a trusted shell):
+| Variable | Required | Purpose |
+|---|---:|---|
+| `SUPABASE_URL` | yes* | Project URL for server code. *If unset, falls back to `NEXT_PUBLIC_SUPABASE_URL`. |
+| `SUPABASE_SERVICE_ROLE_KEY` | yes | **SECRET** — bypasses RLS; owns wallet mutations. Never `NEXT_PUBLIC_`. |
+| `SUPABASE_JWT_SECRET` | recommended | **SECRET** — HS256 secret to verify access tokens offline. If unset, tokens are validated remotely via GoTrue. |
+| `SUPABASE_ANON_KEY` | optional | server-side anon key for GoTrue token validation; falls back to the public one |
+| `API_ENV` | recommended | set `prod` to refuse unverified tokens when the JWT secret is missing |
+| `INFERENCE_PROVIDER` | optional | `mock` (default) \| `nvidia` |
+| `ANALYST_PROVIDER` | optional | `mock` (default) \| `nvidia` |
+| `NVIDIA_API_KEY` / `NVIDIA_BASE_URL` / `NVIDIA_MODEL` | optional | **SECRET** key — only for the `nvidia` provider |
 
-```bash
-export SUPABASE_URL=https://<project-ref>.supabase.co
-export SUPABASE_SERVICE_ROLE_KEY=<service role key>
-export ADMIN_EMAIL=you@example.com
-export ADMIN_PASSWORD=<strong password>
-export ADMIN_FULL_NAME="PersonaStorm Admin"
-python scripts/create_admin_user.py
+**No `NEXT_PUBLIC_` variable may ever contain the service role key, JWT secret,
+admin password, or NVIDIA key.**
+
+---
+
+## Deployment flow
+
+```text
+GitHub Actions (push to main / manual dispatch)
+  → API tests (apps/api, offline mock) + Next.js build
+  → Supabase migrations (supabase db push)
+  → sync safe env vars into Vercel (public NEXT_PUBLIC_* + server-side SUPABASE_*/NVIDIA_*)
+  → deploy the Next.js full-stack app to Vercel (production)
 ```
 
-It creates the auth user (email pre-confirmed), sets `role = admin`, ensures a
-wallet, and grants 10000 credits. It is idempotent and never prints secrets.
+- **Pull request** → CI (API tests + web build) + a Vercel **Preview** deploy.
+  Supabase migrations are intentionally skipped on PRs (never mutate production
+  schema from unmerged code).
+- **Push to `main` / manual dispatch** → CI → Supabase migrations → Vercel
+  **Production** deploy (the Vercel job `needs` the Supabase job so the DB is
+  migrated before the new code goes live).
 
----
+The workflow is the source of truth for Vercel's env: every deploy runs a
+"Sync Vercel environment variables" step that pushes the values below from
+GitHub secrets into Vercel via `vercel env add`. Values are only piped over
+stdin (never echoed) and the step prints variable names only.
 
-## What runs automatically
+### GitHub secrets
 
-| Trigger | CI (API tests + web build) | Supabase migrations | Vercel |
-|---|---|---|---|
-| **Pull request** into `main` | ✅ | ❌ never | ✅ **Preview** deploy |
-| **Push** to `main` | ✅ | ✅ if `supabase/migrations/*.sql` exists | ✅ **Production** deploy |
-| **Manual dispatch** (`workflow_dispatch`) | ✅ | ✅ if `supabase/migrations/*.sql` exists | ✅ **Production** deploy |
+Set in `GitHub repo → Settings → Secrets and variables → Actions`.
 
-### Pull request = CI + Vercel Preview
+**Required:**
 
-Every PR into `main` runs:
+```text
+VERCEL_TOKEN
+VERCEL_ORG_ID
+VERCEL_PROJECT_ID
 
-1. API tests (`apps/api`)
-2. Next.js build (`apps/web`)
-3. A Vercel **Preview** deployment (`vercel deploy`, no `--prod`) — reviewers get a live preview link in the job's step summary.
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-**Supabase migrations are intentionally skipped on PRs** to avoid mutating the
-production database from unmerged code. A PR is proposed, not-yet-reviewed
-code — letting it run `supabase db push` against the shared production
-database would mean any branch (even before review) could alter production
-schema. Migrations only ship once that code has actually landed on `main`, or
-via an explicit manual dispatch.
+SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
+SUPABASE_JWT_SECRET
 
-### Push to `main` = CI + Supabase migrations + Vercel Production
+SUPABASE_ACCESS_TOKEN     # Supabase CLI — migrations only, NOT synced to Vercel
+SUPABASE_PROJECT_ID       # Supabase CLI — migrations only, NOT synced to Vercel
+SUPABASE_DB_PASSWORD      # Supabase CLI — migrations only, NOT synced to Vercel
+```
 
-1. API tests
-2. Next.js build
-3. Supabase migrations deploy (`supabase-deploy`), if `supabase/migrations/*.sql` exists
-4. Vercel **Production** deployment (`vercel-production-deploy`)
+**Optional (only if using the NVIDIA provider):**
 
-The Supabase job runs before the production Vercel deploy (`vercel-production-deploy` `needs: [..., supabase-deploy]`) so the frontend goes live only after the database it depends on has already been migrated.
+```text
+NVIDIA_API_KEY
+NVIDIA_BASE_URL
+NVIDIA_MODEL
+INFERENCE_PROVIDER
+ANALYST_PROVIDER
+```
 
-### Manual dispatch = Supabase migrations + Vercel Production
+**Synced into Vercel** (safe frontend + server-side): `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_URL` (falls back to the public URL),
+`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `INFERENCE_PROVIDER`,
+`ANALYST_PROVIDER`, `NVIDIA_API_KEY`, `NVIDIA_BASE_URL`, `NVIDIA_MODEL`.
 
-Running the workflow manually (`Actions → CI and Deploy → Run workflow`) follows the exact same path as a push to `main`: CI, then Supabase migrations (if any), then a production Vercel deploy. Use this to redeploy without a new commit (e.g. after only rotating a secret).
+**NEVER synced into Vercel** (used only by the Supabase CLI / admin bootstrap):
+`SUPABASE_DB_PASSWORD`, `SUPABASE_ACCESS_TOKEN`, `VERCEL_TOKEN`, `ADMIN_PASSWORD`.
 
----
-
-## Required GitHub repository secrets
-
-Set these in:
-
-`GitHub repo → Settings → Secrets and variables → Actions → New repository secret`
-
-### Vercel secrets
-
-| Secret | Required | Purpose |
-|---|---:|---|
-| `VERCEL_TOKEN` | yes | Vercel personal/team token used by the CLI |
-| `VERCEL_ORG_ID` | yes | Vercel team/user ID |
-| `VERCEL_PROJECT_ID` | yes | Vercel project ID |
-| `VERCEL_SCOPE` | optional | Vercel team slug/name if deploying under a team scope |
-
-How to get Vercel IDs:
+How to get the Vercel IDs:
 
 ```bash
 cd apps/web
 npx vercel login
 npx vercel link
-cat .vercel/project.json
+cat .vercel/project.json   # orgId + projectId — do not commit this file
 ```
-
-The file contains `orgId` and `projectId`. Do not commit `.vercel/project.json`; use its values as GitHub secrets.
-
-### Supabase secrets (CLI — migrations)
-
-| Secret | Required when migrations exist | Purpose |
-|---|---:|---|
-| `SUPABASE_ACCESS_TOKEN` | yes | Supabase CLI access token |
-| `SUPABASE_PROJECT_ID` | yes | Supabase project ref from the dashboard URL |
-| `SUPABASE_DB_PASSWORD` | yes | Database password used by the CLI when linking/pushing |
-
-Supabase project ref is visible in your dashboard URL:
-
-```text
-https://supabase.com/dashboard/project/<project-ref>
-```
-
-### Frontend routing & auth secrets
-
-| Secret | Required | Purpose |
-|---|---:|---|
-| `BACKEND_API_BASE` | yes (production job fails without it; optional for preview) | Deployed FastAPI backend URL. Server-side only, non-`NEXT_PUBLIC_`. |
-| `NEXT_PUBLIC_SUPABASE_URL` | yes (production job fails without it) | Supabase project URL, baked into the browser build |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes (production job fails without it) | Supabase anon key, baked into the browser build (safe to expose — cannot bypass RLS) |
-
-These three are **not** the same as the backend's own `SUPABASE_URL` /
-`SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_JWT_SECRET` (see "Backend environment
-variables" above) — never set those on the frontend side.
-
-### Exact env var classification
-
-**GitHub Actions secrets synced into Vercel (frontend/server-side, safe):**
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-BACKEND_API_BASE=
-```
-
-**Backend-host-only vars (never synced to Vercel, never in frontend env):**
-
-```env
-SUPABASE_URL=
-SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-SUPABASE_JWT_SECRET=
-CORS_ORIGINS=
-ADMIN_EMAIL=
-ADMIN_PASSWORD=
-ADMIN_FULL_NAME=
-```
-
-Set the backend-only vars directly on whatever host runs `apps/api` (Render/
-Railway/Fly.io/VPS dashboard or CLI) — **never** as a GitHub Actions secret
-that gets synced to Vercel, and never as a `NEXT_PUBLIC_*` variable.
 
 ---
 
-## Required Vercel environment variables
+## One-time Supabase setup
 
-GitHub Actions is the **source of truth** for these — the `vercel-preview-deploy`
-and `vercel-production-deploy` jobs each run a "Sync Vercel environment
-variables" step that pushes the values below from GitHub secrets into Vercel
-(via `vercel env add`) on every deploy, so the Vercel dashboard never drifts
-out of sync or starts out empty. You normally don't need to touch the Vercel
-dashboard directly.
+1. Create a Supabase project.
+2. Apply the migrations — push from GitHub Actions (above) or locally:
+   ```bash
+   supabase link --project-ref <project-ref>
+   supabase db push
+   ```
+3. Create the first admin with the **service role** key in a trusted shell:
+   ```bash
+   export SUPABASE_URL=https://<project-ref>.supabase.co
+   export SUPABASE_SERVICE_ROLE_KEY=<service role key>
+   export ADMIN_EMAIL=you@example.com
+   export ADMIN_PASSWORD=<strong password>
+   export ADMIN_FULL_NAME="PersonaStorm Admin"
+   python scripts/create_admin_user.py
+   ```
+   It creates the auth user (email pre-confirmed), sets `role = admin`, ensures a
+   wallet, grants credits, is idempotent, and never prints secrets.
 
-| Variable | Example | Required | Purpose |
-|---|---|---:|---|
-| `BACKEND_API_BASE` | `https://api.yourdomain.com` | **yes** in production (preview optional) | **Plain variable — do NOT prefix with `NEXT_PUBLIC_`.** Read server-side, at request time, by the `/api/backend` proxy route (`apps/web/app/api/backend/[...path]/route.ts`). |
-| `NEXT_PUBLIC_SUPABASE_URL` | `https://xxxx.supabase.co` | **yes** | Supabase project URL, inlined into the browser bundle at build time. |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `eyJ...` | **yes** | Supabase anon key, inlined into the browser bundle. Safe to expose — it cannot bypass Row Level Security. |
+---
 
-> **Why `BACKEND_API_BASE` is different from the old `NEXT_PUBLIC_API_BASE`.**
-> It is **not** inlined into the browser bundle — it's read at request time by
-> a server-side route handler. That means: (1) it never appears in browser
-> devtools or the public JS bundle, (2) you can change it and it takes effect
-> on the *next request*, no rebuild/redeploy needed, and (3) if it's missing,
-> the app doesn't fail to build or show a blank page — login/signup/dashboard
-> keep working, and only backend-dependent actions (starting a storm, viewing
-> a report, wallet, admin) return a clear `503` until it's set.
+## Verify a deployment
 
-Manual alternative (only needed if you're deploying outside this repo's
-GitHub Action, e.g. `vercel deploy` from your own machine):
+Public health check (no auth):
 
 ```bash
-cd apps/web
-vercel env add BACKEND_API_BASE production
-# paste: https://your-deployed-fastapi-backend.com
-
-vercel env add NEXT_PUBLIC_SUPABASE_URL production
-vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
+curl https://personastorm.nguyenhaan.id.vn/api/health
+# {"status":"ok","service":"personastorm-vercel-api"}
 ```
 
-The GitHub Action uses `vercel pull` to pull the just-synced environment settings before building, then runs every Vercel step with `working-directory: apps/web` so the monorepo's frontend app is the Vercel project root.
-
----
-
-## What Vercel does and does not host
-
-- **Vercel hosts the Next.js frontend only** (`apps/web`), including the `/api/backend` proxy route (it runs as a Vercel serverless function, not a separate service).
-- **The FastAPI backend (`apps/api`) is not hosted by Vercel** and is not deployed by this workflow. Deploy it separately (Render, Railway, Fly.io, a VPS, or any container host — an `apps/api/Dockerfile` is provided), then set that public URL as `BACKEND_API_BASE` in Vercel (a plain variable, **not** `NEXT_PUBLIC_BACKEND_API_BASE`).
-- **Supabase only runs database migrations** here (via `supabase db push`). It does **not** host the FastAPI API server.
-
-Run the backend anywhere that can serve HTTP:
+Protected routes require a Supabase access token. Log in via the app, copy the
+token (Supabase stores it in the browser session), then:
 
 ```bash
-cd apps/api
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+TOKEN="<supabase access_token>"
+
+# Price a run (returns total_credits + affordability against your wallet)
+curl -X POST https://personastorm.nguyenhaan.id.vn/api/billing/quote \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"persona_count":1000,"include_analyst_report":true}'
+# {"persona_count":1000,...,"total_credits":65,"wallet_balance":100,"balance_after":35,"has_enough_credits":true}
+
+curl https://personastorm.nguyenhaan.id.vn/api/wallet -H "Authorization: Bearer $TOKEN"
 ```
 
-`CORS_ORIGINS` on the backend is no longer required for the official
-frontend — the Next.js *server* calls the backend now, not the browser, so
-there's no cross-origin request to permit. It still matters if you call the
-API directly from a browser (its own `/docs` page, a future separate client,
-etc.):
-
-```env
-CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,https://your-vercel-domain.vercel.app
-# Optional: allow all Vercel preview deploys of the project
-CORS_ORIGIN_REGEX=https://.*\.vercel\.app
-```
-
----
-
-## Streaming (SSE) limitation
-
-The live storm page streams reactions over SSE through the proxy
-(`/api/backend/storm/{id}/stream`), which forwards the backend's response
-unbuffered — bytes reach the browser as the backend emits them, nothing is
-held in memory first.
-
-The caveat: this executes as a Vercel serverless function, which has a
-**maximum execution duration** per invocation (Hobby: capped at 60s regardless
-of config; Pro: up to 300s by default, configurable up to 900s with Fluid
-Compute; Enterprise: higher). The route sets `export const maxDuration = 300`,
-but the effective cap is whatever your Vercel plan actually allows. A very
-long-running real-provider storm (not the instant `mock` provider) could have
-its stream cut off mid-run on a lower-tier plan. If you hit this:
-
-- Increase `maxDuration` up to your plan's ceiling, and/or upgrade the plan.
-- Or point the frontend directly at the backend for just this one endpoint
-  (undoing the proxy for `/stream` only) if you need genuinely unbounded
-  stream duration — document that tradeoff if you do, since it reintroduces a
-  browser-visible backend URL for that one call.
+Without a token, protected routes return `401 {"detail":"Missing authentication token."}`.
 
 ---
 
@@ -403,97 +276,26 @@ its stream cut off mid-run on a lower-tier plan. If you hit this:
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Banner: **"PersonaStorm backend is not configured or unreachable"** (dashboard/storm-new) | `BACKEND_API_BASE` is unset, or the backend it points to isn't responding | Set `BACKEND_API_BASE` in Vercel (and, if you want CI to catch this earlier, as the `BACKEND_API_BASE` GitHub secret) to your deployed FastAPI backend URL — **no rebuild needed**, it takes effect on the next request. Verify the backend responds: `curl https://<backend>/api/health`. |
-| Storm/billing/admin action fails with **HTTP 503** and `"PersonaStorm backend is not configured..."` | Same as above — the proxy route couldn't resolve `BACKEND_API_BASE` | Same fix. Login/signup/dashboard still work; only backend-dependent actions are affected. |
-| Storm/billing/admin action fails with **HTTP 502** and `"Could not reach the PersonaStorm backend..."` | `BACKEND_API_BASE` is set but the backend didn't respond (down, wrong URL, network issue) | Verify the FastAPI backend is deployed and reachable at that exact URL (`curl https://<backend>/api/health`). Check for typos and that it uses `https://`. |
-| **"Could not reach PersonaStorm. Check your connection and try again."** | The browser couldn't reach *this app's own server* (not the backend) — offline, or the Next.js deployment itself is down | Check your connection; check the Vercel deployment status for the frontend itself. |
-| Live storm stuck on **"connecting"**, then "Can't connect to the storm stream" | The proxied SSE route can't reach the backend, your session expired, or the storm ID no longer exists | Same checks as the 503/502 rows above. Note storms are held in memory, so IDs are lost if the API restarts — run a new storm. See "Streaming (SSE) limitation" above if a long-running stream cuts off mid-run. |
-| Browser console: **CORS blocked** | Something is calling the FastAPI backend directly from a browser (not through the proxy) | Add that origin to `CORS_ORIGINS` on the backend. The official frontend itself no longer needs this — it calls the backend server-to-server through `/api/backend`. |
+| `/api/health` fails or the app can't load | The Vercel deployment itself is down or mis-deployed | Check the Vercel deployment status and function logs. |
+| Actions return `401 {"detail":"Missing authentication token."}` | No/expired Supabase session | Log in again; the browser sends the access token automatically. |
+| Actions return `500 … Check Vercel function logs and required environment variables` | A server env var is missing (e.g. `SUPABASE_SERVICE_ROLE_KEY`) | Set the required server-side secrets; they are synced into Vercel on the next deploy. |
+| `502 … data backend is unavailable` | Supabase/PostgREST call failed | Verify the Supabase project is up and the service role key is correct. |
+| Login/signup fail | `NEXT_PUBLIC_SUPABASE_*` missing or wrong | Set them from Supabase Settings → API (anon key only). |
+| Storm stream stuck "connecting" | Session expired or the storm ID doesn't exist / isn't yours | Log in again; start a new storm. Ownership is enforced (a non-owner gets 404). |
 
 ---
 
-## Supabase migrations
-
-Supabase database changes should be committed as SQL migrations under:
-
-```text
-supabase/migrations/*.sql
-```
-
-When at least one migration exists, the workflow runs:
+## Local development
 
 ```bash
-supabase link --project-ref "$SUPABASE_PROJECT_ID"
-supabase db push
+# frontend + API (Route Handlers) — http://localhost:3000
+cd apps/web
+npm install
+npm run dev
 ```
 
-This follows Supabase's CLI migration model: local schema changes are captured as migration files and deployed to the linked remote project with `supabase db push`.
-
-If there are no SQL migration files, the Supabase deploy job logs a skip message and succeeds without touching the remote database.
-
----
-
-## Avoid duplicate Vercel deployments
-
-If your Vercel project is already connected directly to GitHub, Vercel may auto-deploy on push while this GitHub Action also deploys via CLI. That creates duplicate deployments.
-
-Recommended setup for this workflow:
-
-1. Keep Vercel project linked for environment management if you want.
-2. Disable automatic Git deployments in Vercel, or avoid connecting the repo directly.
-3. Let GitHub Actions be the single deployment path.
-
----
-
-## Manual run
-
-You can trigger the workflow manually from:
-
-`GitHub → Actions → CI and Deploy → Run workflow`
-
-Manual runs follow the same deployment logic as `main` pushes (Supabase migrations, then Vercel production).
-
----
-
-## A note on the `vercel-preview-deploy` job and secrets
-
-`vercel-preview-deploy` does **not** declare `environment: production` (unlike
-`supabase-deploy` and `vercel-production-deploy`) — a PR should get a preview
-link immediately, without waiting on a production environment's manual
-approval gate, if one is configured.
-
-This only matters if your `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID`
-secrets are scoped to the **production** GitHub Environment specifically (Settings
-→ Environments → production → Secrets) rather than added as plain repository
-secrets (Settings → Secrets and variables → Actions). Environment-scoped
-secrets are only visible to jobs that declare that environment, so:
-
-- If your Vercel secrets are **repository secrets** (the common case, and what `docs/deployment.md` above assumes): no action needed, `vercel-preview-deploy` already sees them.
-- If they are **Environment secrets** on `production` only: either duplicate them as repository secrets, or add a separate `preview` Environment (with no required reviewers) holding the same values and set `environment: preview` on `vercel-preview-deploy`.
-
----
-
-## Backend deployment note
-
-This workflow validates `apps/api` but does not deploy it. Until the backend
-is deployed and `BACKEND_API_BASE` is set, the frontend still loads and
-login/signup/dashboard work — storm/billing/admin calls return a clear `503`
-in the meantime, and the `vercel-production-deploy` CI job refuses to deploy
-production at all until `BACKEND_API_BASE` is set (see "Backend deployment
-status" at the top of this doc).
-
-For production, deploy `apps/api` separately — see
-[apps/api/README.md](../apps/api/README.md) for exact steps for Render
-(preferred — blueprint at `render.yaml`), Railway, Docker, or a bare
-`uvicorn` command:
-
-```bash
-cd apps/api
-python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
-```
-
-Then verify it (`curl .../api/health`) and set the `BACKEND_API_BASE` GitHub
-Actions secret to that public backend URL — CI syncs it into Vercel
-automatically on the next deploy (see "Sync Vercel environment variables"
-above). Do **not** set `NEXT_PUBLIC_BACKEND_API_BASE` — that would expose the
-backend's address to the browser and defeats the whole point of the proxy.
+With no Supabase env vars set, the server uses an in-memory gateway + dev auth so
+login/dashboard/storm all work offline within the running dev process (data is
+not persisted across restarts — this is dev-only; production always uses
+Supabase). The `apps/api` FastAPI service is still runnable for reference/testing
+(`make api`, `make test`), but the Next.js app no longer depends on it.

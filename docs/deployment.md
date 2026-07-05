@@ -291,6 +291,13 @@ cat .vercel/project.json   # orgId + projectId — do not commit this file
 
 ## Supabase Auth: Site URL & redirect configuration (required)
 
+> **Debugging a "confirmation email goes to localhost" report?** Start with
+> [docs/auth-redirect-troubleshooting.md](auth-redirect-troubleshooting.md) — it
+> explains how to use the token-free `/api/debug/auth-config` endpoint to prove
+> whether the problem is the deployed build/env (fixable in code/CI) or the
+> Supabase dashboard config below (fixable only in Supabase), plus the old-email
+> caveat and the step-by-step verification protocol.
+
 Supabase Auth builds every confirmation / magic-link / password-reset link from
 two things:
 

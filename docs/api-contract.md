@@ -1,5 +1,28 @@
 # API contract
 
+> **⚠️ LOCAL / DEV / REFERENCE ONLY — this is not the production API.**
+>
+> This document describes the legacy **`apps/api`** FastAPI service (background-task
+> storm creation, `http://localhost:8000`). It is useful for local development and as a
+> reference for the async storm-run event model, but **production does not run this
+> service**. Production is Vercel + Supabase only, served same-origin by **Next.js Route
+> Handlers under `apps/web/app/api/*`**, which are synchronous (no background tasks) and
+> documented in `docs/deployment.md`.
+>
+> Key production endpoints (Next.js Route Handlers, not the FastAPI routes below):
+> - `GET /api/dashboard` — authenticated one-call summary: `{ user, wallet, pricing, stats, recent_storms }`
+> - `GET /api/me` — server-verified session/user info
+> - `GET /api/wallet` — wallet balance
+> - `GET /api/wallet/transactions` — wallet transaction history
+> - `POST /api/billing/quote` — price a storm run before creating it
+> - `GET /api/pricing` — active pricing rules
+> - `POST /api/storm/create` — create/start a storm (synchronous route handler, not the FastAPI background-task flow described below)
+> - `GET /api/storm/[id]/stream` — SSE stream of storm progress/results
+>
+> There is no `BACKEND_API_BASE` / `NEXT_PUBLIC_API_BASE` in production — everything is
+> same-origin. Treat everything below this banner as **`apps/api` (legacy FastAPI)**
+> documentation only.
+
 Live, always-current version: run the API and open **http://localhost:8000/docs**
 (OpenAPI, generated from the Pydantic schemas). This file is the human summary.
 

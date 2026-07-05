@@ -17,14 +17,23 @@ export default function LoginPage() {
 }
 
 // Human-readable messages for the `?error=` codes the auth callback / confirm
-// routes redirect here with. Unknown codes fall back to a generic message.
+// routes (and the app guard) redirect here with. Unknown codes fall back to a
+// generic message. Messages never contain tokens or callback URLs.
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
   otp_expired:
-    "This email link is expired or was already used. Please sign in below, or request a new confirmation email.",
+    "This email link is expired or was already used. Please request a new confirmation email.",
   access_denied:
-    "This email link is expired or was already used. Please sign in below, or request a new confirmation email.",
+    "This email link is expired or was already used. Please request a new confirmation email.",
   invalid_auth_callback:
-    "We couldn’t complete that sign-in link. Please log in below, or request a new email.",
+    "We could not complete authentication. Please try signing in again.",
+  email_not_confirmed:
+    "Your email isn’t confirmed yet. Check your inbox, or request a new confirmation email below.",
+  invalid_credentials:
+    "That email or password is incorrect. Please try again.",
+  auth_redirect_localhost:
+    "Auth redirect is misconfigured. Production must use https://personastorm.nguyenhaan.id.vn, not localhost.",
+  session_expired:
+    "Your session has expired. Please log in again.",
   auth_not_configured:
     "Authentication is not configured yet. Set the Supabase environment variables to enable login.",
 };
@@ -33,6 +42,14 @@ function authErrorMessage(code: string | null | undefined): string | null {
   if (!code) return null;
   return AUTH_ERROR_MESSAGES[code] ?? "That sign-in link could not be used. Please log in below.";
 }
+
+// Codes for which offering "resend confirmation email" makes sense.
+const RESENDABLE_CODES = new Set([
+  "otp_expired",
+  "access_denied",
+  "invalid_auth_callback",
+  "email_not_confirmed",
+]);
 
 function LoginForm() {
   const router = useRouter();
@@ -45,31 +62,85 @@ function LoginForm() {
     rawNext.startsWith("/") && !rawNext.startsWith("//") && !rawNext.startsWith("/\\")
       ? rawNext
       : "/dashboard";
-  const linkError = authErrorMessage(params?.get("error"));
-  const { session, loading, configured, signIn } = useAuth();
+  const errorCode = params?.get("error");
+  const linkError = authErrorMessage(errorCode);
+  const { session, loading, configured, signIn, signOut, resendConfirmation } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showResend, setShowResend] = useState(false);
+  const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
 
-  // Already signed in → go straight to the dashboard.
+  // A session that the server rejected lands here as ?error=session_expired with
+  // the dead client session still present — clear it so we don't bounce back to
+  // the dashboard, and so the message can actually be read.
   useEffect(() => {
-    if (!loading && session) router.replace(next);
-  }, [loading, session, router, next]);
+    if (errorCode === "session_expired" && session) {
+      signOut();
+    }
+  }, [errorCode, session, signOut]);
+
+  // Already signed in → go straight to the dashboard (but not while we're
+  // clearing a rejected session for the session_expired message).
+  useEffect(() => {
+    if (!loading && session && errorCode !== "session_expired") router.replace(next);
+  }, [loading, session, router, next, errorCode]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
+    setShowResend(false);
     const { error } = await signIn(email.trim(), password);
     if (error) {
-      setError(error);
+      // Map Supabase's raw messages to friendly, code-consistent copy.
+      if (/email not confirmed/i.test(error)) {
+        setError(AUTH_ERROR_MESSAGES.email_not_confirmed);
+        setShowResend(true);
+      } else if (/invalid login credentials/i.test(error)) {
+        setError(AUTH_ERROR_MESSAGES.invalid_credentials);
+      } else {
+        setError(error);
+      }
       setSubmitting(false);
     } else {
       router.replace(next);
     }
   }
+
+  async function handleResend() {
+    if (!email.trim()) {
+      setError("Enter your email above, then resend the confirmation link.");
+      return;
+    }
+    setResendState("sending");
+    setError(null);
+    const { error, sent } = await resendConfirmation(email.trim());
+    if (error) {
+      setError(error);
+      setResendState("idle");
+    } else if (sent) {
+      setResendState("sent");
+    }
+  }
+
+  const canResend = showResend || (errorCode ? RESENDABLE_CODES.has(errorCode) : false);
+
+  const resendButton =
+    resendState === "sent" ? (
+      <span className="text-xs font-semibold text-signal-green">Confirmation email sent</span>
+    ) : (
+      <button
+        type="button"
+        onClick={handleResend}
+        disabled={resendState === "sending" || !configured}
+        className="text-xs font-semibold text-signal-cyan hover:underline disabled:opacity-50"
+      >
+        {resendState === "sending" ? "Sending…" : "Resend confirmation email"}
+      </button>
+    );
 
   return (
     <AuthShell>
@@ -87,17 +158,10 @@ function LoginForm() {
 
         {linkError && (
           <Alert
-            tone="yellow"
-            title="Email link issue"
+            tone={errorCode === "auth_redirect_localhost" ? "red" : "yellow"}
+            title={errorCode === "session_expired" ? "Session expired" : "Email link issue"}
             className="mt-5"
-            actions={
-              <Link
-                href="/signup"
-                className="text-xs font-semibold text-signal-cyan hover:underline"
-              >
-                Request a new confirmation email
-              </Link>
-            }
+            actions={canResend ? resendButton : undefined}
           >
             {linkError}
           </Alert>
@@ -138,7 +202,7 @@ function LoginForm() {
           </div>
 
           {error && (
-            <Alert tone="red" title="Could not sign in">
+            <Alert tone="red" title="Could not sign in" actions={showResend ? resendButton : undefined}>
               {error}
             </Alert>
           )}

@@ -1,36 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import clsx from "clsx";
-import { checkBackendHealth, type BackendHealth } from "@/lib/api";
-import { SUPABASE_CONFIGURED } from "@/lib/supabase/client";
+import { useAuth } from "@/lib/auth";
 
 /**
- * Compact health chip for the topbar. Probes the same-origin PersonaStorm
- * server API (`/api/health`) once on mount. Purely informational — the real
- * errors surface where an action actually fails.
+ * Compact connectivity chip for the topbar. It reflects the REAL, server-
+ * verified session status (from /api/me via AuthProvider) — NOT an
+ * unauthenticated liveness probe. This is deliberate: a public health check
+ * would show "Connected" even when the server is rejecting the user's token,
+ * which is exactly the misleading "CONNECTED + session expired" state we fixed.
  */
 export function ApiStatusBadge() {
-  const [backend, setBackend] = useState<BackendHealth | "checking">("checking");
+  const { configured, meStatus } = useAuth();
 
-  useEffect(() => {
-    let cancelled = false;
-    checkBackendHealth().then((h) => {
-      if (!cancelled) setBackend(h);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const ok = backend === "ok" && SUPABASE_CONFIGURED;
-  const label = !SUPABASE_CONFIGURED
+  const ok = configured && meStatus === "ok";
+  const label = !configured
     ? "Auth not configured"
-    : backend === "checking"
-      ? "Checking…"
-      : backend === "ok"
-        ? "Connected"
-        : "API unreachable";
+    : meStatus === "ok"
+      ? "Connected"
+      : meStatus === "expired"
+        ? "Session expired"
+        : meStatus === "error"
+          ? "API unreachable"
+          : "Checking…";
 
   return (
     <span
@@ -41,9 +33,7 @@ export function ApiStatusBadge() {
           : "border-signal-yellow/40 bg-signal-yellow/10 text-signal-yellow",
       )}
     >
-      <span
-        className={clsx("h-1.5 w-1.5 rounded-full", ok ? "bg-signal-green" : "bg-signal-yellow")}
-      />
+      <span className={clsx("h-1.5 w-1.5 rounded-full", ok ? "bg-signal-green" : "bg-signal-yellow")} />
       {label}
     </span>
   );

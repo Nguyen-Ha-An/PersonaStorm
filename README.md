@@ -33,11 +33,18 @@ user-facing rationale.
 PersonaStorm ships as a real dashboard product on top of the wind-tunnel engine:
 
 - **Supabase Auth** — email/password login & signup, plus password reset. Every
-  user gets a **profile**, a **credit wallet**, and **100 starter credits**.
+  user gets a **profile**, a **credit wallet**, and **100 starter credits**,
+  provisioned by the `handle_new_user()` Postgres trigger on signup and, as a
+  belt-and-braces fallback, **lazily auto-repaired server-side**
+  (`ensureUserProfileAndWallet()` / `gateway.ensureWalletWithStarter()`) on
+  every authenticated request for any account whose row is missing (predates
+  the trigger, or a signup where the trigger failed) — the starter grant is
+  applied **exactly once** and never lowers an existing balance.
   Confirmation, magic-link, and password-reset links always return to the
   configured site (`NEXT_PUBLIC_SITE_URL`) via `/auth/callback` — set the
-  Supabase **Site URL** + **Redirect URLs** to match (see
-  [docs/deployment.md](docs/deployment.md#supabase-auth-site-url--redirect-configuration-required)).
+  Supabase **Site URL** + **Redirect URLs** to match. See
+  [docs/deployment.md](docs/deployment.md#supabase-auth-site-url--redirect-configuration-required)
+  for that setup and the leaked-session revocation runbook.
 - **Credit billing** — each run is priced by an editable pricing rule
   (`base + ceil(personas/100)·per100 + analyst_report`; a 1,000-persona run =
   65 credits) and charged **atomically** before it starts. Insufficient balance
@@ -45,15 +52,32 @@ PersonaStorm ships as a real dashboard product on top of the wind-tunnel engine:
 - **Protected dashboard** — `/dashboard`, `/storm/new` (live price preview),
   `/storm/[id]` (live stream), the market report, `/wallet` (balance +
   transaction history), and `/account`. Storms are **owned** — you can only see
-  your own runs (admins see all).
+  your own runs (admins see all). `/dashboard` itself loads from a single
+  `GET /api/dashboard` call (`user`, `wallet`, `pricing`, run `stats`,
+  `recent_storms`) and renders real data or an honest loading /
+  session-expired / error state — a failed auth check returns `401`, never a
+  `200` with fake zeros. The topbar connectivity badge reflects the real
+  server-verified session (`/api/me`), not a public health probe, so it never
+  shows "Connected" while the server is rejecting the token.
 - **Admin console** (`/admin`) — manage users, adjust wallets, change roles,
   browse all storm runs, and edit the active pricing rule.
 
 Security model: the browser holds only the Supabase **anon** key and its access
 token; the **Next.js API Route Handlers** (running server-side on Vercel) verify
 that token, own every wallet mutation through a service-role RPC, and enforce
-ownership/roles. RLS is enabled on all tables and no client can write a balance.
-Full setup (Supabase project, env vars, admin bootstrap):
+ownership/roles. Token verification is **algorithm-aware**
+(`apps/web/lib/server/supabaseAdmin.ts`): HS256 tokens are checked locally
+against `SUPABASE_JWT_SECRET`; tokens signed with asymmetric keys (ES256/RS256
+— the modern default for new Supabase projects), or any token when the secret
+is wrong or absent, fall back to a remote check against Supabase GoTrue
+(`/auth/v1/user`) — so `SUPABASE_JWT_SECRET` is **optional**, and the shared
+secret is only ever trusted for a token that itself declares HS256. RLS is
+enabled on all tables and no client can write a balance. Site URL and Supabase
+URL handling are centralized in `apps/web/lib/config.ts` — an isomorphic
+barrel re-exporting `lib/site-url.ts` (site URL + localhost-in-production
+guard) and `lib/supabase/config.ts` (`NEXT_PUBLIC_SUPABASE_URL` validation and
+normalization) — as the single source of truth instead of scattered `env`
+reads. Full setup (Supabase project, env vars, admin bootstrap):
 [docs/deployment.md](docs/deployment.md).
 
 > **PersonaStorm is a Vercel full-stack app** — the backend API is Next.js Route
@@ -118,12 +142,14 @@ described across the criteria schema. Full rationale:
 personastorm/
 ├── apps/web        Next.js 14 FULL-STACK app on Vercel (TypeScript, Tailwind, Recharts)
 │   └── app/(app)/           protected dashboard: dashboard · storm/new · storm/[id] · wallet · account · admin
-│   └── app/api/             the backend API — same-origin Route Handlers (health · me · wallet ·
-│                            billing/quote · storm/* · admin/*)
-│   └── lib/server/          server-only backend: auth · supabaseAdmin · gateway · pricing · wallet ·
-│                            stormStore · stormEngine + engine/ (criteria · persona · providers ·
-│                            aggregation · quality) — the TypeScript port of the engine
-│   └── lib/                 supabase browser client · auth context · api client (same-origin /api/*)
+│   └── app/api/             the backend API — same-origin Route Handlers (health · me · dashboard ·
+│                            wallet · billing/quote · storm/* · admin/*)
+│   └── lib/server/          server-only backend: auth (session verify + lazy profile/wallet repair) ·
+│                            supabaseAdmin (algorithm-aware JWT verify, GoTrue fallback) · gateway ·
+│                            pricing · wallet · stormStore · stormEngine + engine/ (criteria · persona ·
+│                            providers · aggregation · quality) — the TypeScript port of the engine
+│   └── lib/                 config.ts (site URL + Supabase URL validation, single source of truth) ·
+│                            supabase browser client · auth context · api client (same-origin /api/*)
 ├── apps/api        FastAPI backend — LOCAL/DEV/REFERENCE ONLY (not deployed in production)
 │   └── app/services/…       the original Python engine the TypeScript port mirrors
 ├── supabase/migrations/  SaaS schema (profiles · wallets · transactions · storm_runs · pricing_rules) + RLS
@@ -193,10 +219,10 @@ key needed.
 | `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | only used by the optional `apps/api` reference service. The Vercel app's API is same-origin, so CORS never applies to it. |
 | `SUPABASE_URL` / `SUPABASE_ANON_KEY` | — | **server-side (Vercel)** Supabase project URL + anon key. `SUPABASE_URL` falls back to `NEXT_PUBLIC_SUPABASE_URL`. Unset → in-memory dev gateway. |
 | `SUPABASE_SERVICE_ROLE_KEY` | — | **secret** — server-side only; bypasses RLS, owns wallet mutations. Never `NEXT_PUBLIC_`, never in the browser. |
-| `SUPABASE_JWT_SECRET` | — | **secret** — HS256 secret to verify access tokens offline. If unset, tokens are validated remotely via Supabase GoTrue. |
+| `SUPABASE_JWT_SECRET` | — | **secret, OPTIONAL** — HS256 secret to verify access tokens locally. Validation is algorithm-aware (`lib/server/supabaseAdmin.ts`): only a token that itself declares HS256 uses this secret; asymmetric (ES256/RS256) tokens — the modern Supabase default for new projects — or a missing/wrong secret fall back to a remote check against Supabase GoTrue (`/auth/v1/user`). So this var can be left unset even in production. |
 | `API_ENV` | `dev` | set `prod` to refuse unverified tokens when the JWT secret is missing. |
-| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | — | frontend Supabase client (anon key only). Required for login/signup in production. `NEXT_PUBLIC_SUPABASE_URL` must be only `https://<ref>.supabase.co` (no `/rest/v1`, `/auth/v1`, `/storage/v1`). |
-| `NEXT_PUBLIC_SITE_URL` | — | canonical site URL used to build every Supabase Auth redirect (email confirmation, magic link, password reset). Prod: `https://personastorm.nguyenhaan.id.vn`; dev: `http://localhost:3000`. **Never localhost in production.** Falls back to `NEXT_PUBLIC_VERCEL_URL` → `window.location.origin` → localhost. |
+| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | — | frontend Supabase client (anon key only). Required for login/signup in production. `NEXT_PUBLIC_SUPABASE_URL` must be only `https://<ref>.supabase.co` — `lib/supabase/config.ts` validates and normalizes it at runtime, stripping (and logging) `/rest/v1`, `/auth/v1`, or `/storage/v1` if present, as defense-in-depth on top of the CI check in `deploy.yml`. |
+| `NEXT_PUBLIC_SITE_URL` | — | canonical site URL used to build every Supabase Auth redirect (email confirmation, magic link, password reset), resolved by the centralized `lib/config.ts` / `lib/site-url.ts`. Prod: hardcoded `PRODUCTION_SITE_URL` = `https://personastorm.nguyenhaan.id.vn` — used even if this var is unset, and **never falls back to localhost**; `assertNoLocalhostInProduction()` throws (surfaced as the `auth_redirect_localhost` login error) if a misconfiguration would resolve a localhost redirect in prod. Dev: falls back to `http://localhost:3000` → `NEXT_PUBLIC_VERCEL_URL` → `window.location.origin`. |
 | ~~`BACKEND_API_BASE`~~ / ~~`NEXT_PUBLIC_API_BASE`~~ | **removed** | No longer used. The API is same-origin Next.js Route Handlers on Vercel — there is no external backend URL. |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_FULL_NAME` | — | used by `scripts/create_admin_user.py` to bootstrap the first admin. |
 

@@ -72,6 +72,31 @@ export interface Pricing {
   analyst_report_credits: number;
 }
 
+export interface DashboardPricing {
+  base_run_credits: number;
+  credits_per_100_personas: number;
+  analyst_report_credits: number;
+  /** Convenience: credits for a 1,000-persona run with the analyst report. */
+  thousand_persona_run: number;
+}
+
+/** The consolidated GET /api/dashboard payload — all real, from one auth call. */
+export interface DashboardData {
+  user: {
+    id: string;
+    email: string;
+    full_name: string | null;
+    role: UserRole;
+  };
+  wallet: Wallet;
+  pricing: DashboardPricing;
+  stats: {
+    storms_run: number;
+    credits_spent: number;
+  };
+  recent_storms: StormHistoryItem[];
+}
+
 export interface QuoteRequest {
   persona_count: number;
   include_analyst_report: boolean;

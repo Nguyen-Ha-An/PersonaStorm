@@ -10,7 +10,16 @@ import "./only";
  * Fallback rule (Phase 10): if `SUPABASE_URL` is missing but the public
  * `NEXT_PUBLIC_SUPABASE_URL` exists, reuse it server-side — the project URL is
  * not a secret, only the service role key is.
+ *
+ * The Supabase URL is validated + normalized to a bare origin through the
+ * shared (secret-free) validator so a pathed value (/rest/v1, /auth/v1,
+ * /storage/v1) set directly in the Vercel dashboard — bypassing the CI check
+ * in deploy.yml — is caught and corrected at runtime instead of silently
+ * producing malformed GoTrue/PostgREST URLs.
  */
+
+// Isomorphic + secret-free — safe to import into a server-only module.
+import { validateSupabaseUrl } from "../supabase/config";
 
 function trimmed(v: string | undefined): string {
   return (v ?? "").trim();
@@ -46,9 +55,19 @@ function intEnv(name: string, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+let warnedBadUrl = false;
+
 export function getConfig(): ServerConfig {
-  const supabaseUrl =
+  const rawSupabaseUrl =
     trimmed(process.env.SUPABASE_URL) || trimmed(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const urlCheck = validateSupabaseUrl(rawSupabaseUrl);
+  if (rawSupabaseUrl && !urlCheck.ok && !warnedBadUrl) {
+    // Warn once per process; never print the value itself.
+    console.error(`[personastorm] ${urlCheck.error}`);
+    warnedBadUrl = true;
+  }
+  // Normalized bare origin (path stripped) — resilient against a pathed value.
+  const supabaseUrl = urlCheck.url || rawSupabaseUrl;
   const supabaseAnonKey =
     trimmed(process.env.SUPABASE_ANON_KEY) || trimmed(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 

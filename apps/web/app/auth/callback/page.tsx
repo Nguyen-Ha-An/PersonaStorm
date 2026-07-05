@@ -36,45 +36,76 @@ export default function AuthCallbackPage() {
     }
 
     let settled = false;
+
+    // Remove auth tokens/params from the URL bar so #access_token / ?code never
+    // linger in history, get bookmarked, or leak via the Referer header.
+    const scrubUrl = () => {
+      try {
+        window.history.replaceState(null, "", window.location.pathname);
+      } catch {
+        /* non-fatal — the redirect below changes the URL anyway */
+      }
+    };
+
     const finish = (path: string) => {
       if (settled) return;
       settled = true;
+      scrubUrl();
       router.replace(path);
     };
 
     const hash = new URLSearchParams((window.location.hash || "").replace(/^#/, ""));
     const query = new URLSearchParams(window.location.search);
 
-    // 1. Errors arrive in the hash (implicit flow) or query string. Route the
-    //    user to /login with the specific code so we can show a helpful message.
-    const errorCode =
+    // 1. Errors arrive in the hash (implicit flow) or query string. Normalize
+    //    expired/used links to `otp_expired`; route everything else through.
+    const rawError =
       hash.get("error_code") ||
       hash.get("error") ||
       query.get("error_code") ||
       query.get("error");
-    if (errorCode) {
-      finish(`/login?error=${encodeURIComponent(errorCode)}`);
+    if (rawError) {
+      const code =
+        rawError === "access_denied" || rawError === "otp_expired"
+          ? "otp_expired"
+          : rawError;
+      finish(`/login?error=${encodeURIComponent(code)}`);
       return;
     }
 
     const code = query.get("code");
+    const accessToken = hash.get("access_token");
+    const refreshToken = hash.get("refresh_token");
+    const isRecovery = hash.get("type") === "recovery";
+    const successTarget = isRecovery ? "/auth/reset-password" : "/dashboard";
 
     async function run() {
       // 2. PKCE / OAuth: exchange the authorization code for a session.
       if (code) {
         const { error } = await supabase!.auth.exchangeCodeForSession(code);
-        finish(error ? "/login?error=invalid_auth_callback" : "/dashboard");
+        finish(error ? "/login?error=invalid_auth_callback" : successTarget);
         return;
       }
-      // 3/4. Implicit flow or an existing session: detectSessionInUrl parses the
-      //      hash asynchronously, so a session may already exist or be arriving.
+
+      // 3. Implicit flow: establish the session EXPLICITLY from the hash tokens
+      //    (don't rely solely on detectSessionInUrl), then scrub them.
+      if (accessToken && refreshToken) {
+        const { error } = await supabase!.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        finish(error ? "/login?error=invalid_auth_callback" : successTarget);
+        return;
+      }
+
+      // 4. An already-valid session (e.g. detectSessionInUrl parsed the hash).
       const { data } = await supabase!.auth.getSession();
-      if (data.session) finish("/dashboard");
+      if (data.session) finish(successTarget);
     }
 
     // Catch the session the moment detectSessionInUrl finishes parsing the hash.
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) finish("/dashboard");
+      if (session) finish(successTarget);
     });
 
     run();
@@ -82,7 +113,7 @@ export default function AuthCallbackPage() {
     // 5. Fallback: if nothing resolved after a beat, there is no usable session.
     const timer = setTimeout(async () => {
       const { data } = await supabase.auth.getSession();
-      finish(data.session ? "/dashboard" : "/login?error=invalid_auth_callback");
+      finish(data.session ? successTarget : "/login?error=invalid_auth_callback");
     }, 4000);
 
     return () => {

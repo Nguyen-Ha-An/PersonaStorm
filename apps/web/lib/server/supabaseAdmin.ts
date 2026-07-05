@@ -30,39 +30,48 @@ function base64UrlDecode(input: string): Buffer {
   return Buffer.from(input.replace(/-/g, "+").replace(/_/g, "/") + pad, "base64");
 }
 
-function decodePayload(token: string): Record<string, unknown> {
+function decodeSegment(token: string, index: 0 | 1): Record<string, unknown> {
   const parts = token.split(".");
   if (parts.length !== 3) throw new HttpError(401, "Malformed session token.");
   try {
-    return JSON.parse(base64UrlDecode(parts[1]).toString("utf8"));
+    return JSON.parse(base64UrlDecode(parts[index]).toString("utf8"));
   } catch {
     throw new HttpError(401, "Malformed session token.");
   }
 }
 
-function verifyHs256(token: string, secret: string): Record<string, unknown> {
+function decodeHeader(token: string): Record<string, unknown> {
+  return decodeSegment(token, 0);
+}
+
+function decodePayload(token: string): Record<string, unknown> {
+  return decodeSegment(token, 1);
+}
+
+/**
+ * True when the token's HS256 signature verifies against `secret`. Constant-time
+ * compare. This is ONLY ever called for a token whose header declares HS256, so
+ * the shared secret can never be misused to verify an asymmetric (ES256/RS256)
+ * or alg:none token — closing the classic algorithm-confusion bypass.
+ */
+function hs256SignatureValid(token: string, secret: string): boolean {
   const parts = token.split(".");
-  if (parts.length !== 3) throw new HttpError(401, "Malformed session token.");
+  if (parts.length !== 3) return false;
   const [headerB64, payloadB64, signatureB64] = parts;
-  const expected = crypto
-    .createHmac("sha256", secret)
-    .update(`${headerB64}.${payloadB64}`)
-    .digest();
+  const expected = crypto.createHmac("sha256", secret).update(`${headerB64}.${payloadB64}`).digest();
   const actual = base64UrlDecode(signatureB64);
-  if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
-    throw new HttpError(401, "Invalid or expired session token.");
-  }
-  const payload = decodePayload(token);
-  // exp check.
+  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+}
+
+/** Enforce the standard Supabase claim checks (exp + aud) on a verified token. */
+function assertClaimsValid(payload: Record<string, unknown>): void {
   const exp = payload.exp;
   if (typeof exp === "number" && exp * 1000 < Date.now()) {
     throw new HttpError(401, "Your session has expired. Please log in again.");
   }
-  // aud check (Supabase issues aud "authenticated").
   const aud = payload.aud;
   const audOk = aud === "authenticated" || (Array.isArray(aud) && aud.includes("authenticated"));
   if (!audOk) throw new HttpError(401, "Invalid or expired session token.");
-  return payload;
 }
 
 function claimsFromPayload(payload: Record<string, unknown>): TokenClaims {
@@ -77,21 +86,48 @@ function claimsFromPayload(payload: Record<string, unknown>): TokenClaims {
 /**
  * Validate a Supabase access token and return its identity claims. Throws a 401
  * HttpError on any failure. Never trusts a user_id supplied by the client.
+ *
+ * Algorithm-aware, so it works whether the Supabase project signs tokens with
+ * the legacy shared HS256 secret OR the modern asymmetric signing keys
+ * (ES256/RS256) that new projects default to — the latter cannot be verified
+ * with a shared secret, which is a common cause of "session expired right after
+ * login" when SUPABASE_JWT_SECRET is set on such a project:
+ *
+ *   1. Header declares HS256 AND we hold the secret → verify locally (fast).
+ *        - signature OK  → enforce exp/aud locally and return.
+ *        - signature BAD → the secret is stale/wrong or the token is forged;
+ *          defer to GoTrue (the authority) when reachable — it rejects forgeries,
+ *          so this self-heals a misconfigured secret without ever trusting an
+ *          invalid token — else fail closed.
+ *   2. Otherwise (asymmetric alg, alg:none, or no secret) → validate remotely
+ *      against GoTrue. We never use the shared secret to verify a non-HS256
+ *      token, so there is no algorithm-confusion surface.
+ *   3. No real Supabase configured → refuse in prod; in local dev (in-memory
+ *      gateway) decode without verifying so offline development works.
  */
 export async function verifyAccessToken(token: string, cfg: ServerConfig = getConfig()): Promise<TokenClaims> {
-  if (cfg.supabaseJwtSecret) {
-    return claimsFromPayload(verifyHs256(token, cfg.supabaseJwtSecret));
+  const header = decodeHeader(token);
+  const alg = typeof header.alg === "string" ? header.alg.toUpperCase() : "";
+
+  if (alg === "HS256" && cfg.supabaseJwtSecret) {
+    if (hs256SignatureValid(token, cfg.supabaseJwtSecret)) {
+      const payload = decodePayload(token);
+      assertClaimsValid(payload);
+      return claimsFromPayload(payload);
+    }
+    if (supabaseConfigured(cfg)) return verifyViaGoTrue(token, cfg);
+    throw new HttpError(401, "Invalid or expired session token.");
   }
 
-  // No JWT secret. Accepting an unverified token is only safe when we are NOT
-  // in prod AND NOT talking to a real Supabase — otherwise anyone could forge
-  // `sub`. Fail safe on a misconfigured deploy.
-  if (cfg.apiEnv === "prod" || supabaseConfigured(cfg)) {
-    if (supabaseConfigured(cfg)) {
-      // Remote-validate against GoTrue instead of blindly trusting the token.
-      return verifyViaGoTrue(token, cfg);
-    }
-    throw new HttpError(401, "Auth is not configured on the server (missing SUPABASE_JWT_SECRET).");
+  if (supabaseConfigured(cfg)) {
+    return verifyViaGoTrue(token, cfg);
+  }
+
+  if (cfg.apiEnv === "prod") {
+    throw new HttpError(
+      401,
+      "Auth is not configured on the server (missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY).",
+    );
   }
 
   // Dev fallback (in-memory gateway, non-prod): decode without verifying.

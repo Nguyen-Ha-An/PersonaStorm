@@ -12,7 +12,7 @@ import "./only";
  *   requireAdmin(request)   -> CurrentUser, throws 403 if not an admin
  */
 
-import { getConfig } from "./env";
+import { getConfig, type ServerConfig } from "./env";
 import { HttpError } from "./errors";
 import { buildGateway, type Gateway } from "./gateway";
 import { verifyAccessToken } from "./supabaseAdmin";
@@ -54,6 +54,16 @@ export async function getCurrentUser(request: Request, gateway?: Gateway): Promi
     profile = { id: claims.sub, email: claims.email, full_name: claims.full_name, role: "user" };
   }
 
+  // Lazily provision the wallet (+ one-time starter credits) for users whose
+  // rows are missing — accounts created before the handle_new_user trigger
+  // existed, or a signup where the trigger failed. Best-effort: never block the
+  // request; wallet routes still create a 0-balance wallet as a final backstop.
+  try {
+    await gw.ensureWalletWithStarter(claims.sub, cfg.starterCredits);
+  } catch (err) {
+    console.error("[personastorm auth] ensureWalletWithStarter failed:", (err as Error).message);
+  }
+
   const role = (profile.role as string) ?? "user";
   return {
     id: claims.sub,
@@ -70,4 +80,20 @@ export async function requireAdmin(request: Request, gateway?: Gateway): Promise
   const user = await getCurrentUser(request, gateway);
   if (!user.isAdmin) throw new HttpError(403, "Admin access required.");
   return user;
+}
+
+/**
+ * Idempotently ensure the user's profile AND wallet rows exist, granting the
+ * one-time starter credits if the wallet had to be created. getCurrentUser
+ * already does this on every authenticated request; this named helper lets a
+ * route (e.g. /api/dashboard) make the intent explicit and repair rows before
+ * reading them. Never lowers an existing balance or duplicates the grant.
+ */
+export async function ensureUserProfileAndWallet(
+  gateway: Gateway,
+  user: { id: string; email: string; full_name: string | null },
+  cfg: ServerConfig = getConfig(),
+): Promise<void> {
+  await gateway.ensureAndGetProfile(user.id, user.email, user.full_name);
+  await gateway.ensureWalletWithStarter(user.id, cfg.starterCredits);
 }

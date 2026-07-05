@@ -47,6 +47,7 @@ All implemented under `apps/web/app/api/`:
 ```text
 GET  /api/health                         → { "status": "ok", "service": "personastorm-vercel-api" }
 GET  /api/me                             → current user profile + wallet
+GET  /api/dashboard                      → one-call dashboard payload (user, wallet, pricing, stats, recent_storms)
 GET  /api/wallet                         → wallet balance
 GET  /api/wallet/transactions            → the caller's transaction history
 GET  /api/pricing                        → active pricing rule
@@ -69,6 +70,19 @@ Every route runs on the server, verifies the Supabase access token
 (`Authorization: Bearer …`, or `?access_token=` for the SSE stream only), and
 enforces ownership/roles. The browser only ever holds the Supabase **anon** key
 and its access token.
+
+`GET /api/dashboard` is a single authenticated call that aggregates everything
+the dashboard page needs — `{ user, wallet, pricing (including
+thousand_persona_run), stats: { storms_run, credits_spent }, recent_storms }`
+— so the frontend renders real data instead of stitching together `/api/me` +
+`/api/wallet` + `/api/pricing` + `/api/storm/history`. An auth failure returns
+`401` (never `200` with fake zeros); a data-layer failure returns `500` with a
+safe message. It also runs the lazy profile/wallet repair (see "SaaS data
+model" below) on every call. The dashboard frontend renders this real data, or
+an honest loading / session-expired / error state — and the topbar
+connectivity badge reflects the real server-verified session (`/api/me` via
+`AuthProvider`'s `meStatus`), **not** a public health probe, so it never shows
+"Connected" while the server is rejecting the token.
 
 ### Streaming on serverless — how it works (and its one limitation)
 
@@ -110,6 +124,22 @@ any balance change. `EXECUTE` on `adjust_wallet_balance` is revoked from
 `anon`/`authenticated`, so only the service role (the Route Handlers) can move
 credits; a browser client can never credit itself.
 
+**Lazy profile/wallet repair.** New signups are provisioned by the
+`handle_new_user` trigger above (the primary path), but accounts that predate
+it — or a signup where the trigger failed — can be left without a
+`profiles`/`wallets` row. `apps/web/lib/server/auth.ts` exports
+`ensureUserProfileAndWallet()`, and `gateway.ensureWalletWithStarter()`
+provisions a missing wallet and grants the 100 starter credits (plus a
+`credit_grant` transaction) **exactly once** for such users. It never lowers
+an existing balance and never duplicates the grant. This runs on every
+authenticated request (`requireUser`) and inside `GET /api/dashboard`, so a
+pre-existing account is repaired transparently on next use.
+
+Migration `20260705160000_pricing_rules_select_active.sql` tightens
+`pricing_rules` RLS so authenticated clients can `SELECT` only the active
+rule — the app already reads pricing via the service role server-side, so
+this is not a functional change.
+
 Pricing formula (default rule 10 / 5 / 5, analyst report included):
 
 ```text
@@ -123,13 +153,19 @@ total_credits = base_run_credits
 
 ## Environment variables
 
+Site-URL and Supabase-URL logic is centralized in `apps/web/lib/config.ts` (an
+isomorphic barrel that re-exports the site-URL helpers in
+`apps/web/lib/site-url.ts` and the Supabase URL validation in
+`apps/web/lib/supabase/config.ts`), so the frontend and server code share one
+source of truth instead of each re-deriving it.
+
 ### Frontend (public — safe to expose; inlined into the browser bundle)
 
 | Variable | Required | Purpose |
 |---|---:|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | yes | Supabase project URL — **only** `https://<ref>.supabase.co`, no `/rest/v1`, `/auth/v1`, `/storage/v1` path |
+| `NEXT_PUBLIC_SUPABASE_URL` | yes | Supabase project URL — **only** `https://<ref>.supabase.co`, no `/rest/v1`, `/auth/v1`, `/storage/v1` path. Validated and normalized at runtime — a value carrying one of those API path suffixes is stripped to the bare origin and logged — as defense-in-depth on top of the CI check in `deploy.yml`. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Supabase **anon** key (never the service role key) |
-| `NEXT_PUBLIC_SITE_URL` | recommended | Canonical site URL used to build every auth redirect (`emailRedirectTo` / `redirectTo`). Production: `https://personastorm.nguyenhaan.id.vn`. The production deploy **defaults** this to that domain when the secret is unset (so a missing secret never blocks the deploy and never uses localhost); set the secret only to override. In the app itself, if unset it falls back to `NEXT_PUBLIC_VERCEL_URL` → `window.location.origin` → `http://localhost:3000` (dev only). **Never localhost in production.** |
+| `NEXT_PUBLIC_SITE_URL` | recommended | Canonical site URL used to build every auth redirect (`emailRedirectTo` / `redirectTo`). Production: `https://personastorm.nguyenhaan.id.vn`. The production deploy **defaults** this to that domain when the secret is unset (so a missing secret never blocks the deploy and never uses localhost); set the secret only to override. In the app itself, if unset it falls back to `NEXT_PUBLIC_VERCEL_URL` → `window.location.origin` → `http://localhost:3000` (dev only). In production, `getSiteUrl()` always resolves to `PRODUCTION_SITE_URL` (`https://personastorm.nguyenhaan.id.vn`) and **never** falls back to localhost; if an explicit misconfiguration still resolves a localhost redirect in production, `assertNoLocalhostInProduction()` throws, which the login page surfaces as `?error=auth_redirect_localhost`. |
 
 ### Server-side (Vercel — read at request time by Route Handlers, never in the browser)
 
@@ -137,7 +173,7 @@ total_credits = base_run_credits
 |---|---:|---|
 | `SUPABASE_URL` | yes* | Project URL for server code. *If unset, falls back to `NEXT_PUBLIC_SUPABASE_URL`. |
 | `SUPABASE_SERVICE_ROLE_KEY` | yes | **SECRET** — bypasses RLS; owns wallet mutations. Never `NEXT_PUBLIC_`. |
-| `SUPABASE_JWT_SECRET` | recommended | **SECRET** — HS256 secret to verify access tokens offline. If unset, tokens are validated remotely via GoTrue. |
+| `SUPABASE_JWT_SECRET` | **optional** | **SECRET** — HS256 secret for a fast local-verify path. Validation is algorithm-aware (see below): only a token that declares `HS256` uses this secret at all; asymmetric-key tokens (ES256/RS256) and any token when this secret is unset or wrong are validated remotely via GoTrue instead. |
 | `SUPABASE_ANON_KEY` | optional | server-side anon key for GoTrue token validation; falls back to the public one |
 | `API_ENV` | recommended | set `prod` to refuse unverified tokens when the JWT secret is missing |
 | `INFERENCE_PROVIDER` | optional | `mock` (default) \| `nvidia` |
@@ -146,6 +182,25 @@ total_credits = base_run_credits
 
 **No `NEXT_PUBLIC_` variable may ever contain the service role key, JWT secret,
 admin password, or NVIDIA key.**
+
+#### Why `SUPABASE_JWT_SECRET` is optional
+
+`apps/web/lib/server/supabaseAdmin.ts` validates access tokens by algorithm.
+An `HS256` token is verified **locally** against `SUPABASE_JWT_SECRET` (fast,
+no network round trip). A token signed with an **asymmetric key** (`ES256` /
+`RS256` — the modern Supabase default for new projects using JWT signing
+keys), or **any** token when the secret is unset or wrong, is validated
+**remotely** against GoTrue (`/auth/v1/user`) instead. So the app works
+correctly with `SUPABASE_JWT_SECRET` left unset — it's only an optional
+fast-path, never a hard requirement, and asymmetric JWT signing keys are
+fully supported via the GoTrue fallback.
+
+This algorithm-awareness is also what fixed the "session expired right after
+login" bug: a shared HS256 secret configured on a project that had migrated
+to asymmetric signing keys was being applied to tokens it could never
+validate. Anti-algorithm-confusion is preserved — the shared secret is used
+**only** for a token that itself declares `HS256`, so it can't be used to
+(mis)validate a token signed with a different algorithm.
 
 ---
 
@@ -188,7 +243,7 @@ NEXT_PUBLIC_SITE_URL       # OPTIONAL — defaults to https://personastorm.nguye
 
 SUPABASE_URL
 SUPABASE_SERVICE_ROLE_KEY
-SUPABASE_JWT_SECRET
+SUPABASE_JWT_SECRET       # OPTIONAL — fast local HS256 verify path; unset (or wrong) still works via GoTrue fallback
 
 SUPABASE_ACCESS_TOKEN     # Supabase CLI — migrations only, NOT synced to Vercel
 SUPABASE_PROJECT_ID       # Supabase CLI — migrations only, NOT synced to Vercel
@@ -264,9 +319,21 @@ https://personastorm.nguyenhaan.id.vn
 
 ```text
 https://personastorm.nguyenhaan.id.vn/**
+https://personastorm.nguyenhaan.id.vn/auth/callback
+https://personastorm.nguyenhaan.id.vn/auth/confirm
+https://personastorm.nguyenhaan.id.vn/auth/reset-password
 https://persona-storm.vercel.app/**
 http://localhost:3000/**
 ```
+
+`apps/web/app/auth/callback/page.tsx` explicitly calls `setSession()` from the
+`#access_token` / `#refresh_token` URL fragment and then strips the token hash
+from the URL bar. `AuthHashRedirector` (`apps/web/components/AuthHashRedirector.tsx`,
+mounted in `apps/web/app/layout.tsx`) forwards any auth hash that lands on the
+root path instead of `/auth/callback` to `/auth/callback` so it's still
+handled. Old confirmation emails may still route to localhost or be expired —
+after changing any of the settings above, always **resend a fresh
+confirmation email and click only the newest one**.
 
 For Vercel **preview** deployments (per-PR URLs), also add a wildcard for your
 Vercel team/account slug:
@@ -398,6 +465,58 @@ fixed at review time):
   not verified, `/docs` + `/openapi.json` exposed without auth, and PostgREST
   filters built by f-string interpolation (no working injection found). Harden
   or remove if the service is ever hosted again.
+
+## Revoking a leaked/compromised session
+
+If a Supabase auth URL that contained `access_token` / `refresh_token` was
+ever exposed — pasted into a chat, visible in a screen share, captured in
+browser history, logged by a proxy, etc. — treat that session as
+**compromised** immediately and revoke it. (The client-side hash-stripping
+described above, in `auth/callback` and `AuthHashRedirector`, prevents the
+token from *lingering* in the visible URL bar; it does nothing to undo an
+exposure that already happened.)
+
+**1. Revoke the specific session**
+
+- Supabase dashboard → **Authentication → Users** → open the affected user →
+  sign the user out / revoke their session(s) (or
+  **Authentication → Sessions** and revoke it directly).
+- Have the user log out and log back in. If they also need a fresh
+  confirmation link, use **"Resend confirmation email"** on the login page
+  rather than reusing an old email — don't click stale links.
+
+**2. Invalidate every existing token at once (broader compromise)**
+
+- Supabase dashboard → **Project Settings → API → JWT Secret → Rotate**.
+  This signs out **every** user, everywhere, immediately.
+- Because server token validation is algorithm-aware (see "Environment
+  variables" above), the app keeps working through this rotation via the
+  GoTrue fallback even before `SUPABASE_JWT_SECRET` is re-synced — there is
+  no outage window.
+- Update the `SUPABASE_JWT_SECRET` GitHub secret and redeploy (or wait for
+  the next deploy) to resync it into Vercel and restore the fast
+  local-verify path.
+
+**3. If a service credential itself may be exposed**
+
+Rotate the specific credential in its own dashboard, then update the
+matching GitHub Actions secret — the next deploy re-syncs server env into
+Vercel:
+
+- `SUPABASE_SERVICE_ROLE_KEY` → Supabase dashboard → Project Settings → API
+- `SUPABASE_JWT_SECRET` → Supabase dashboard → Project Settings → API (also
+  signs everyone out — see step 2)
+- `SUPABASE_ACCESS_TOKEN` → Supabase account access tokens
+- `VERCEL_TOKEN` → Vercel account → Settings → Tokens
+
+Never commit, log, or print any secret/token value — including while
+following this runbook.
+
+After a revocation, affected users may land on `/login?error=session_expired`
+(or `otp_expired`, `email_not_confirmed`, `invalid_auth_callback`,
+`invalid_credentials`, `auth_redirect_localhost`) — this is expected, safe
+behavior: the login page explains the error and, where relevant, offers to
+resend a fresh confirmation email.
 
 ## Troubleshooting
 

@@ -252,7 +252,14 @@ jobs:
         working-directory: apps/web
         run: |
           set -o pipefail
-          deployment_url=$(vercel deploy --yes --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG 2>&1 | tee vercel-deploy.log | tail -n 1)
+          # Bake a build marker into the deployed bundle so /api/debug/auth-config
+          # can prove WHICH commit is live (detects a stale Vercel build). These
+          # are non-secret NEXT_PUBLIC_* build args, inlined at build time.
+          DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          deployment_url=$(vercel deploy --yes --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG \
+            --build-env NEXT_PUBLIC_COMMIT_SHA="${GITHUB_SHA}" \
+            --build-env NEXT_PUBLIC_DEPLOYED_AT="${DEPLOYED_AT}" \
+            2>&1 | tee vercel-deploy.log | tail -n 1)
           echo "deployment_url=$deployment_url" >> "$GITHUB_OUTPUT"
           echo "### Vercel preview deployment" >> "$GITHUB_STEP_SUMMARY"
           echo "$deployment_url" >> "$GITHUB_STEP_SUMMARY"
@@ -438,6 +445,9 @@ jobs:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           NVIDIA_BASE_URL: ${{ secrets.NVIDIA_BASE_URL }}
           NVIDIA_MODEL: ${{ secrets.NVIDIA_MODEL }}
+          # Optional: gates the /api/debug/auth-config endpoint in production.
+          # If unset, that endpoint stays disabled (404) — safe default.
+          AUTH_DEBUG_SECRET: ${{ secrets.AUTH_DEBUG_SECRET }}
         run: |
           set -eu
           sync_env() {
@@ -457,6 +467,7 @@ jobs:
           sync_env SUPABASE_URL "${SUPABASE_URL:-$NEXT_PUBLIC_SUPABASE_URL}" production
           sync_env SUPABASE_SERVICE_ROLE_KEY "$SUPABASE_SERVICE_ROLE_KEY" production
           sync_env SUPABASE_JWT_SECRET "$SUPABASE_JWT_SECRET" production
+          sync_env AUTH_DEBUG_SECRET "$AUTH_DEBUG_SECRET" production
           sync_env INFERENCE_PROVIDER "$INFERENCE_PROVIDER" production
           sync_env ANALYST_PROVIDER "$ANALYST_PROVIDER" production
           sync_env NVIDIA_API_KEY "$NVIDIA_API_KEY" production
@@ -481,7 +492,14 @@ jobs:
         working-directory: apps/web
         run: |
           set -o pipefail
-          deployment_url=$(vercel deploy --prod --yes --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG 2>&1 | tee vercel-deploy.log | tail -n 1)
+          # Bake a build marker into the deployed bundle so /api/debug/auth-config
+          # can prove WHICH commit is live (detects a stale Vercel build). These
+          # are non-secret NEXT_PUBLIC_* build args, inlined at build time.
+          DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          deployment_url=$(vercel deploy --prod --yes --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG \
+            --build-env NEXT_PUBLIC_COMMIT_SHA="${GITHUB_SHA}" \
+            --build-env NEXT_PUBLIC_DEPLOYED_AT="${DEPLOYED_AT}" \
+            2>&1 | tee vercel-deploy.log | tail -n 1)
           echo "deployment_url=$deployment_url" >> "$GITHUB_OUTPUT"
           echo "### Vercel production deployment" >> "$GITHUB_STEP_SUMMARY"
           echo "$deployment_url" >> "$GITHUB_STEP_SUMMARY"

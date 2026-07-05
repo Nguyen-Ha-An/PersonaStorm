@@ -14,6 +14,12 @@ concurrency:
 env:
   NODE_VERSION: "22"
   PYTHON_VERSION: "3.11"
+  # Canonical production domain used as the default auth-redirect base when the
+  # NEXT_PUBLIC_SITE_URL secret is not set. It is a known constant (not a secret),
+  # so we default to it rather than failing the deploy — this still guarantees
+  # production auth links never fall back to localhost. Set the NEXT_PUBLIC_SITE_URL
+  # secret only to override this (e.g. if the domain changes).
+  PROD_SITE_URL_DEFAULT: "https://personastorm.nguyenhaan.id.vn"
 
 jobs:
   api-tests:
@@ -307,11 +313,13 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
+          # NEXT_PUBLIC_SITE_URL is intentionally NOT required here: it defaults to
+          # PROD_SITE_URL_DEFAULT (the known production domain) below, so a missing
+          # secret must not block the deploy.
           missing=0
-          for name in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY NEXT_PUBLIC_SITE_URL SUPABASE_SERVICE_ROLE_KEY; do
+          for name in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY; do
             if [ -z "${!name}" ]; then
               echo "Missing required GitHub secret: $name"
               missing=1
@@ -319,7 +327,6 @@ jobs:
           done
           if [ "$missing" -ne 0 ]; then
             echo "Set the frontend keys from Supabase Settings -> API (anon key only, never the service role)."
-            echo "Set NEXT_PUBLIC_SITE_URL to the production domain (https://personastorm.nguyenhaan.id.vn)."
             echo "Set SUPABASE_SERVICE_ROLE_KEY (server-side only) so Route Handlers can own wallet mutations."
             exit 1
           fi
@@ -336,8 +343,13 @@ jobs:
           node - <<'NODE'
           function fail(msg) { console.error(msg); process.exit(1); }
 
-          const site = process.env.NEXT_PUBLIC_SITE_URL;
-          if (!site) fail("Missing required secret: NEXT_PUBLIC_SITE_URL");
+          // Fall back to the known production domain when the secret is unset, so
+          // the deploy is never blocked and production still never uses localhost.
+          const site = process.env.NEXT_PUBLIC_SITE_URL || process.env.PROD_SITE_URL_DEFAULT;
+          if (!site) fail("No NEXT_PUBLIC_SITE_URL and no PROD_SITE_URL_DEFAULT.");
+          if (!process.env.NEXT_PUBLIC_SITE_URL) {
+            console.log("NEXT_PUBLIC_SITE_URL secret unset — defaulting to PROD_SITE_URL_DEFAULT.");
+          }
           let siteUrl;
           try {
             siteUrl = new URL(site);
@@ -434,7 +446,7 @@ jobs:
           echo "Syncing GitHub secrets into Vercel (production environment):"
           sync_env NEXT_PUBLIC_SUPABASE_URL "$NEXT_PUBLIC_SUPABASE_URL" production
           sync_env NEXT_PUBLIC_SUPABASE_ANON_KEY "$NEXT_PUBLIC_SUPABASE_ANON_KEY" production
-          sync_env NEXT_PUBLIC_SITE_URL "$NEXT_PUBLIC_SITE_URL" production
+          sync_env NEXT_PUBLIC_SITE_URL "${NEXT_PUBLIC_SITE_URL:-$PROD_SITE_URL_DEFAULT}" production
           sync_env SUPABASE_URL "${SUPABASE_URL:-$NEXT_PUBLIC_SUPABASE_URL}" production
           sync_env SUPABASE_SERVICE_ROLE_KEY "$SUPABASE_SERVICE_ROLE_KEY" production
           sync_env SUPABASE_JWT_SECRET "$SUPABASE_JWT_SECRET" production

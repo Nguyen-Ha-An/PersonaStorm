@@ -32,8 +32,12 @@ user-facing rationale.
 
 PersonaStorm ships as a real dashboard product on top of the wind-tunnel engine:
 
-- **Supabase Auth** — email/password login & signup. Every user gets a
-  **profile**, a **credit wallet**, and **100 starter credits**.
+- **Supabase Auth** — email/password login & signup, plus password reset. Every
+  user gets a **profile**, a **credit wallet**, and **100 starter credits**.
+  Confirmation, magic-link, and password-reset links always return to the
+  configured site (`NEXT_PUBLIC_SITE_URL`) via `/auth/callback` — set the
+  Supabase **Site URL** + **Redirect URLs** to match (see
+  [docs/deployment.md](docs/deployment.md#supabase-auth-site-url--redirect-configuration-required)).
 - **Credit billing** — each run is priced by an editable pricing rule
   (`base + ceil(personas/100)·per100 + analyst_report`; a 1,000-persona run =
   65 credits) and charged **atomically** before it starts. Insufficient balance
@@ -191,7 +195,8 @@ key needed.
 | `SUPABASE_SERVICE_ROLE_KEY` | — | **secret** — server-side only; bypasses RLS, owns wallet mutations. Never `NEXT_PUBLIC_`, never in the browser. |
 | `SUPABASE_JWT_SECRET` | — | **secret** — HS256 secret to verify access tokens offline. If unset, tokens are validated remotely via Supabase GoTrue. |
 | `API_ENV` | `dev` | set `prod` to refuse unverified tokens when the JWT secret is missing. |
-| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | — | frontend Supabase client (anon key only). Required for login/signup in production. |
+| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | — | frontend Supabase client (anon key only). Required for login/signup in production. `NEXT_PUBLIC_SUPABASE_URL` must be only `https://<ref>.supabase.co` (no `/rest/v1`, `/auth/v1`, `/storage/v1`). |
+| `NEXT_PUBLIC_SITE_URL` | — | canonical site URL used to build every Supabase Auth redirect (email confirmation, magic link, password reset). Prod: `https://personastorm.nguyenhaan.id.vn`; dev: `http://localhost:3000`. **Never localhost in production.** Falls back to `NEXT_PUBLIC_VERCEL_URL` → `window.location.origin` → localhost. |
 | ~~`BACKEND_API_BASE`~~ / ~~`NEXT_PUBLIC_API_BASE`~~ | **removed** | No longer used. The API is same-origin Next.js Route Handlers on Vercel — there is no external backend URL. |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_FULL_NAME` | — | used by `scripts/create_admin_user.py` to bootstrap the first admin. |
 

@@ -127,8 +127,9 @@ total_credits = base_run_credits
 
 | Variable | Required | Purpose |
 |---|---:|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | yes | Supabase project URL (browser auth client) |
+| `NEXT_PUBLIC_SUPABASE_URL` | yes | Supabase project URL — **only** `https://<ref>.supabase.co`, no `/rest/v1`, `/auth/v1`, `/storage/v1` path |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Supabase **anon** key (never the service role key) |
+| `NEXT_PUBLIC_SITE_URL` | yes (prod) | Canonical site URL used to build every auth redirect (`emailRedirectTo` / `redirectTo`). Production: `https://personastorm.nguyenhaan.id.vn`. If unset, falls back to `NEXT_PUBLIC_VERCEL_URL` → `window.location.origin` → `http://localhost:3000` (dev only). **Never localhost in production.** |
 
 ### Server-side (Vercel — read at request time by Route Handlers, never in the browser)
 
@@ -183,6 +184,7 @@ VERCEL_PROJECT_ID
 
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY
+NEXT_PUBLIC_SITE_URL       # https://personastorm.nguyenhaan.id.vn — auth redirect base
 
 SUPABASE_URL
 SUPABASE_SERVICE_ROLE_KEY
@@ -204,9 +206,15 @@ ANALYST_PROVIDER
 ```
 
 **Synced into Vercel** (safe frontend + server-side): `NEXT_PUBLIC_SUPABASE_URL`,
-`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_URL` (falls back to the public URL),
-`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `INFERENCE_PROVIDER`,
-`ANALYST_PROVIDER`, `NVIDIA_API_KEY`, `NVIDIA_BASE_URL`, `NVIDIA_MODEL`.
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL`, `SUPABASE_URL` (falls back
+to the public URL), `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`,
+`INFERENCE_PROVIDER`, `ANALYST_PROVIDER`, `NVIDIA_API_KEY`, `NVIDIA_BASE_URL`,
+`NVIDIA_MODEL`.
+
+The production deploy fails loud if `NEXT_PUBLIC_SITE_URL` is missing, not a valid
+`https` URL, or points at `localhost`, and if `NEXT_PUBLIC_SUPABASE_URL` carries an
+API path (`/rest/v1`, `/auth/v1`, `/storage/v1`) — see the "Validate auth redirect
++ Supabase URL format (production)" step in the workflow.
 
 **NEVER synced into Vercel** (used only by the Supabase CLI / admin bootstrap):
 `SUPABASE_DB_PASSWORD`, `SUPABASE_ACCESS_TOKEN`, `VERCEL_TOKEN`, `ADMIN_PASSWORD`.
@@ -219,6 +227,80 @@ npx vercel login
 npx vercel link
 cat .vercel/project.json   # orgId + projectId — do not commit this file
 ```
+
+---
+
+## Supabase Auth: Site URL & redirect configuration (required)
+
+Supabase Auth builds every confirmation / magic-link / password-reset link from
+two things:
+
+- the **Site URL** — the default redirect used when a request passes no explicit
+  redirect; and
+- the **Redirect URLs allow list** — the set of destinations `emailRedirectTo` /
+  `redirectTo` are allowed to point at.
+
+If the Site URL is left at the Supabase default (`http://localhost:3000`), every
+confirmation email sends users back to localhost — which is exactly the
+`http://localhost:3000/#error=access_denied&error_code=otp_expired…` symptom.
+The app now always passes an explicit `emailRedirectTo`/`redirectTo` built from
+`NEXT_PUBLIC_SITE_URL`, but you must **also** fix the dashboard so the Site URL
+is production and the redirect targets are allow-listed.
+
+Open **[Authentication → URL Configuration](https://supabase.com/dashboard/project/_/auth/url-configuration)**
+(`https://supabase.com/dashboard/project/_/auth/url-configuration`) and set:
+
+**Site URL**
+
+```text
+https://personastorm.nguyenhaan.id.vn
+```
+
+**Redirect URLs** (add each; `/**` allow-lists every path under the origin)
+
+```text
+https://personastorm.nguyenhaan.id.vn/**
+https://persona-storm.vercel.app/**
+http://localhost:3000/**
+```
+
+For Vercel **preview** deployments (per-PR URLs), also add a wildcard for your
+Vercel team/account slug:
+
+```text
+https://*-<your-vercel-team-or-account-slug>.vercel.app/**
+```
+
+### Optional: point the email button at the app domain (custom confirm route)
+
+By default the confirmation button links to Supabase's `/auth/v1/verify` URL,
+which then 302s to `emailRedirectTo`. If you'd rather the button link **directly**
+at the PersonaStorm domain, edit **Authentication → Email Templates → Confirm
+signup** and change the button to use the `token_hash` flow the app implements at
+`/auth/confirm`:
+
+```html
+<a href="{{ .RedirectTo }}/auth/confirm?token_hash={{ .TokenHash }}&type=email">
+  Confirm email address
+</a>
+```
+
+- `{{ .RedirectTo }}` is the redirect passed by `signUp` (i.e. built from
+  `NEXT_PUBLIC_SITE_URL`), so the link lands on the production domain — **never
+  hardcode localhost here**.
+- `{{ .TokenHash }}` is the single-use token the `/auth/confirm` route exchanges
+  with `verifyOtp`. On success it routes to `/dashboard`; on a stale/used link it
+  routes to `/login?error=otp_expired`.
+
+This step is optional — the default `{{ .ConfirmationURL }}` template works too,
+because `emailRedirectTo` already returns users to `/auth/callback`.
+
+### Why an old link still shows `otp_expired`
+
+`otp_expired` means the link is **expired, already used, or was generated before
+the URL configuration was fixed**. Existing emails may still point at localhost or
+have expired. After changing the Site URL / redirect config, **request a fresh
+confirmation email** and click the newest one — do not test with an old link.
 
 ---
 
@@ -281,6 +363,8 @@ Without a token, protected routes return `401 {"detail":"Missing authentication 
 | Actions return `500 … Check Vercel function logs and required environment variables` | A server env var is missing (e.g. `SUPABASE_SERVICE_ROLE_KEY`) | Set the required server-side secrets; they are synced into Vercel on the next deploy. |
 | `502 … data backend is unavailable` | Supabase/PostgREST call failed | Verify the Supabase project is up and the service role key is correct. |
 | Login/signup fail | `NEXT_PUBLIC_SUPABASE_*` missing or wrong | Set them from Supabase Settings → API (anon key only). |
+| Confirmation email lands on `http://localhost:3000/#error=…otp_expired…` | Supabase **Site URL** is still localhost and/or the link is old | Set Site URL + Redirect URLs to the production domain (above), set `NEXT_PUBLIC_SITE_URL`, redeploy, then request a **fresh** email. |
+| Email link shows `otp_expired` even after the fix | Link is expired, already used, or predates the URL-config fix | Request a new confirmation/reset email and click the newest one. Don't reuse old links. |
 | Storm stream stuck "connecting" | Session expired or the storm ID doesn't exist / isn't yours | Log in again; start a new storm. Ownership is enforced (a non-owner gets 404). |
 
 ---

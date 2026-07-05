@@ -18,6 +18,7 @@ import {
 } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getMe } from "./api";
+import { getAuthCallbackUrl, getResetPasswordUrl } from "./site-url";
 import { SUPABASE_CONFIGURED, getSupabaseClient } from "./supabase/client";
 import type { Me } from "./types";
 
@@ -36,6 +37,10 @@ interface AuthContextValue {
   signUp(email: string, password: string, fullName?: string): Promise<SignUpResult>;
   signOut(): Promise<void>;
   refreshMe(): Promise<void>;
+  /** Email a password-recovery link that returns to /auth/reset-password. */
+  sendPasswordReset(email: string): Promise<{ error?: string }>;
+  /** Set a new password for the user in the current (recovery) session. */
+  updatePassword(password: string): Promise<{ error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -108,11 +113,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: fullName ? { full_name: fullName } : undefined },
+        options: {
+          data: fullName ? { full_name: fullName } : undefined,
+          // ALWAYS pass an explicit redirect. Without this, Supabase falls back
+          // to the project Site URL (which was localhost), so confirmation
+          // emails sent people to http://localhost:3000. This forces the link
+          // back to the current site (production domain via NEXT_PUBLIC_SITE_URL).
+          emailRedirectTo: getAuthCallbackUrl(),
+        },
       });
       if (error) return { error: error.message };
       // If email confirmation is required, there's no active session yet.
       return { needsConfirmation: !data.session };
+    },
+    [supabase],
+  );
+
+  const sendPasswordReset = useCallback(
+    async (email: string): Promise<{ error?: string }> => {
+      if (!supabase) return { error: "Authentication is not configured." };
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: getResetPasswordUrl(),
+      });
+      return error ? { error: error.message } : {};
+    },
+    [supabase],
+  );
+
+  const updatePassword = useCallback(
+    async (password: string): Promise<{ error?: string }> => {
+      if (!supabase) return { error: "Authentication is not configured." };
+      const { error } = await supabase.auth.updateUser({ password });
+      return error ? { error: error.message } : {};
     },
     [supabase],
   );
@@ -135,8 +167,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUp,
       signOut,
       refreshMe,
+      sendPasswordReset,
+      updatePassword,
     }),
-    [loading, session, me, signIn, signUp, signOut, refreshMe],
+    [loading, session, me, signIn, signUp, signOut, refreshMe, sendPasswordReset, updatePassword],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

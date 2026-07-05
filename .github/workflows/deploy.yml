@@ -201,6 +201,7 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
@@ -224,6 +225,7 @@ jobs:
           echo "Syncing GitHub secrets into Vercel (preview environment):"
           sync_env NEXT_PUBLIC_SUPABASE_URL "$NEXT_PUBLIC_SUPABASE_URL" preview
           sync_env NEXT_PUBLIC_SUPABASE_ANON_KEY "$NEXT_PUBLIC_SUPABASE_ANON_KEY" preview
+          sync_env NEXT_PUBLIC_SITE_URL "$NEXT_PUBLIC_SITE_URL" preview
           sync_env SUPABASE_URL "${SUPABASE_URL:-$NEXT_PUBLIC_SUPABASE_URL}" preview
           sync_env SUPABASE_SERVICE_ROLE_KEY "$SUPABASE_SERVICE_ROLE_KEY" preview
           sync_env SUPABASE_JWT_SECRET "$SUPABASE_JWT_SECRET" preview
@@ -305,10 +307,11 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           missing=0
-          for name in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY; do
+          for name in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY NEXT_PUBLIC_SITE_URL SUPABASE_SERVICE_ROLE_KEY; do
             if [ -z "${!name}" ]; then
               echo "Missing required GitHub secret: $name"
               missing=1
@@ -316,9 +319,62 @@ jobs:
           done
           if [ "$missing" -ne 0 ]; then
             echo "Set the frontend keys from Supabase Settings -> API (anon key only, never the service role)."
+            echo "Set NEXT_PUBLIC_SITE_URL to the production domain (https://personastorm.nguyenhaan.id.vn)."
             echo "Set SUPABASE_SERVICE_ROLE_KEY (server-side only) so Route Handlers can own wallet mutations."
             exit 1
           fi
+
+      # Auth redirects break silently if NEXT_PUBLIC_SITE_URL is localhost or the
+      # Supabase URL carries an API path — validate both before we ship. Values
+      # are passed via env and never echoed; only names/verdicts are printed.
+      - name: Validate auth redirect + Supabase URL format (production)
+        env:
+          NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NODE_ENV: production
+        run: |
+          node - <<'NODE'
+          function fail(msg) { console.error(msg); process.exit(1); }
+
+          const site = process.env.NEXT_PUBLIC_SITE_URL;
+          if (!site) fail("Missing required secret: NEXT_PUBLIC_SITE_URL");
+          let siteUrl;
+          try {
+            siteUrl = new URL(site);
+          } catch {
+            fail("NEXT_PUBLIC_SITE_URL is not a valid URL.");
+          }
+          if (siteUrl.protocol !== "https:") {
+            fail("NEXT_PUBLIC_SITE_URL must use https in production.");
+          }
+          if (
+            process.env.NODE_ENV === "production" &&
+            (siteUrl.hostname === "localhost" || siteUrl.hostname === "127.0.0.1")
+          ) {
+            fail("NEXT_PUBLIC_SITE_URL cannot be localhost in production.");
+          }
+
+          const supa = process.env.NEXT_PUBLIC_SUPABASE_URL;
+          if (!supa) fail("Missing required secret: NEXT_PUBLIC_SUPABASE_URL");
+          let supaUrl;
+          try {
+            supaUrl = new URL(supa);
+          } catch {
+            fail("NEXT_PUBLIC_SUPABASE_URL is not a valid URL.");
+          }
+          if (supaUrl.protocol !== "https:") {
+            fail("NEXT_PUBLIC_SUPABASE_URL must use https.");
+          }
+          // Must be ONLY the project origin — no /rest/v1, /auth/v1, /storage/v1.
+          const path = supaUrl.pathname.replace(/\/$/, "");
+          if (path !== "") {
+            fail(
+              "NEXT_PUBLIC_SUPABASE_URL must be only https://<project-ref>.supabase.co " +
+                "(no /rest/v1, /auth/v1, or /storage/v1 path).",
+            );
+          }
+          console.log("Auth redirect + Supabase URL format OK.");
+          NODE
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
@@ -354,6 +410,7 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
@@ -377,6 +434,7 @@ jobs:
           echo "Syncing GitHub secrets into Vercel (production environment):"
           sync_env NEXT_PUBLIC_SUPABASE_URL "$NEXT_PUBLIC_SUPABASE_URL" production
           sync_env NEXT_PUBLIC_SUPABASE_ANON_KEY "$NEXT_PUBLIC_SUPABASE_ANON_KEY" production
+          sync_env NEXT_PUBLIC_SITE_URL "$NEXT_PUBLIC_SITE_URL" production
           sync_env SUPABASE_URL "${SUPABASE_URL:-$NEXT_PUBLIC_SUPABASE_URL}" production
           sync_env SUPABASE_SERVICE_ROLE_KEY "$SUPABASE_SERVICE_ROLE_KEY" production
           sync_env SUPABASE_JWT_SECRET "$SUPABASE_JWT_SECRET" production

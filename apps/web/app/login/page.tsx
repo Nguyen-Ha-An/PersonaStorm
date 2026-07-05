@@ -16,6 +16,24 @@ export default function LoginPage() {
   );
 }
 
+// Human-readable messages for the `?error=` codes the auth callback / confirm
+// routes redirect here with. Unknown codes fall back to a generic message.
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  otp_expired:
+    "This email link is expired or was already used. Please sign in below, or request a new confirmation email.",
+  access_denied:
+    "This email link is expired or was already used. Please sign in below, or request a new confirmation email.",
+  invalid_auth_callback:
+    "We couldn’t complete that sign-in link. Please log in below, or request a new email.",
+  auth_not_configured:
+    "Authentication is not configured yet. Set the Supabase environment variables to enable login.",
+};
+
+function authErrorMessage(code: string | null | undefined): string | null {
+  if (!code) return null;
+  return AUTH_ERROR_MESSAGES[code] ?? "That sign-in link could not be used. Please log in below.";
+}
+
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
@@ -27,6 +45,7 @@ function LoginForm() {
     rawNext.startsWith("/") && !rawNext.startsWith("//") && !rawNext.startsWith("/\\")
       ? rawNext
       : "/dashboard";
+  const linkError = authErrorMessage(params?.get("error"));
   const { session, loading, configured, signIn } = useAuth();
 
   const [email, setEmail] = useState("");
@@ -66,6 +85,24 @@ function LoginForm() {
           </Alert>
         )}
 
+        {linkError && (
+          <Alert
+            tone="yellow"
+            title="Email link issue"
+            className="mt-5"
+            actions={
+              <Link
+                href="/signup"
+                className="text-xs font-semibold text-signal-cyan hover:underline"
+              >
+                Request a new confirmation email
+              </Link>
+            }
+          >
+            {linkError}
+          </Alert>
+        )}
+
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
             <Label htmlFor="email">Email</Label>
@@ -80,7 +117,15 @@ function LoginForm() {
             />
           </div>
           <div>
-            <Label htmlFor="password">Password</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">Password</Label>
+              <Link
+                href="/forgot-password"
+                className="mb-1.5 text-xs font-medium text-signal-cyan hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
             <Input
               id="password"
               type="password"

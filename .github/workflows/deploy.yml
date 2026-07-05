@@ -60,6 +60,38 @@ jobs:
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
 
+      # Catch a misconfigured Supabase URL (e.g. …/rest/v1) early. Validates the
+      # FORMAT only — it never prints the value. Skips when the secret is absent
+      # (e.g. fork PRs); presence is enforced separately in the production job.
+      - name: Validate NEXT_PUBLIC_SUPABASE_URL format
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        run: |
+          node - <<'NODE'
+          const raw = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
+          if (!raw) {
+            console.log("NEXT_PUBLIC_SUPABASE_URL not set for this job — skipping format check.");
+            process.exit(0);
+          }
+          let url;
+          try {
+            url = new URL(raw);
+          } catch {
+            console.error("NEXT_PUBLIC_SUPABASE_URL is not a valid URL.");
+            process.exit(1);
+          }
+          const badPaths = ["/rest/v1", "/auth/v1", "/storage/v1"];
+          if (badPaths.some((p) => url.pathname.startsWith(p))) {
+            console.error("NEXT_PUBLIC_SUPABASE_URL is invalid. Use the Supabase project base URL only, e.g. https://project-ref.supabase.co. Do not include /rest/v1, /auth/v1, or /storage/v1.");
+            process.exit(1);
+          }
+          if (url.pathname !== "/" && url.pathname !== "") {
+            console.error("NEXT_PUBLIC_SUPABASE_URL must not include a path. Use only https://project-ref.supabase.co.");
+            process.exit(1);
+          }
+          console.log("NEXT_PUBLIC_SUPABASE_URL format OK (base project URL, no path).");
+          NODE
+
       - name: Install web dependencies
         working-directory: apps/web
         run: npm ci
@@ -166,6 +198,37 @@ jobs:
           if [ "$missing" -ne 0 ]; then
             exit 1
           fi
+
+      # Reject a path-included Supabase URL (…/rest/v1) before the preview
+      # deploy. Never prints the value; skips when the secret is absent.
+      - name: Validate NEXT_PUBLIC_SUPABASE_URL format (preview)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        run: |
+          node - <<'NODE'
+          const raw = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
+          if (!raw) {
+            console.log("NEXT_PUBLIC_SUPABASE_URL not set for this job — skipping format check.");
+            process.exit(0);
+          }
+          let url;
+          try {
+            url = new URL(raw);
+          } catch {
+            console.error("NEXT_PUBLIC_SUPABASE_URL is not a valid URL.");
+            process.exit(1);
+          }
+          const badPaths = ["/rest/v1", "/auth/v1", "/storage/v1"];
+          if (badPaths.some((p) => url.pathname.startsWith(p))) {
+            console.error("NEXT_PUBLIC_SUPABASE_URL is invalid. Use the Supabase project base URL only, e.g. https://project-ref.supabase.co. Do not include /rest/v1, /auth/v1, or /storage/v1.");
+            process.exit(1);
+          }
+          if (url.pathname !== "/" && url.pathname !== "") {
+            console.error("NEXT_PUBLIC_SUPABASE_URL must not include a path. Use only https://project-ref.supabase.co.");
+            process.exit(1);
+          }
+          console.log("NEXT_PUBLIC_SUPABASE_URL format OK (base project URL, no path).");
+          NODE
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
@@ -319,6 +382,37 @@ jobs:
             echo "Set SUPABASE_SERVICE_ROLE_KEY (server-side only) so Route Handlers can own wallet mutations."
             exit 1
           fi
+
+      # Format gate: reject a path-included Supabase URL (…/rest/v1) before we
+      # ever ship it to production. Never prints the value.
+      - name: Validate NEXT_PUBLIC_SUPABASE_URL format (production)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        run: |
+          node - <<'NODE'
+          const raw = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
+          if (!raw) {
+            console.error("Missing required secret: NEXT_PUBLIC_SUPABASE_URL");
+            process.exit(1);
+          }
+          let url;
+          try {
+            url = new URL(raw);
+          } catch {
+            console.error("NEXT_PUBLIC_SUPABASE_URL is not a valid URL.");
+            process.exit(1);
+          }
+          const badPaths = ["/rest/v1", "/auth/v1", "/storage/v1"];
+          if (badPaths.some((p) => url.pathname.startsWith(p))) {
+            console.error("NEXT_PUBLIC_SUPABASE_URL is invalid. Use the Supabase project base URL only, e.g. https://project-ref.supabase.co. Do not include /rest/v1, /auth/v1, or /storage/v1.");
+            process.exit(1);
+          }
+          if (url.pathname !== "/" && url.pathname !== "") {
+            console.error("NEXT_PUBLIC_SUPABASE_URL must not include a path. Use only https://project-ref.supabase.co.");
+            process.exit(1);
+          }
+          console.log("NEXT_PUBLIC_SUPABASE_URL format OK (base project URL, no path).");
+          NODE
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest

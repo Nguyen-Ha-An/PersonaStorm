@@ -191,7 +191,7 @@ key needed.
 | `SUPABASE_SERVICE_ROLE_KEY` | — | **secret** — server-side only; bypasses RLS, owns wallet mutations. Never `NEXT_PUBLIC_`, never in the browser. |
 | `SUPABASE_JWT_SECRET` | — | **secret** — HS256 secret to verify access tokens offline. If unset, tokens are validated remotely via Supabase GoTrue. |
 | `API_ENV` | `dev` | set `prod` to refuse unverified tokens when the JWT secret is missing. |
-| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | — | frontend Supabase client (anon key only). Required for login/signup in production. |
+| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | — | frontend Supabase client (anon key only). Required for login/signup in production. **`NEXT_PUBLIC_SUPABASE_URL` must be the project *base* URL** (`https://project-ref.supabase.co`) — **not** `…/rest/v1` or any path, or signup/login 404 with "Invalid path specified in request URL". Validated at app load and in CI. |
 | ~~`BACKEND_API_BASE`~~ / ~~`NEXT_PUBLIC_API_BASE`~~ | **removed** | No longer used. The API is same-origin Next.js Route Handlers on Vercel — there is no external backend URL. |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_FULL_NAME` | — | used by `scripts/create_admin_user.py` to bootstrap the first admin. |
 

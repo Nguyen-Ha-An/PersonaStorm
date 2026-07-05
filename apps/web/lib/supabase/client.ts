@@ -6,32 +6,44 @@
  * localStorage and auto-refreshes the access token.
  *
  * Env is read at build time and inlined into the bundle:
- *   NEXT_PUBLIC_SUPABASE_URL
+ *   NEXT_PUBLIC_SUPABASE_URL   (validated/normalized in ./config)
  *   NEXT_PUBLIC_SUPABASE_ANON_KEY
  *
- * When either is missing we return a null client and expose SUPABASE_CONFIGURED
- * so the UI can show a clear "auth is not configured" message instead of
- * crashing — the production build still succeeds.
+ * The URL is normalized/validated in ./config so a path-included value (e.g.
+ * …/rest/v1) is caught with a clear message. When the URL is missing or
+ * invalid, or the anon key is missing, we return a null client and expose
+ * SUPABASE_CONFIGURED / SUPABASE_MISCONFIGURED so the UI can show the right
+ * message instead of crashing — the production build still succeeds.
  */
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import {
+  SUPABASE_ANON_KEY,
+  SUPABASE_CONFIGURED,
+  SUPABASE_CONFIG_ERROR,
+  SUPABASE_MISCONFIGURED,
+  SUPABASE_URL,
+  SUPABASE_URL_ERROR,
+  SUPABASE_URL_MISCONFIG_MESSAGE,
+  friendlySupabaseError,
+} from "./config";
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
-
-export const SUPABASE_CONFIGURED = Boolean(url && anonKey);
-
-export const SUPABASE_CONFIG_ERROR =
-  "Authentication is not configured. Set NEXT_PUBLIC_SUPABASE_URL and " +
-  "NEXT_PUBLIC_SUPABASE_ANON_KEY in your environment (Vercel → Settings → " +
-  "Environment Variables) to enable login.";
+// Re-export the public config surface so existing importers keep working.
+export {
+  SUPABASE_CONFIGURED,
+  SUPABASE_CONFIG_ERROR,
+  SUPABASE_MISCONFIGURED,
+  SUPABASE_URL_ERROR,
+  SUPABASE_URL_MISCONFIG_MESSAGE,
+  friendlySupabaseError,
+};
 
 let cached: SupabaseClient | null = null;
 
 export function getSupabaseClient(): SupabaseClient | null {
-  if (!SUPABASE_CONFIGURED) return null;
+  if (!SUPABASE_CONFIGURED || !SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
   if (!cached) {
-    cached = createClient(url as string, anonKey as string, {
+    cached = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,

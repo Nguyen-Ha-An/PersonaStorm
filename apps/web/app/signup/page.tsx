@@ -7,6 +7,7 @@ import { AuthShell } from "@/components/AuthShell";
 import { Alert } from "@/components/feedback";
 import { Button, Card, Input, Label } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
+import { SUPABASE_MISCONFIGURED, SUPABASE_URL_ERROR } from "@/lib/supabase/client";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -74,12 +75,23 @@ export default function SignupPage() {
           to run your first storm.
         </p>
 
-        {!configured && (
-          <Alert tone="yellow" title="Authentication is not configured" className="mt-5">
-            Set <span className="font-mono text-storm-100">NEXT_PUBLIC_SUPABASE_URL</span> and{" "}
-            <span className="font-mono text-storm-100">NEXT_PUBLIC_SUPABASE_ANON_KEY</span> to enable
-            signup.
+        {SUPABASE_MISCONFIGURED ? (
+          <Alert tone="red" title="Supabase URL is misconfigured" className="mt-5">
+            {SUPABASE_URL_ERROR}
+            <span className="mt-2 block font-mono text-xs text-storm-300">
+              Correct: https://project-ref.supabase.co
+              <br />
+              Wrong: https://project-ref.supabase.co/rest/v1
+            </span>
           </Alert>
+        ) : (
+          !configured && (
+            <Alert tone="yellow" title="Authentication is not configured" className="mt-5">
+              Set <span className="font-mono text-storm-100">NEXT_PUBLIC_SUPABASE_URL</span> and{" "}
+              <span className="font-mono text-storm-100">NEXT_PUBLIC_SUPABASE_ANON_KEY</span> to enable
+              signup.
+            </Alert>
+          )
         )}
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">

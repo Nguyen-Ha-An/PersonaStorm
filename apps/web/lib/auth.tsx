@@ -18,8 +18,19 @@ import {
 } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getMe } from "./api";
-import { SUPABASE_CONFIGURED, getSupabaseClient } from "./supabase/client";
+import {
+  SUPABASE_CONFIGURED,
+  SUPABASE_MISCONFIGURED,
+  SUPABASE_URL_MISCONFIG_MESSAGE,
+  friendlySupabaseError,
+  getSupabaseClient,
+} from "./supabase/client";
 import type { Me } from "./types";
+
+/** The message shown when auth can't be used because env is missing/misconfigured. */
+const AUTH_UNAVAILABLE_MESSAGE = SUPABASE_MISCONFIGURED
+  ? SUPABASE_URL_MISCONFIG_MESSAGE
+  : "Authentication is not configured.";
 
 interface SignUpResult {
   error?: string;
@@ -95,22 +106,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(
     async (email: string, password: string) => {
-      if (!supabase) return { error: "Authentication is not configured." };
+      if (!supabase) return { error: AUTH_UNAVAILABLE_MESSAGE };
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      return error ? { error: error.message } : {};
+      // Map a path-included Supabase URL (…/rest/v1 → 404 "Invalid path
+      // specified in request URL") to a clear, actionable message.
+      return error ? { error: friendlySupabaseError(error.message) } : {};
     },
     [supabase],
   );
 
   const signUp = useCallback(
     async (email: string, password: string, fullName?: string): Promise<SignUpResult> => {
-      if (!supabase) return { error: "Authentication is not configured." };
+      if (!supabase) return { error: AUTH_UNAVAILABLE_MESSAGE };
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: { data: fullName ? { full_name: fullName } : undefined },
       });
-      if (error) return { error: error.message };
+      if (error) return { error: friendlySupabaseError(error.message) };
       // If email confirmation is required, there's no active session yet.
       return { needsConfirmation: !data.session };
     },

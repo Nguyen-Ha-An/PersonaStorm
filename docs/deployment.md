@@ -127,8 +127,23 @@ total_credits = base_run_credits
 
 | Variable | Required | Purpose |
 |---|---:|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | yes | Supabase project URL (browser auth client) |
+| `NEXT_PUBLIC_SUPABASE_URL` | yes | Supabase **project base URL** (browser auth client) — base origin only, no path |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Supabase **anon** key (never the service role key) |
+
+> **⚠️ `NEXT_PUBLIC_SUPABASE_URL` must be the project *base* URL — no path.**
+> Use the value from Supabase → Project Settings → API → "Project URL". Do
+> **not** append `/rest/v1`, `/auth/v1`, or `/storage/v1` — supabase-js builds
+> those sub-paths itself, and a path here makes it call e.g.
+> `POST …/rest/v1/auth/v1/signup` → **404 "Invalid path specified in request
+> URL"** on signup/login.
+>
+> - ✅ Correct: `https://project-ref.supabase.co`
+> - ❌ Wrong: `https://project-ref.supabase.co/rest/v1`
+>
+> This is now guarded in three places: the app validates and normalizes the URL
+> at load (`apps/web/lib/supabase/config.ts`) and shows a fix-it message, and the
+> GitHub Actions workflow fails the build/deploy if the format is wrong (it never
+> prints the value).
 
 ### Server-side (Vercel — read at request time by Route Handlers, never in the browser)
 

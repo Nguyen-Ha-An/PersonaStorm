@@ -361,6 +361,44 @@ Without a token, protected routes return `401 {"detail":"Missing authentication 
 
 ---
 
+## Security hardening backlog
+
+Findings from the July 2026 security review that were deliberately deferred
+(nothing here is a known-exploitable vulnerability; Critical/High items were
+fixed at review time):
+
+- **Content-Security-Policy** — not set yet. App Router inline hydration
+  scripts and the Supabase browser client need a nonce/hash-based policy
+  (`connect-src 'self' https://<project-ref>.supabase.co`); roll it out in
+  `Content-Security-Policy-Report-Only` mode first. The other baseline headers
+  (HSTS, nosniff, frame deny, referrer, permissions) are set in
+  `apps/web/next.config.mjs`.
+- **Real rate limiting** — `storm/create` refuses a second concurrent run per
+  user (see `assertNoActiveRun` in `apps/web/lib/server/stormStore.ts`), but
+  there is no token-bucket limiter on `storm/create`, `billing/quote`, or the
+  admin wallet-adjust route. Add a per-user/IP limiter (e.g. Upstash Redis)
+  when infra allows.
+- **SSE stream token** — the stream route accepts the session JWT as
+  `?access_token=` (EventSource cannot set headers), which lands in access
+  logs. Replace with a short-lived, storm-scoped signed token minted at
+  stream-start, or redact the param from platform logs.
+- **Last-admin demotion race** — the guard in
+  `apps/web/app/api/admin/users/[id]/role/route.ts` counts admins and then
+  writes without a transaction; two concurrent demotions could drop the system
+  to zero admins. Enforce the invariant in the DB (RPC or trigger).
+- **GitHub Actions SHA pinning** — third-party actions are pinned by major tag
+  (`actions/checkout@v4`, `supabase/setup-cli@v1`, …), not commit SHA. The
+  Vercel CLI is now pinned to an exact version; pin actions to SHAs next and
+  bump via Dependabot.
+- **Next.js major upgrade** — `next@14.2.35` is the last-patched 14.2.x; the
+  remaining npm-audit advisories (RSC DoS/cache-poisoning class; none of the
+  affected features — middleware, next/image, rewrites, i18n — are used here)
+  are only fixed in Next 16. Plan the major upgrade.
+- **Legacy `apps/api` service** (not deployed to production): JWT `iss` claim
+  not verified, `/docs` + `/openapi.json` exposed without auth, and PostgREST
+  filters built by f-string interpolation (no working injection found). Harden
+  or remove if the service is ever hosted again.
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |

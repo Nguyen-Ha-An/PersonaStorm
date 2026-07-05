@@ -202,7 +202,7 @@ class MockPersonaProvider(PersonaInferenceProvider):
         category: str | None = None,
     ) -> PersonaReaction:
         f = features or parse_stimulus(stimulus, title="", stimulus_type=stimulus_type)
-        stim_hash = hashlib.sha1(stimulus.encode()).hexdigest()[:10]
+        stim_hash = hashlib.sha1(stimulus.encode(), usedforsecurity=False).hexdigest()[:10]
         rng = random.Random(f"{self.seed}:{persona.persona_id}:{stim_hash}")
 
         # The run's authoritative category (explicit override or auto-detected

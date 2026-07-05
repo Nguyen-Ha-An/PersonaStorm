@@ -57,8 +57,53 @@ export interface StreamData {
 
 export function newStormId(): string {
   const g = globalThis as { crypto?: { randomUUID?: () => string } };
-  const hex = g.crypto?.randomUUID ? g.crypto.randomUUID().replace(/-/g, "") : Date.now().toString(16) + Math.floor(1e12).toString(16);
-  return `storm_${hex.slice(0, 12)}`;
+  const hex = g.crypto?.randomUUID
+    ? g.crypto.randomUUID().replace(/-/g, "")
+    : Date.now().toString(16) + Math.floor(Math.random() * 1e12).toString(16);
+  return `storm_${hex}`;
+}
+
+/**
+ * storm_runs.error is shown to the run owner (report page, GET /storm/[id],
+ * SSE error event). Raw exception text can carry provider response bodies or
+ * env-var names, so only a curated, user-safe reason is ever persisted — the
+ * verbatim message goes to the server log alone.
+ */
+function publicFailureReason(err: unknown): string {
+  if (err instanceof SupabaseError) return "Storage backend unavailable while saving the run.";
+  const msg = err instanceof Error ? err.message : String(err);
+  if (/NVIDIA_API_KEY|INFERENCE_PROVIDER|ANALYST_PROVIDER|not (set|configured)/i.test(msg)) {
+    return "The inference provider is not configured on the server.";
+  }
+  if (/timeout|timed out|aborted|ECONNRESET|fetch failed/i.test(msg)) {
+    return "The run timed out or lost the connection to the inference provider.";
+  }
+  return "Internal error while running the storm.";
+}
+
+/**
+ * Minimal concurrency guardrail: one running storm per user. Runs are
+ * synchronous and capped by the route's maxDuration, so a 'running' row older
+ * than STALE_RUNNING_MS is a crashed invocation and must not lock the user out.
+ *
+ * TODO(rate-limiting): this is not real rate limiting. Add a per-user/IP
+ * token-bucket (e.g. Upstash Redis) in front of storm create, billing quote,
+ * and admin wallet-adjust once an infra choice is made — see
+ * docs/deployment.md "Security hardening backlog".
+ */
+const STALE_RUNNING_MS = 3 * 60 * 1000;
+
+async function assertNoActiveRun(gateway: Gateway, userId: string): Promise<void> {
+  const recent = await gateway.listUserStorms(userId, 5);
+  const now = Date.now();
+  const active = recent.find(
+    (r) =>
+      r.status === "running" &&
+      now - new Date(String(r.created_at ?? 0)).getTime() < STALE_RUNNING_MS,
+  );
+  if (active) {
+    throw new HttpError(429, "You already have a storm running. Wait for it to finish before starting another.");
+  }
 }
 
 /**
@@ -71,6 +116,9 @@ export async function createAndRunStorm(
   payload: CreateStormPayload,
   cfg: ServerConfig = getConfig(),
 ): Promise<StormCreateResult> {
+  // 0) refuse a second concurrent run for the same user (cost-amplification guardrail).
+  await assertNoActiveRun(gateway, user.id);
+
   // 1) price the run (analyst report always included at create time).
   const rule = await getPricingRule(gateway);
   const quote = quotePrice(rule, payload.persona_count, true);
@@ -139,7 +187,7 @@ export async function createAndRunStorm(
     console.error(`[personastorm storm] run ${stormId} failed, refunding:`, (err as Error).message);
     try {
       await refundStorm(gateway, user.id, quote.total_credits, stormId, `Refund — storm ${stormId} failed`);
-      await gateway.updateStorm(stormId, { status: "failed", error: String((err as Error).message).slice(0, 1000) });
+      await gateway.updateStorm(stormId, { status: "failed", error: publicFailureReason(err) });
     } catch (refundErr) {
       console.error(`[personastorm storm] refund after failed run also failed for ${stormId}:`, (refundErr as Error).message);
     }

@@ -39,6 +39,13 @@ export function getSiteUrl(): string {
     return stripTrailingSlash(window.location.origin);
   }
 
+  // Reaching here in a production server context means auth emails would link
+  // to localhost — loud failure beats a silent one.
+  if (process.env.NODE_ENV === "production") {
+    console.error(
+      "[personastorm] getSiteUrl() fell back to localhost in production — set NEXT_PUBLIC_SITE_URL.",
+    );
+  }
   return LOCAL_FALLBACK;
 }
 

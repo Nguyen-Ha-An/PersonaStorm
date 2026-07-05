@@ -14,6 +14,12 @@ ENV DATA_DIR=/data \
     RUNS_DIR=/data/runs \
     PYTHONUNBUFFERED=1
 
+# Drop root: the service only needs to read /app and write /data/runs.
+RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p /data/runs \
+    && chown -R appuser:appuser /data
+USER appuser
+
 EXPOSE 8000
 # Shell form (not exec form) so $PORT expands — Render/Railway inject PORT and
 # expect the process to bind to it; falls back to 8000 for local `docker run`.

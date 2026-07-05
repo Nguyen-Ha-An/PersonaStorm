@@ -28,6 +28,7 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 ADMIN_GRANT = 10_000
@@ -65,7 +66,9 @@ def _find_user_id_by_email(base: str, key: str, email: str) -> str | None:
     # The trigger writes a profile row (with email) at signup, so PostgREST is
     # the simplest way to resolve an existing user id.
     status, rows = _request(
-        "GET", f"{base}/rest/v1/profiles?email=eq.{email}&select=id&limit=1", key
+        "GET",
+        f"{base}/rest/v1/profiles?email=eq.{urllib.parse.quote(email, safe='')}&select=id&limit=1",
+        key,
     )
     if status < 300 and isinstance(rows, list) and rows:
         return rows[0]["id"]
@@ -97,6 +100,11 @@ def main() -> None:
     ]
     if missing:
         _fail(f"Missing required environment variables: {', '.join(missing)}")
+
+    # The service role key rides in these requests — refuse plaintext transport
+    # (http://localhost is fine for a local Supabase stack).
+    if not (base.startswith("https://") or base.startswith("http://localhost") or base.startswith("http://127.0.0.1")):
+        _fail("SUPABASE_URL must be https:// (or a local http://localhost stack).")
 
     print(f"→ Bootstrapping admin for {email} on {base}")
 

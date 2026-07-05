@@ -174,7 +174,9 @@ jobs:
           fi
 
       - name: Install Vercel CLI
-        run: npm install --global vercel@latest
+        # Pinned exact version: this job holds deploy + Supabase secrets, so an
+        # unpinned "latest" CLI is a supply-chain risk. Bump deliberately via PR.
+        run: npm install --global vercel@54.20.1
 
       - name: Prepare Vercel scope argument
         run: |
@@ -262,6 +264,9 @@ jobs:
           name: vercel-preview-deploy-log
           path: apps/web/vercel-deploy.log
           if-no-files-found: ignore
+          # Raw CLI output could one day include sensitive values we don't
+          # control — keep the debugging window short.
+          retention-days: 7
 
   # Push to main / manual dispatch only: deploy the Vercel PRODUCTION build.
   # Waits on supabase-deploy so the database is already migrated before the
@@ -389,7 +394,9 @@ jobs:
           NODE
 
       - name: Install Vercel CLI
-        run: npm install --global vercel@latest
+        # Pinned exact version: this job holds deploy + Supabase secrets, so an
+        # unpinned "latest" CLI is a supply-chain risk. Bump deliberately via PR.
+        run: npm install --global vercel@54.20.1
 
       - name: Prepare Vercel scope argument
         run: |
@@ -486,3 +493,6 @@ jobs:
           name: vercel-deploy-log
           path: apps/web/vercel-deploy.log
           if-no-files-found: ignore
+          # Raw CLI output could one day include sensitive values we don't
+          # control — keep the debugging window short.
+          retention-days: 7

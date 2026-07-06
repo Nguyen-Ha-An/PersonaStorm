@@ -98,8 +98,8 @@ export default function ResetPasswordPage() {
     return (
       <AuthShell>
         <Card className="p-7 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-signal-yellow/40 bg-signal-yellow/10">
-            <svg viewBox="0 0 24 24" className="h-6 w-6 text-signal-yellow" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-accent-risk/40 bg-accent-risk/10">
+            <svg viewBox="0 0 24 24" className="h-6 w-6 text-accent-risk" fill="none" stroke="currentColor" strokeWidth="1.8">
               <path d="M12 9v4m0 4h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.42 0Z" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
@@ -119,10 +119,11 @@ export default function ResetPasswordPage() {
     return (
       <AuthShell>
         <Card className="p-7 text-center">
-          <span className="relative mx-auto flex h-3 w-3">
-            <span className="absolute inline-flex h-full w-full animate-pulseglow rounded-full bg-signal-cyan opacity-60" />
-            <span className="relative inline-flex h-3 w-3 rounded-full bg-signal-cyan" />
-          </span>
+          <span
+            className="mx-auto block h-6 w-6 animate-spin rounded-full border-2 border-storm-700 border-t-storm-300"
+            role="status"
+            aria-label="Verifying your reset link"
+          />
           <p className="mt-4 text-sm text-storm-300">Verifying your reset link…</p>
         </Card>
       </AuthShell>

@@ -3,7 +3,7 @@
 import clsx from "clsx";
 import { Button } from "@/components/ui";
 import { DataTable, type Column } from "./DataTable";
-import { formatDate } from "@/lib/format";
+import { formatCredits, formatDate, formatNumberCompact } from "@/lib/format";
 import type { AdminUser } from "@/lib/types";
 
 export function AdminUserTable({
@@ -23,8 +23,15 @@ export function AdminUserTable({
       header: "User",
       cell: (u) => (
         <div className="min-w-0">
-          <p className="truncate font-medium text-storm-100">{u.full_name || u.email || "—"}</p>
-          <p className="truncate text-xs text-storm-500">{u.email}</p>
+          <p
+            className={clsx(
+              "truncate",
+              u.full_name ? "font-medium text-storm-100" : "font-mono text-sm text-storm-500",
+            )}
+          >
+            {u.full_name || "no name"}
+          </p>
+          <p className="truncate text-xs text-storm-500">{u.email || "—"}</p>
         </div>
       ),
     },
@@ -34,13 +41,13 @@ export function AdminUserTable({
       cell: (u) => (
         <span
           className={clsx(
-            "rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+            "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
             u.role === "admin"
-              ? "border-signal-cyan/40 bg-signal-cyan/10 text-signal-cyan"
-              : "border-storm-700 bg-storm-850 text-storm-300",
+              ? "border-storm-600 bg-storm-800 text-storm-100"
+              : "border-storm-700 bg-storm-850 text-storm-400",
           )}
         >
-          {u.role}
+          {u.role === "admin" ? "Admin" : "User"}
         </span>
       ),
     },
@@ -48,19 +55,19 @@ export function AdminUserTable({
       key: "balance",
       header: "Balance",
       align: "right",
-      cell: (u) => <span className="font-mono text-storm-100">{u.balance_credits.toLocaleString()}</span>,
+      cell: (u) => <span className="font-medium text-storm-100">{formatCredits(u.balance_credits)}</span>,
     },
     {
       key: "storms",
       header: "Storms",
       align: "right",
-      cell: (u) => <span className="font-mono text-storm-300">{u.total_storms}</span>,
+      cell: (u) => <span className="text-storm-300">{formatNumberCompact(u.total_storms)}</span>,
     },
     {
       key: "spent",
       header: "Spent",
       align: "right",
-      cell: (u) => <span className="font-mono text-storm-300">{u.total_spent_credits.toLocaleString()}</span>,
+      cell: (u) => <span className="text-storm-300">{formatCredits(u.total_spent_credits)}</span>,
     },
     {
       key: "joined",

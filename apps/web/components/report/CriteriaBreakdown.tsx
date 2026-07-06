@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Card, CardHeader } from "@/components/ui";
 import type { CriterionBreakdown, StormReport } from "@/lib/types";
-import { effectiveScore, toneFor, TONE_RGB, TONE_TEXT, pct } from "./criteria-helpers";
+import { formatPercent } from "@/lib/format";
+import { effectiveScore, toneFor, TONE_RGB, TONE_TEXT } from "./criteria-helpers";
 
 /**
  * Horizontal bars for all 17 criteria. Top-5 by weight shown first; the rest
@@ -35,13 +36,9 @@ export function CriteriaBreakdown({ report }: { report: StormReport }) {
             type="button"
             onClick={() => setExpanded((v) => !v)}
             aria-expanded={expanded}
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-storm-700 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-storm-300 transition-colors hover:border-signal-cyan/60 hover:text-white"
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-storm-700 px-4 py-2.5 text-xs font-medium text-storm-300 transition-colors hover:border-storm-500 hover:bg-storm-850 hover:text-storm-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60"
           >
-            {expanded ? (
-              <>Collapse ▲</>
-            ) : (
-              <>Show all {all.length} criteria ▼</>
-            )}
+            {expanded ? <>Collapse ▲</> : <>Show all {all.length} criteria ▼</>}
           </button>
         </div>
       )}
@@ -61,14 +58,14 @@ function CriterionRow({ c }: { c: CriterionBreakdown }) {
         <p className="flex items-center gap-2 text-sm font-medium text-storm-200">
           {c.label}
           {!c.higher_is_better && (
-            <span className="rounded border border-storm-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-storm-400">
+            <span className="rounded border border-storm-600 px-1.5 py-0.5 text-[10px] font-medium text-storm-400">
               barrier
             </span>
           )}
         </p>
-        <div className="flex shrink-0 items-baseline gap-2 font-mono text-xs">
-          <span className="text-storm-400">w {pct(c.weight)}</span>
-          <span className={`text-sm font-bold ${TONE_TEXT[tone]}`}>{pct(c.average_score)}</span>
+        <div className="flex shrink-0 items-baseline gap-2 text-xs">
+          <span className="text-storm-400">w {formatPercent(c.weight)}</span>
+          <span className={`text-sm font-semibold ${TONE_TEXT[tone]}`}>{formatPercent(c.average_score)}</span>
         </div>
       </div>
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-storm-800">

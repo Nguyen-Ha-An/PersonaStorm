@@ -1,4 +1,3 @@
-import { Card, CardHeader } from "@/components/ui";
 import type { StormReport } from "@/lib/types";
 import { byId } from "./criteria-helpers";
 import { CriterionStat } from "./CriterionStat";
@@ -11,12 +10,13 @@ export function TrustProofPanel({ report }: { report: StormReport }) {
   if (!trust && !proof) return null;
 
   return (
-    <Card>
-      <CardHeader title="Trust & proof" hint="believability" />
-      <div className="space-y-2.5 p-4">
-        <CriterionStat criterion={trust} labelOverride="Trust in claims" />
-        <CriterionStat criterion={proof} labelOverride="Proof requirement" />
+    <div className="flex flex-col gap-2.5 rounded-lg border border-storm-800/70 bg-storm-900/40 p-4">
+      <div>
+        <p className="text-sm font-semibold text-storm-100">Trust &amp; proof</p>
+        <p className="text-xs text-storm-400">Believability</p>
       </div>
-    </Card>
+      <CriterionStat criterion={trust} labelOverride="Trust in claims" />
+      <CriterionStat criterion={proof} labelOverride="Proof requirement" />
+    </div>
   );
 }

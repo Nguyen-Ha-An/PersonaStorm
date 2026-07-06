@@ -5,25 +5,27 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { Button, Card, CardHeader, SectionRule, Skeleton } from "@/components/ui";
+import { InsightCard } from "@/components/ui/InsightCard";
 import { ErrorState } from "@/components/feedback";
 import { MarketFitHero } from "@/components/report/MarketFitHero";
+import { TrustPanel } from "@/components/report/TrustPanel";
 import { BlockerCards } from "@/components/report/BlockerCards";
+import { StrengthCards } from "@/components/report/StrengthCards";
 import { CriteriaRadar } from "@/components/report/CriteriaRadar";
 import { CriteriaBreakdown } from "@/components/report/CriteriaBreakdown";
-import { StrengthCards } from "@/components/report/StrengthCards";
-import { AgeCohortBreakdown } from "@/components/report/AgeCohortBreakdown";
 import { TrustProofPanel } from "@/components/report/TrustProofPanel";
 import { DifferentiationPanel } from "@/components/report/DifferentiationPanel";
 import { PricingFitPanel } from "@/components/report/PricingFitPanel";
 import { WorkflowFitPanel } from "@/components/report/WorkflowFitPanel";
-import { NextValidationPanel } from "@/components/report/NextValidationPanel";
-import { KillQuoteCard } from "@/components/report/KillQuoteCard";
-import { ObjectionsTable } from "@/components/report/ObjectionsTable";
 import { PriceCurve } from "@/components/report/PriceCurve";
-import { Recommendations } from "@/components/report/Recommendations";
 import { SegmentHeatmap } from "@/components/report/SegmentHeatmap";
-import { TrustPanel } from "@/components/report/TrustPanel";
+import { AgeCohortBreakdown } from "@/components/report/AgeCohortBreakdown";
+import { ObjectionsTable } from "@/components/report/ObjectionsTable";
+import { KillQuoteCard } from "@/components/report/KillQuoteCard";
+import { Recommendations } from "@/components/report/Recommendations";
+import { NextValidationPanel } from "@/components/report/NextValidationPanel";
 import { getReport } from "@/lib/api";
+import { formatNumberCompact } from "@/lib/format";
 import type { StormReport } from "@/lib/types";
 
 const MARKET_LABELS: Record<string, string> = {
@@ -35,6 +37,16 @@ const MARKET_LABELS: Record<string, string> = {
   early_adopters: "Early adopters",
   custom: "Custom segment",
 };
+
+/** Small neutral spinner for transitional loading — not the brand pulse dot. */
+function Spinner() {
+  return (
+    <svg className="h-4 w-4 animate-spin text-storm-400" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+      <path className="opacity-80" d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 export default function ReportPage() {
   const params = useParams<{ id: string }>();
@@ -93,7 +105,7 @@ export default function ReportPage() {
           message={error}
           onRetry={retry}
           homeHref="/storm/new"
-          homeLabel="Run a new storm"
+          homeLabel="Run a new simulation"
         />
       </DashboardShell>
     );
@@ -101,12 +113,10 @@ export default function ReportPage() {
 
   if (!report) {
     return (
-      <DashboardShell title="Market evaluation" subtitle="aggregating swarm signal…">
-        <div className="mb-6 flex items-center gap-3">
-          <span className="h-2 w-2 animate-pulseglow rounded-full bg-signal-cyan" />
-          <p className="font-mono text-sm uppercase tracking-[0.2em] text-signal-cyan">
-            aggregating swarm signal…
-          </p>
+      <DashboardShell title="Market evaluation" subtitle="Aggregating swarm signal…">
+        <div className="mb-6 flex items-center gap-2.5 text-sm text-storm-300">
+          <Spinner />
+          <span>Aggregating swarm signal…</span>
         </div>
         <p className="mb-8 text-xs text-storm-400">
           If the storm is still streaming, this page fills in automatically when it finishes.
@@ -127,11 +137,11 @@ export default function ReportPage() {
   const actions = (
     <div className="flex gap-2">
       <Button variant="outline" size="sm" onClick={downloadJson}>
-        ⬇ JSON
+        <span aria-hidden>⬇</span> JSON
       </Button>
       <Link href="/storm/new" className="hidden sm:block">
         <Button variant="outline" size="sm">
-          + New storm
+          <span aria-hidden>+</span> New simulation
         </Button>
       </Link>
     </div>
@@ -140,67 +150,66 @@ export default function ReportPage() {
   return (
     <DashboardShell
       title={report.title}
-      subtitle={`${MARKET_LABELS[report.target_market] ?? report.target_market} · ${report.persona_count.toLocaleString()} personas · ${report.storm_id}`}
+      subtitle={`${MARKET_LABELS[report.target_market] ?? report.target_market} · ${formatNumberCompact(report.persona_count)} personas · ${report.storm_id}`}
       actions={actions}
       width="wide"
     >
-      <div className="space-y-6">
-        <MarketFitHero report={report} />
-
-        <Card>
-          <CardHeader title="Executive summary" />
-          <p className="p-6 text-sm leading-relaxed text-storm-200">{report.summary}</p>
-        </Card>
-
-        <BlockerCards report={report} />
-
-        <SectionRule>criteria diagnosis</SectionRule>
-        <div className="grid gap-6 lg:grid-cols-2">
-          <CriteriaRadar report={report} />
-          <CriteriaBreakdown report={report} />
+      <div className="space-y-8">
+        {/* Tier 1 — hero + the narrative read + calibration, all read before anything else */}
+        <div className="space-y-4">
+          <MarketFitHero report={report} />
+          <InsightCard title="Executive summary" tone="insight">
+            {report.summary}
+          </InsightCard>
+          <TrustPanel report={report} />
         </div>
 
-        <StrengthCards report={report} />
-        <AgeCohortBreakdown report={report} />
-
-        <SectionRule>adoption drivers</SectionRule>
-        <div className="grid gap-6 lg:grid-cols-2">
-          <TrustProofPanel report={report} />
-          <DifferentiationPanel report={report} />
+        {/* Tier 2 — what's driving (or blocking) adoption */}
+        <div className="space-y-4">
+          <SectionRule>What's driving adoption</SectionRule>
+          <BlockerCards report={report} />
+          <StrengthCards report={report} />
         </div>
-        <div className="grid gap-6 lg:grid-cols-2">
-          <PricingFitPanel report={report} />
-          <PriceCurve report={report} />
-        </div>
-        <WorkflowFitPanel report={report} />
 
-        <SectionRule>evidence</SectionRule>
-        <SegmentHeatmap report={report} />
-
-        <Card>
-          <CardHeader title="Segment insights" />
-          <div className="grid gap-3 p-5 sm:grid-cols-2">
-            {report.segments.map((sg) => (
-              <div key={sg.segment} className="rounded-xl border border-storm-800 bg-storm-850 p-4">
-                <div className="flex items-baseline justify-between gap-2">
-                  <p className="text-xs font-semibold leading-snug text-storm-100">{sg.segment}</p>
-                  <span className="shrink-0 font-mono text-xs text-signal-cyan">
-                    {Math.round(sg.adoption_rate * 100)}% adopt
-                  </span>
-                </div>
-                <p className="mt-2 text-xs leading-relaxed text-storm-300">{sg.insight}</p>
-              </div>
-            ))}
+        {/* Tier 3 — criteria diagnosis */}
+        <div className="space-y-4">
+          <SectionRule>Criteria diagnosis</SectionRule>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <CriteriaRadar report={report} />
+            <CriteriaBreakdown report={report} />
           </div>
-        </Card>
+        </div>
 
-        <ObjectionsTable report={report} />
-        <KillQuoteCard report={report} />
+        {/* Tier 4 — criterion deep-dives, merged into one denser grid */}
+        <div className="space-y-4">
+          <SectionRule>Criterion deep-dives</SectionRule>
+          <Card>
+            <CardHeader title="Criterion deep-dives" hint="trust · differentiation · pricing · workflow" />
+            <div className="grid gap-5 p-5 sm:grid-cols-2 xl:grid-cols-4">
+              <TrustProofPanel report={report} />
+              <DifferentiationPanel report={report} />
+              <PricingFitPanel report={report} />
+              <WorkflowFitPanel report={report} />
+            </div>
+          </Card>
+        </div>
 
-        <SectionRule>next steps</SectionRule>
-        <NextValidationPanel report={report} />
-        <Recommendations report={report} />
-        <TrustPanel report={report} />
+        {/* Tier 5 — evidence */}
+        <div className="space-y-4">
+          <SectionRule>Evidence</SectionRule>
+          <PriceCurve report={report} />
+          <SegmentHeatmap report={report} />
+          <AgeCohortBreakdown report={report} />
+          <ObjectionsTable report={report} />
+          <KillQuoteCard report={report} />
+        </div>
+
+        {/* Tier 6 — next steps (the "next validation" hand-off to fieldwork) */}
+        <div className="space-y-4">
+          <SectionRule>Next steps</SectionRule>
+          <Recommendations report={report} />
+          <NextValidationPanel report={report} />
+        </div>
       </div>
     </DashboardShell>
   );

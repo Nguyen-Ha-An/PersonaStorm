@@ -47,8 +47,8 @@ export default function SignupPage() {
     return (
       <AuthShell>
         <Card className="p-7 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-signal-green/40 bg-signal-green/10">
-            <svg viewBox="0 0 24 24" className="h-6 w-6 text-signal-green" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-accent-success/40 bg-accent-success/10">
+            <svg viewBox="0 0 24 24" className="h-6 w-6 text-accent-success" fill="none" stroke="currentColor" strokeWidth="1.8">
               <path d="m5 13 4 4 10-10" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
@@ -71,7 +71,7 @@ export default function SignupPage() {
       <Card className="p-7">
         <h1 className="text-xl font-semibold tracking-tight text-storm-100">Create your account</h1>
         <p className="mt-1 text-sm text-storm-400">
-          Start with <span className="font-semibold text-signal-cyan">100 free credits</span> — enough
+          Start with <span className="font-semibold text-storm-100">100 free credits</span> — enough
           to run your first storm.
         </p>
 
@@ -131,7 +131,10 @@ export default function SignupPage() {
 
         <p className="mt-6 text-center text-sm text-storm-400">
           Already have an account?{" "}
-          <Link href="/login" className="font-medium text-signal-cyan hover:underline">
+          <Link
+            href="/login"
+            className="rounded font-medium text-accent-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60"
+          >
             Log in
           </Link>
         </p>

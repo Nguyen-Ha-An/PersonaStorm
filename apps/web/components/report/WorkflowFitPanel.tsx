@@ -1,4 +1,3 @@
-import { Card, CardHeader } from "@/components/ui";
 import type { StormReport } from "@/lib/types";
 import { byId } from "./criteria-helpers";
 import { CriterionStat } from "./CriterionStat";
@@ -13,14 +12,15 @@ export function WorkflowFitPanel({ report }: { report: StormReport }) {
   if (!workflow && !activation && !switching && !repeat) return null;
 
   return (
-    <Card>
-      <CardHeader title="Workflow & retention" hint="habit fit" />
-      <div className="grid gap-2.5 p-4 sm:grid-cols-2">
-        <CriterionStat criterion={workflow} labelOverride="Workflow fit" />
-        <CriterionStat criterion={activation} labelOverride="Activation likelihood" />
-        <CriterionStat criterion={switching} labelOverride="Switching willingness" />
-        <CriterionStat criterion={repeat} labelOverride="Repeat usage potential" />
+    <div className="flex flex-col gap-2.5 rounded-lg border border-storm-800/70 bg-storm-900/40 p-4">
+      <div>
+        <p className="text-sm font-semibold text-storm-100">Workflow &amp; retention</p>
+        <p className="text-xs text-storm-400">Habit fit</p>
       </div>
-    </Card>
+      <CriterionStat criterion={workflow} labelOverride="Workflow fit" />
+      <CriterionStat criterion={activation} labelOverride="Activation likelihood" />
+      <CriterionStat criterion={switching} labelOverride="Switching willingness" />
+      <CriterionStat criterion={repeat} labelOverride="Repeat usage potential" />
+    </div>
   );
 }

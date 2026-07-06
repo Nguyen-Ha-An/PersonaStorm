@@ -1,11 +1,19 @@
+import clsx from "clsx";
 import { LevelBadge } from "@/components/ui";
 import type { StormReport } from "@/lib/types";
-import { toneFor, TONE_TEXT } from "./criteria-helpers";
+import { formatNumberCompact, formatPercent, formatScore } from "@/lib/format";
+import { toneFor, TONE_TEXT, type ScoreTone } from "./criteria-helpers";
+
+const WASH: Record<ScoreTone, string> = {
+  green: "radial-gradient(ellipse 70% 90% at 12% 0%, rgba(76,195,138,0.16), transparent 60%)",
+  yellow: "radial-gradient(ellipse 70% 90% at 12% 0%, rgba(214,168,79,0.15), transparent 60%)",
+  red: "radial-gradient(ellipse 70% 90% at 12% 0%, rgba(239,106,122,0.16), transparent 60%)",
+};
 
 /**
- * The market-fit diagnosis headline. Big overall score + confidence, with the
+ * The market-fit diagnosis headline. One large score + confidence, with the
  * adoption forecast (green/yellow/red split, buy likelihood, market-fit avg)
- * rendered as an instrument-panel readout so the verdict is unmistakable.
+ * rendered as a calm instrument-panel readout so the verdict is unmistakable.
  */
 export function MarketFitHero({ report }: { report: StormReport }) {
   const overall = report.overall;
@@ -14,65 +22,51 @@ export function MarketFitHero({ report }: { report: StormReport }) {
 
   // Guard: types say overall is always present, but be defensive.
   const scoreRaw = overall?.market_fit_score ?? adoption.average_market_fit_score ?? 0;
-  const scorePct = Math.round(scoreRaw * 100);
   const tone = toneFor(scoreRaw);
   const confidence = overall?.confidence ?? "medium";
 
   const verdict =
-    scoreRaw >= 0.66
+    tone === "green"
       ? "Strong market fit signal"
-      : scoreRaw >= 0.4
+      : tone === "yellow"
         ? "Contested — fit is unproven"
         : "Weak fit — high risk of rejection";
 
-  const pct = (n: number) => Math.round((n / total) * 100);
-
   return (
-    <div className="relative overflow-hidden rounded-xl border border-storm-700/60 bg-storm-900/80 backdrop-blur-sm">
-      {/* radial verdict glow */}
+    <div className="relative overflow-hidden rounded-2xl border border-storm-700 bg-storm-900 p-6 shadow-panel sm:p-8">
+      {/* subtle verdict wash */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-60"
-        style={{
-          background:
-            tone === "green"
-              ? "radial-gradient(ellipse 70% 90% at 12% 0%, rgba(52,211,153,0.16), transparent 60%)"
-              : tone === "yellow"
-                ? "radial-gradient(ellipse 70% 90% at 12% 0%, rgba(251,191,36,0.15), transparent 60%)"
-                : "radial-gradient(ellipse 70% 90% at 12% 0%, rgba(251,113,133,0.16), transparent 60%)",
-        }}
+        className="pointer-events-none absolute inset-0 opacity-70"
+        style={{ background: WASH[tone] }}
       />
 
-      <div className="relative grid gap-6 p-6 lg:grid-cols-[minmax(230px,300px)_1fr] lg:gap-8 lg:p-8">
+      <div className="relative grid gap-8 lg:grid-cols-[minmax(230px,300px)_1fr] lg:gap-10">
         {/* score */}
         <div className="flex flex-col justify-center border-b border-storm-800 pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-8">
-          <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-storm-400">
-            market-fit diagnosis
+          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-storm-400">
+            Market-fit diagnosis
           </p>
           <div className="mt-2 flex items-baseline gap-1">
-            <span className={`text-7xl font-bold leading-none ${TONE_TEXT[tone]}`}>
-              {scorePct}
+            <span className={clsx("text-4xl font-semibold tracking-tight sm:text-5xl", TONE_TEXT[tone])}>
+              {formatScore(scoreRaw)}
             </span>
-            <span className={`text-3xl font-bold ${TONE_TEXT[tone]}`}>%</span>
+            <span className={clsx("text-2xl font-semibold tracking-tight", TONE_TEXT[tone])}>%</span>
           </div>
-          <p className="mt-3 text-sm font-semibold text-white">{verdict}</p>
+          <p className={clsx("mt-3 text-sm font-semibold leading-snug", TONE_TEXT[tone])}>{verdict}</p>
           <div className="mt-3 flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wider text-storm-400">
-              confidence
-            </span>
+            <span className="text-xs font-medium text-storm-400">Confidence</span>
             <LevelBadge level={confidence} />
           </div>
           {report.product_category && (
-            <p className="mt-3 font-mono text-[11px] text-storm-400">
-              category · {report.product_category}
-            </p>
+            <p className="mt-3 text-xs text-storm-400">Category — {report.product_category}</p>
           )}
         </div>
 
         {/* adoption forecast */}
         <div className="flex flex-col justify-center">
-          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-storm-400">
-            adoption forecast · {total.toLocaleString()} personas
+          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-storm-400">
+            Adoption forecast · {formatNumberCompact(total)} personas
           </p>
 
           {/* stacked bar */}
@@ -80,33 +74,42 @@ export function MarketFitHero({ report }: { report: StormReport }) {
             <div
               className="bg-signal-green/85"
               style={{ width: `${(adoption.green / total) * 100}%` }}
-              title={`likely: ${adoption.green}`}
+              title={`Likely: ${adoption.green}`}
             />
             <div
               className="bg-signal-yellow/80"
               style={{ width: `${(adoption.yellow / total) * 100}%` }}
-              title={`unsure: ${adoption.yellow}`}
+              title={`Unsure: ${adoption.yellow}`}
             />
             <div
               className="bg-signal-red/80"
               style={{ width: `${(adoption.red / total) * 100}%` }}
-              title={`unlikely: ${adoption.red}`}
+              title={`Unlikely: ${adoption.red}`}
             />
           </div>
 
           {/* forecast readouts */}
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <Readout label="likely" value={`${adoption.green}`} sub={`${pct(adoption.green)}%`} tone="green" />
-            <Readout label="unsure" value={`${adoption.yellow}`} sub={`${pct(adoption.yellow)}%`} tone="yellow" />
-            <Readout label="unlikely" value={`${adoption.red}`} sub={`${pct(adoption.red)}%`} tone="red" />
             <Readout
-              label="avg buy likelihood"
-              value={`${Math.round(adoption.average_buy_likelihood * 100)}%`}
+              label="Likely"
+              value={formatNumberCompact(adoption.green)}
+              sub={formatPercent(adoption.green / total)}
+              tone="green"
             />
             <Readout
-              label="avg market fit"
-              value={`${Math.round(adoption.average_market_fit_score * 100)}%`}
+              label="Unsure"
+              value={formatNumberCompact(adoption.yellow)}
+              sub={formatPercent(adoption.yellow / total)}
+              tone="yellow"
             />
+            <Readout
+              label="Unlikely"
+              value={formatNumberCompact(adoption.red)}
+              sub={formatPercent(adoption.red / total)}
+              tone="red"
+            />
+            <Readout label="Avg. buy likelihood" value={formatPercent(adoption.average_buy_likelihood)} />
+            <Readout label="Avg. market fit" value={formatPercent(adoption.average_market_fit_score)} />
           </div>
         </div>
       </div>
@@ -132,12 +135,12 @@ function Readout({
         ? "text-signal-yellow"
         : tone === "red"
           ? "text-signal-red"
-          : "text-white";
+          : "text-storm-100";
   return (
     <div className="rounded-lg border border-storm-800 bg-storm-850 px-3 py-2.5">
-      <p className="text-[9px] uppercase leading-tight tracking-wider text-storm-400">{label}</p>
-      <p className={`mt-1 font-mono text-lg font-bold leading-none ${color}`}>{value}</p>
-      {sub && <p className="mt-0.5 font-mono text-[10px] text-storm-400">{sub}</p>}
+      <p className="text-[11px] leading-tight text-storm-400">{label}</p>
+      <p className={clsx("mt-1 text-lg font-semibold leading-none", color)}>{value}</p>
+      {sub && <p className="mt-1 text-[11px] text-storm-400">{sub}</p>}
     </div>
   );
 }

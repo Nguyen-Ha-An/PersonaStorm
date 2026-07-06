@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * Small hand-rolled UI kit (shadcn-style API, zero runtime deps beyond clsx).
  * Decision: shadcn/ui requires its CLI + Radix; for these primitives that's
@@ -8,14 +10,16 @@
  */
 
 import clsx from "clsx";
-import type {
-  ButtonHTMLAttributes,
-  HTMLAttributes,
-  LabelHTMLAttributes,
-  ReactNode,
-  SelectHTMLAttributes,
-  TextareaHTMLAttributes,
-  InputHTMLAttributes,
+import {
+  useEffect,
+  useRef,
+  type ButtonHTMLAttributes,
+  type HTMLAttributes,
+  type LabelHTMLAttributes,
+  type ReactNode,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
+  type InputHTMLAttributes,
 } from "react";
 
 // ── Layout ────────────────────────────────────────────────────────────────
@@ -27,7 +31,7 @@ export function PageShell({
   ...props
 }: HTMLAttributes<HTMLElement>) {
   return (
-    <main className={clsx("mx-auto w-full max-w-7xl px-5 sm:px-6", className)} {...props}>
+    <main className={clsx("mx-auto w-full max-w-[75rem] px-5 sm:px-6", className)} {...props}>
       {children}
     </main>
   );
@@ -51,11 +55,11 @@ export function SectionHeader({
     <div className={clsx("flex flex-wrap items-end justify-between gap-4", className)}>
       <div className="min-w-0">
         {eyebrow ? (
-          <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.22em] text-storm-400">
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-storm-400">
             {eyebrow}
           </p>
         ) : null}
-        <h2 className="text-xl font-semibold tracking-tight text-storm-100 sm:text-2xl">
+        <h2 className="text-base font-semibold tracking-tight text-storm-100 sm:text-lg">
           {title}
         </h2>
         {description ? (
@@ -67,11 +71,11 @@ export function SectionHeader({
   );
 }
 
-/** Thin divider with a mono label — separates dashboard zones. */
+/** Thin divider with an eyebrow label — separates dashboard zones. */
 export function SectionRule({ children }: { children: ReactNode }) {
   return (
     <div className="flex items-center gap-3 pt-2">
-      <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-storm-400">
+      <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-storm-400">
         {children}
       </span>
       <span className="h-px flex-1 bg-storm-800" />
@@ -93,17 +97,16 @@ export function Button({
   return (
     <button
       className={clsx(
-        "inline-flex items-center justify-center gap-2 rounded-lg font-semibold",
-        "transition-all duration-150 focus-visible:outline-none focus-visible:ring-2",
-        "focus-visible:ring-signal-cyan/60 focus-visible:ring-offset-2 focus-visible:ring-offset-storm-950",
+        "inline-flex items-center justify-center gap-2 rounded-lg font-medium",
+        "transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2",
+        "focus-visible:ring-accent-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-storm-950",
         "disabled:cursor-not-allowed disabled:opacity-40",
         size === "sm" && "px-3 py-1.5 text-xs",
         size === "md" && "px-4 py-2.5 text-sm",
-        size === "lg" && "px-6 py-3 text-base",
-        variant === "primary" &&
-          "bg-signal-cyan text-storm-950 shadow-accent hover:bg-signal-cyan/90 active:scale-[0.99]",
+        size === "lg" && "px-5 py-3 text-[15px]",
+        variant === "primary" && "bg-accent-primary text-storm-950 shadow-accent hover:bg-accent-primary/90",
         variant === "outline" &&
-          "border border-storm-600 text-storm-200 hover:border-storm-500 hover:bg-storm-850 hover:text-storm-100",
+          "border border-storm-600 text-storm-200 hover:border-storm-500 hover:bg-storm-850",
         variant === "ghost" && "text-storm-300 hover:bg-storm-850 hover:text-storm-100",
         className,
       )}
@@ -117,10 +120,7 @@ export function Button({
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={clsx(
-        "rounded-2xl border border-storm-800 bg-storm-900/70 shadow-card backdrop-blur-sm",
-        className,
-      )}
+      className={clsx("rounded-2xl border border-storm-800 bg-storm-850 shadow-card", className)}
       {...props}
     />
   );
@@ -136,10 +136,8 @@ export function CardHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-storm-800 px-5 py-3.5">
-      <h3 className="text-[13px] font-semibold uppercase tracking-[0.12em] text-storm-200">
-        {title}
-      </h3>
+    <div className="flex items-center justify-between gap-3 border-b border-storm-800 px-5 py-4">
+      <h3 className="text-sm font-semibold text-storm-100">{title}</h3>
       {action ? action : hint ? <span className="text-xs text-storm-400">{hint}</span> : null}
     </div>
   );
@@ -148,21 +146,13 @@ export function CardHeader({
 // ── Form primitives ──────────────────────────────────────────────────────────
 
 export function Label({ className, ...props }: LabelHTMLAttributes<HTMLLabelElement>) {
-  return (
-    <label
-      className={clsx(
-        "mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.08em] text-storm-300",
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <label className={clsx("mb-1.5 block text-xs font-medium text-storm-300", className)} {...props} />;
 }
 
 const FIELD =
   "w-full rounded-lg border border-storm-700 bg-storm-850 px-3.5 py-2.5 text-sm text-storm-100 " +
   "transition-colors placeholder:text-storm-500 hover:border-storm-600 " +
-  "focus:border-signal-cyan/70 focus:outline-none focus:ring-2 focus:ring-signal-cyan/20";
+  "focus:border-accent-primary/70 focus:outline-none focus:ring-2 focus:ring-accent-primary/20";
 
 export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={clsx(FIELD, className)} {...props} />;
@@ -227,7 +217,7 @@ export function LevelBadge({
   return (
     <span
       className={clsx(
-        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide",
+        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide",
         LEVEL_STYLES[styleKey] ?? "border-storm-600 text-storm-300",
         className,
       )}
@@ -240,7 +230,7 @@ export function LevelBadge({
 type BadgeTone = "cyan" | "green" | "yellow" | "red" | "neutral";
 
 const BADGE_TONES: Record<BadgeTone, { chip: string; dot: string }> = {
-  cyan: { chip: "border-signal-cyan/40 bg-signal-cyan/10 text-signal-cyan", dot: "bg-signal-cyan" },
+  cyan: { chip: "border-accent-primary/40 bg-accent-primary/10 text-accent-primary", dot: "bg-accent-primary" },
   green: { chip: "border-signal-green/40 bg-signal-green/10 text-signal-green", dot: "bg-signal-green" },
   yellow: { chip: "border-signal-yellow/40 bg-signal-yellow/10 text-signal-yellow", dot: "bg-signal-yellow" },
   red: { chip: "border-signal-red/40 bg-signal-red/10 text-signal-red", dot: "bg-signal-red" },
@@ -263,7 +253,7 @@ export function StatusBadge({
   return (
     <span
       className={clsx(
-        "inline-flex items-center gap-2 rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-wider",
+        "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-medium tracking-wide",
         t.chip,
         className,
       )}
@@ -294,7 +284,7 @@ const METRIC_TONES: Record<string, string> = {
   green: "text-signal-green",
   yellow: "text-signal-yellow",
   red: "text-signal-red",
-  cyan: "text-signal-cyan",
+  cyan: "text-accent-primary",
   neutral: "text-storm-100",
 };
 
@@ -313,12 +303,12 @@ export function MetricCard({
   className?: string;
 }) {
   return (
-    <div className={clsx("rounded-xl border border-storm-800 bg-storm-850/70 px-4 py-3", className)}>
-      <p className="text-[10px] uppercase leading-tight tracking-wider text-storm-400">{label}</p>
-      <p className={clsx("mt-1 font-mono text-xl font-bold leading-none", METRIC_TONES[tone])}>
+    <div className={clsx("rounded-xl border border-storm-800 bg-storm-850 px-4 py-3.5", className)}>
+      <p className="text-xs text-storm-400">{label}</p>
+      <p className={clsx("mt-1.5 text-2xl font-semibold tracking-tight", METRIC_TONES[tone])}>
         {value}
       </p>
-      {sub ? <p className="mt-1 font-mono text-[10px] text-storm-400">{sub}</p> : null}
+      {sub ? <p className="mt-1 text-xs text-storm-400">{sub}</p> : null}
     </div>
   );
 }
@@ -330,8 +320,8 @@ export function Skeleton({ className }: { className?: string }) {
 
 // ── Modal ─────────────────────────────────────────────────────────────────
 
-/** Lightweight centered dialog. Closes on backdrop click or Escape (caller
- *  handles Escape if needed). Renders nothing when `open` is false. */
+/** Lightweight centered dialog. Closes on backdrop click or Escape. Focuses
+ *  the panel on open. Renders nothing when `open` is false. */
 export function Modal({
   open,
   onClose,
@@ -345,17 +335,36 @@ export function Modal({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    panelRef.current?.focus();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-storm-950/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-storm-700 bg-storm-900 shadow-card">
-        <div className="flex items-center justify-between border-b border-storm-800 px-5 py-3.5">
+      <div className="absolute inset-0 bg-storm-950/70" onClick={onClose} />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={typeof title === "string" ? title : undefined}
+        tabIndex={-1}
+        className="relative w-full max-w-md overflow-hidden rounded-2xl border border-storm-700 bg-storm-900 shadow-card focus:outline-none"
+      >
+        <div className="flex items-center justify-between border-b border-storm-800 px-5 py-4">
           <h3 className="text-sm font-semibold text-storm-100">{title}</h3>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="rounded-md p-1 text-storm-400 transition hover:bg-storm-850 hover:text-storm-100"
+            className="rounded-md p-1 text-storm-400 transition hover:bg-storm-850 hover:text-storm-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60"
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
               <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
@@ -363,7 +372,7 @@ export function Modal({
           </button>
         </div>
         <div className="p-5">{children}</div>
-        {footer ? <div className="flex justify-end gap-2 border-t border-storm-800 px-5 py-3.5">{footer}</div> : null}
+        {footer ? <div className="flex justify-end gap-2 border-t border-storm-800 px-5 py-4">{footer}</div> : null}
       </div>
     </div>
   );

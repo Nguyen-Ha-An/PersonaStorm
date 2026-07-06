@@ -1,40 +1,56 @@
 "use client";
 
-import clsx from "clsx";
 import { useAuth } from "@/lib/auth";
+import { StatusBadge } from "@/components/ui";
 
 /**
- * Compact connectivity chip for the topbar. It reflects the REAL, server-
+ * Compact connectivity indicator for the topbar. It reflects the REAL, server-
  * verified session status (from /api/me via AuthProvider) — NOT an
  * unauthenticated liveness probe. This is deliberate: a public health check
  * would show "Connected" even when the server is rejecting the user's token,
  * which is exactly the misleading "CONNECTED + session expired" state we fixed.
+ *
+ * Visual policy: quiet by default. A healthy connection renders a tiny neutral
+ * dot (or nothing) rather than a loud always-on pill; only genuine problems
+ * (misconfiguration, expired session, unreachable API) surface a visible badge.
  */
 export function ApiStatusBadge() {
   const { configured, meStatus } = useAuth();
 
-  const ok = configured && meStatus === "ok";
-  const label = !configured
-    ? "Auth not configured"
-    : meStatus === "ok"
-      ? "Connected"
-      : meStatus === "expired"
-        ? "Session expired"
-        : meStatus === "error"
-          ? "API unreachable"
-          : "Checking…";
+  if (!configured) {
+    return (
+      <StatusBadge tone="yellow" className="hidden sm:inline-flex">
+        Auth not configured
+      </StatusBadge>
+    );
+  }
 
-  return (
-    <span
-      className={clsx(
-        "hidden items-center gap-2 rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider sm:inline-flex",
-        ok
-          ? "border-signal-green/30 bg-signal-green/10 text-signal-green"
-          : "border-signal-yellow/40 bg-signal-yellow/10 text-signal-yellow",
-      )}
-    >
-      <span className={clsx("h-1.5 w-1.5 rounded-full", ok ? "bg-signal-green" : "bg-signal-yellow")} />
-      {label}
-    </span>
-  );
+  if (meStatus === "expired") {
+    return (
+      <StatusBadge tone="yellow" className="hidden sm:inline-flex">
+        Session expired
+      </StatusBadge>
+    );
+  }
+
+  if (meStatus === "error") {
+    return (
+      <StatusBadge tone="red" className="hidden sm:inline-flex">
+        API unreachable
+      </StatusBadge>
+    );
+  }
+
+  if (meStatus === "ok") {
+    return (
+      <span
+        role="status"
+        aria-label="Connected"
+        className="hidden h-1.5 w-1.5 rounded-full bg-signal-green sm:inline-block"
+      />
+    );
+  }
+
+  // idle / loading: no LED while we're still checking.
+  return null;
 }

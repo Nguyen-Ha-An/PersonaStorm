@@ -36,13 +36,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (loading || !session || meStatus === "expired") {
     return (
       <div className="bg-tunnel flex min-h-screen items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <span className="relative flex h-3 w-3">
-            <span className="absolute inline-flex h-full w-full animate-pulseglow rounded-full bg-signal-cyan opacity-60" />
-            <span className="relative inline-flex h-3 w-3 rounded-full bg-signal-cyan" />
-          </span>
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-storm-400">
-            {loading ? "loading…" : "redirecting…"}
+        <div className="flex flex-col items-center gap-3" role="status">
+          <span
+            aria-hidden
+            className="h-5 w-5 animate-spin rounded-full border-2 border-storm-700 border-t-storm-300"
+          />
+          <p className="text-xs text-storm-400">
+            {loading ? "Loading…" : "Redirecting…"}
           </p>
         </div>
       </div>

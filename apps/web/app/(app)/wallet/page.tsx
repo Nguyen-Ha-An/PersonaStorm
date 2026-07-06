@@ -7,10 +7,11 @@ import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { WalletBalanceCard } from "@/components/dashboard/WalletBalanceCard";
 import { DataTable, type Column } from "@/components/dashboard/DataTable";
 import { Alert } from "@/components/feedback";
-import { Card, Skeleton } from "@/components/ui";
+import { SectionHeader, Skeleton } from "@/components/ui";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { getTransactions } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { formatDateTime, formatSignedCredits } from "@/lib/format";
+import { formatCredits, formatDateTime, formatSignedCredits } from "@/lib/format";
 import type { WalletTransaction } from "@/lib/types";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -19,6 +20,13 @@ const TYPE_LABELS: Record<string, string> = {
   refund: "Refund",
   admin_adjustment: "Admin adjustment",
 };
+
+/** Display-only fallback for transaction types not in TYPE_LABELS, e.g.
+ *  "admin_adjustment" → "Admin adjustment" — never render a raw snake_case type. */
+function humanizeType(type: string): string {
+  const spaced = type.replace(/_/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
 
 export default function WalletPage() {
   const { me } = useAuth();
@@ -39,7 +47,9 @@ export default function WalletPage() {
     {
       key: "type",
       header: "Type",
-      cell: (t) => <span className="font-medium text-storm-100">{TYPE_LABELS[t.type] ?? t.type}</span>,
+      cell: (t) => (
+        <span className="font-medium text-storm-100">{TYPE_LABELS[t.type] ?? humanizeType(t.type)}</span>
+      ),
     },
     {
       key: "desc",
@@ -53,7 +63,7 @@ export default function WalletPage() {
       cell: (t) => (
         <span
           className={clsx(
-            "font-mono font-bold",
+            "font-medium",
             t.amount_credits > 0 ? "text-signal-green" : "text-signal-red",
           )}
         >
@@ -65,14 +75,17 @@ export default function WalletPage() {
       key: "balance",
       header: "Balance",
       align: "right",
-      cell: (t) => <span className="font-mono text-storm-300">{t.balance_after.toLocaleString()}</span>,
+      cell: (t) => <span className="text-storm-300">{formatCredits(t.balance_after)}</span>,
     },
     {
       key: "storm",
-      header: "Storm",
+      header: "Simulation",
       cell: (t) =>
         t.storm_id ? (
-          <Link href={`/storm/${t.storm_id}`} className="font-mono text-xs text-signal-cyan hover:underline">
+          <Link
+            href={`/storm/${t.storm_id}`}
+            className="rounded font-mono text-xs text-storm-300 hover:text-storm-100 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60"
+          >
             {t.storm_id.replace("storm_", "").slice(0, 8)}
           </Link>
         ) : (
@@ -88,41 +101,44 @@ export default function WalletPage() {
   ];
 
   return (
-    <DashboardShell title="Wallet" subtitle="Your credit balance and transaction history">
-      {error && (
-        <Alert tone="red" title="Could not load your wallet" className="mb-6">
-          {error}
-        </Alert>
-      )}
+    <DashboardShell title="Credits">
+      <div className="space-y-8">
+        <PageHeader title="Credits" subtitle="Your available balance and credit activity." />
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+        {error && (
+          <Alert tone="red" title="Couldn't load your credit activity">
+            {error}
+          </Alert>
+        )}
+
+        <div>
           <WalletBalanceCard
             balance={me?.wallet.balance_credits ?? 0}
             lifetimeSpent={me?.wallet.lifetime_spent_credits ?? 0}
           />
-        </div>
-        <Card className="flex items-center p-5">
-          <p className="text-xs leading-relaxed text-storm-400">
-            <span className="font-semibold text-storm-200">Payments are not enabled yet.</span>{" "}
-            Contact an admin for a credit top-up. New accounts start with 100 free credits.
+          <p className="mt-3 px-1 text-xs text-storm-400">
+            Payments aren&rsquo;t enabled yet — contact an admin for a credit top-up. New accounts
+            start with 100 free credits.
           </p>
-        </Card>
-      </div>
+        </div>
 
-      <h2 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-[0.12em] text-storm-200">
-        Transaction history
-      </h2>
-      {txns === null ? (
-        <Skeleton className="h-48 w-full" />
-      ) : (
-        <DataTable
-          columns={columns}
-          rows={txns}
-          rowKey={(t) => t.id}
-          empty={{ title: "No transactions yet", message: "Your credit activity will appear here." }}
-        />
-      )}
+        <div>
+          <SectionHeader title="Credit activity" className="mb-4" />
+          {txns === null ? (
+            <Skeleton className="h-48 w-full" />
+          ) : (
+            <DataTable
+              columns={columns}
+              rows={txns}
+              rowKey={(t) => t.id}
+              empty={{
+                title: "No credit activity yet",
+                message: "Your credit activity will appear here as you run simulations.",
+              }}
+            />
+          )}
+        </div>
+      </div>
     </DashboardShell>
   );
 }

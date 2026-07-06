@@ -29,38 +29,38 @@ export function PriceCurve({ report }: { report: StormReport }) {
           <AreaChart data={data} margin={{ top: 4, right: 12, bottom: 0, left: -12 }}>
             <defs>
               <linearGradient id="curveFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.35} />
-                <stop offset="100%" stopColor="#22d3ee" stopOpacity={0.02} />
+                <stop offset="0%" stopColor="#35C7D9" stopOpacity={0.35} />
+                <stop offset="100%" stopColor="#35C7D9" stopOpacity={0.02} />
               </linearGradient>
             </defs>
-            <CartesianGrid stroke="#1c2740" strokeDasharray="3 3" />
+            <CartesianGrid stroke="#1C212B" strokeDasharray="3 3" />
             <XAxis
               dataKey="price"
               tickFormatter={(v: number) => `$${v}`}
-              stroke="#51678f"
-              tick={{ fill: "#8194b8", fontSize: 11 }}
+              stroke="#39414F"
+              tick={{ fill: "#6F7A8E", fontSize: 11 }}
             />
             <YAxis
               tickFormatter={(v: number) => `${v}%`}
-              stroke="#51678f"
-              tick={{ fill: "#8194b8", fontSize: 11 }}
+              stroke="#39414F"
+              tick={{ fill: "#6F7A8E", fontSize: 11 }}
               domain={[0, 100]}
             />
             <Tooltip
               formatter={(value: number | string) => [`${value}% would pay`, ""]}
               labelFormatter={(label) => `at $${label}`}
               contentStyle={{
-                background: "#0d1220",
-                border: "1px solid #2b3a5c",
+                background: "#10141C",
+                border: "1px solid #2A313D",
                 borderRadius: 8,
-                color: "#b3c1da",
+                color: "#C9D0DB",
                 fontSize: 12,
               }}
             />
             <Area
               type="monotone"
               dataKey="willing"
-              stroke="#22d3ee"
+              stroke="#35C7D9"
               strokeWidth={2}
               fill="url(#curveFill)"
             />

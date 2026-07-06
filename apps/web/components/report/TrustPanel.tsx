@@ -1,35 +1,38 @@
+import clsx from "clsx";
 import { Card, CardHeader, LevelBadge } from "@/components/ui";
 import type { StormReport } from "@/lib/types";
+import { formatPercent } from "@/lib/format";
 
 /**
- * The honesty panel. Every metric that could tell a user "don't trust this
- * run" is displayed with equal visual weight to the flattering ones.
+ * The honesty strip. Every metric that could tell a user "don't trust this
+ * run" is displayed with equal visual weight to the flattering ones — kept
+ * compact and placed right under the hero so it's read first, not buried.
  */
 export function TrustPanel({ report }: { report: StormReport }) {
   const q = report.quality;
 
   const scoreTiles: { label: string; value: string; good: boolean; hint: string }[] = [
     {
-      label: "persona adherence",
+      label: "Persona adherence",
       value: q.persona_adherence.toFixed(2),
       good: q.persona_adherence >= 0.6,
-      hint: "do reactions follow persona traits? (trait↔behavior correlation)",
+      hint: "do reactions follow persona traits?",
     },
     {
-      label: "product grounding",
+      label: "Product grounding",
       value: q.product_grounding.toFixed(2),
       good: q.product_grounding >= 0.6,
-      hint: "share of reactions referencing your actual stimulus",
+      hint: "share of reactions referencing your stimulus",
     },
     {
-      label: "generic response rate",
-      value: `${Math.round(q.generic_response_rate * 100)}%`,
+      label: "Generic response rate",
+      value: formatPercent(q.generic_response_rate),
       good: q.generic_response_rate <= 0.1,
       hint: "vague filler like “seems useful” — lower is better",
     },
     {
-      label: "duplicate rate",
-      value: `${Math.round(q.duplicate_objection_rate * 100)}%`,
+      label: "Duplicate rate",
+      value: formatPercent(q.duplicate_objection_rate),
       good: q.duplicate_objection_rate <= 0.3,
       hint: "near-verbatim repeated outputs — lower is better",
     },
@@ -37,54 +40,48 @@ export function TrustPanel({ report }: { report: StormReport }) {
 
   const levelTiles: { label: string; level: string; invert?: boolean; hint: string }[] = [
     {
-      label: "objection entropy",
+      label: "Objection entropy",
       level: q.objection_entropy,
       hint: "diversity of objection themes",
     },
     {
-      label: "segment variance",
+      label: "Segment variance",
       level: q.segment_variance,
-      hint: "do segments react differently? (they should)",
+      hint: "do segments react differently?",
     },
     {
-      label: "collapse risk",
+      label: "Collapse risk",
       level: q.collapse_risk,
       invert: true,
       hint: "is the swarm mode-collapsing into one voice?",
     },
     {
-      label: "benchmark confidence",
+      label: "Benchmark confidence",
       level: q.benchmark_confidence,
-      hint: q.benchmark_category
-        ? `reference data for “${q.benchmark_category}”`
-        : "reference data for this category",
+      hint: q.benchmark_category ? `reference data for “${q.benchmark_category}”` : "reference data for this category",
     },
   ];
 
   return (
     <Card>
-      <CardHeader title="Trust / calibration panel" hint="read this before believing anything above" />
-      <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-4">
+      <CardHeader title="Calibration & confidence" hint="read this before believing anything above" />
+      <div className="grid grid-cols-2 gap-2.5 p-4 sm:grid-cols-4 lg:grid-cols-8">
         {scoreTiles.map((t) => (
-          <div key={t.label} className="rounded-lg border border-storm-800 bg-storm-850 p-4">
-            <p className="text-[10px] uppercase tracking-wider text-storm-400">{t.label}</p>
-            <p
-              className={`mt-1 font-mono text-2xl font-bold ${
-                t.good ? "text-signal-green" : "text-signal-yellow"
-              }`}
-            >
+          <div key={t.label} className="rounded-lg border border-storm-800 bg-storm-850 px-3 py-2.5">
+            <p className="text-xs text-storm-400">{t.label}</p>
+            <p className={clsx("mt-1 text-lg font-semibold", t.good ? "text-signal-green" : "text-signal-yellow")}>
               {t.value}
             </p>
-            <p className="mt-1.5 text-[11px] leading-snug text-storm-400">{t.hint}</p>
+            <p className="mt-1 text-[11px] leading-snug text-storm-400">{t.hint}</p>
           </div>
         ))}
         {levelTiles.map((t) => (
-          <div key={t.label} className="rounded-lg border border-storm-800 bg-storm-850 p-4">
-            <p className="text-[10px] uppercase tracking-wider text-storm-400">{t.label}</p>
-            <div className="mt-1.5">
+          <div key={t.label} className="rounded-lg border border-storm-800 bg-storm-850 px-3 py-2.5">
+            <p className="text-xs text-storm-400">{t.label}</p>
+            <div className="mt-1">
               <LevelBadge level={t.level} invert={t.invert} />
             </div>
-            <p className="mt-1.5 text-[11px] leading-snug text-storm-400">{t.hint}</p>
+            <p className="mt-1 text-[11px] leading-snug text-storm-400">{t.hint}</p>
           </div>
         ))}
       </div>
@@ -97,7 +94,7 @@ export function TrustPanel({ report }: { report: StormReport }) {
           ))}
         </div>
       )}
-      <div className="border-t border-storm-800 bg-storm-850/50 px-5 py-3">
+      <div className="border-t border-storm-800 bg-storm-900/40 px-5 py-3">
         <p className="text-xs leading-relaxed text-storm-300">{report.disclaimer}</p>
       </div>
     </Card>

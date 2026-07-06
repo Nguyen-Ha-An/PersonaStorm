@@ -37,12 +37,13 @@ export function DataTable<T>({
     <div className="overflow-x-auto rounded-xl border border-storm-800">
       <table className="w-full min-w-[36rem] border-collapse text-sm">
         <thead>
-          <tr className="border-b border-storm-800 bg-storm-900/60">
+          <tr className="border-b border-storm-800 bg-storm-900">
             {columns.map((c) => (
               <th
                 key={c.key}
+                scope="col"
                 className={clsx(
-                  "whitespace-nowrap px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-storm-400",
+                  "whitespace-nowrap px-4 py-2.5 text-xs font-medium text-storm-400",
                   alignCls(c.align),
                 )}
               >
@@ -57,8 +58,8 @@ export function DataTable<T>({
               key={rowKey(row, i)}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
               className={clsx(
-                "border-b border-storm-800/60 last:border-0",
-                onRowClick && "cursor-pointer transition-colors hover:bg-storm-850/50",
+                "border-b border-storm-800 last:border-0",
+                onRowClick && "cursor-pointer transition-colors hover:bg-storm-850/60",
               )}
             >
               {columns.map((c) => (

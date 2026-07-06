@@ -1,41 +1,67 @@
 import type { Config } from "tailwindcss";
 
-// Wind-tunnel palette: deep slate-blues for surfaces, instrument-panel signal
-// colors for verdicts. Signal hexes are intentionally stable — several charts
-// reference them as raw rgb() strings — so tuning happens in the `storm` ramp
-// (surfaces / borders / text) where the "premium, less-neon" feel lives.
+// Wind-tunnel palette v2 — "premium research instrument".
+// storm-*  = neutral ink+surface ramp (950 darkest surface → 100 near-white text)
+// signal-* = semantic accents; ALSO referenced as raw hex/rgb() by chart code,
+//            so any change here MUST be mirrored in the chart files listed in §2.3.
+// surface/line/ink/accent = semantic aliases for NEW components (same hexes).
 const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
         storm: {
-          950: "#05070d", // page base
-          900: "#0a0e17", // card surface
-          850: "#0f1420", // raised tile / input surface
-          800: "#171d2b", // hairline border / divider
-          750: "#202839", // hover border / stronger divider
-          700: "#2a3448", // card border
-          600: "#3b4761", // outline / button border
-          500: "#566481", // mid
-          400: "#6d7c99", // muted / hint text
-          300: "#9aa8c4", // secondary text
-          200: "#c6d0e2", // body text
-          100: "#e8ecf5", // headings / near-white
+          950: "#0B0E14", // page base (surface-base)
+          900: "#10141C", // panel / elevated surface
+          850: "#151A23", // card / raised tile / input surface
+          800: "#1C212B", // hairline border (subtle)
+          750: "#232A35", // hover border / stronger divider
+          700: "#2A313D", // card border (strong)
+          600: "#39414F", // outline / button border
+          500: "#5A6478", // mid / disabled text
+          400: "#6F7A8E", // muted / hint text
+          300: "#A7B0C0", // secondary text
+          200: "#C9D0DB", // body text
+          100: "#F4F7FA", // headings / near-white
         },
         signal: {
-          green: "#34d399",
-          yellow: "#fbbf24",
-          red: "#fb7185",
-          cyan: "#22d3ee",
+          green: "#4CC38A", // adoption / success
+          yellow: "#D6A84F", // risk / attention (amber)
+          red: "#EF6A7A", // blocker / failure
+          cyan: "#35C7D9", // primary accent (sparingly)
+          violet: "#8B7CF6", // insight / AI-derived
+        },
+        // Semantic aliases for new components (identical hexes; use freely).
+        surface: {
+          base: "#0B0E14",
+          panel: "#10141C",
+          card: "#151A23",
+          subtle: "#0F141C",
+        },
+        line: {
+          subtle: "rgba(255,255,255,0.08)",
+          strong: "rgba(255,255,255,0.14)",
+        },
+        ink: {
+          primary: "#F4F7FA",
+          secondary: "#A7B0C0",
+          muted: "#6F7A8E",
+        },
+        accent: {
+          primary: "#35C7D9",
+          insight: "#8B7CF6",
+          risk: "#D6A84F",
+          success: "#4CC38A",
+          danger: "#EF6A7A",
         },
       },
       fontFamily: {
         sans: [
+          "InterVariable",
+          "Inter",
           "-apple-system",
           "BlinkMacSystemFont",
           "Segoe UI",
-          "Inter",
           "Roboto",
           "Helvetica Neue",
           "Arial",
@@ -52,14 +78,17 @@ const config: Config = {
         ],
       },
       borderRadius: {
+        lg: "0.625rem",
         xl: "0.875rem",
-        "2xl": "1.125rem",
+        "2xl": "1rem",
       },
       boxShadow: {
-        card: "0 1px 0 0 rgba(255,255,255,0.03) inset, 0 8px 24px -12px rgba(0,0,0,0.6)",
+        // Softer, more premium than the old neon set. No colored glows by default.
+        card: "0 1px 0 0 rgba(255,255,255,0.02) inset, 0 1px 2px 0 rgba(0,0,0,0.4)",
         "card-hover":
-          "0 1px 0 0 rgba(255,255,255,0.05) inset, 0 12px 32px -12px rgba(0,0,0,0.7)",
-        accent: "0 8px 24px -10px rgba(34,211,238,0.35)",
+          "0 1px 0 0 rgba(255,255,255,0.04) inset, 0 8px 28px -14px rgba(0,0,0,0.7)",
+        panel: "0 12px 40px -20px rgba(0,0,0,0.8)",
+        accent: "0 6px 20px -12px rgba(53,199,217,0.30)",
       },
       keyframes: {
         cellpop: {
@@ -70,9 +99,7 @@ const config: Config = {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.55" },
         },
-        shimmer: {
-          "100%": { transform: "translateX(100%)" },
-        },
+        shimmer: { "100%": { transform: "translateX(100%)" } },
         "fade-up": {
           "0%": { opacity: "0", transform: "translateY(6px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },

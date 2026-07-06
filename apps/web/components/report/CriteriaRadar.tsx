@@ -1,5 +1,6 @@
 import { Card, CardHeader } from "@/components/ui";
 import type { StormReport } from "@/lib/types";
+import { formatPercent } from "@/lib/format";
 import { effectiveScore, toneFor, TONE_HEX } from "./criteria-helpers";
 
 /**
@@ -13,11 +14,26 @@ const CX = SIZE / 2;
 const CY = SIZE / 2;
 const R = 150; // outer radius of the 1.0 ring
 const RINGS = [0.25, 0.5, 0.75, 1]; // gridline radii (as fraction)
+const LINE_MAX = 13; // soft per-line character budget for wrapped labels
 
-/** Shorten dense labels so 17 fit around the ring. */
-function abbrev(label: string): string {
-  if (label.length <= 14) return label;
-  return label.slice(0, 13).trimEnd() + "…";
+/** Wrap a label onto up to two short lines instead of aggressively truncating. */
+function wrapLabel(label: string): string[] {
+  if (label.length <= LINE_MAX) return [label];
+  const words = label.split(" ");
+  if (words.length === 1) {
+    return label.length > 16 ? [label.slice(0, 15).trimEnd() + "…"] : [label];
+  }
+  let line1 = "";
+  let line2 = "";
+  for (const w of words) {
+    if (!line1 || `${line1} ${w}`.length <= LINE_MAX) {
+      line1 = line1 ? `${line1} ${w}` : w;
+    } else {
+      line2 = line2 ? `${line2} ${w}` : w;
+    }
+  }
+  if (line2.length > 16) line2 = line2.slice(0, 15).trimEnd() + "…";
+  return line2 ? [line1, line2] : [line1];
 }
 
 export function CriteriaRadar({ report }: { report: StormReport }) {
@@ -66,7 +82,7 @@ export function CriteriaRadar({ report }: { report: StormReport }) {
                 })
                 .join(" ")}
               fill="none"
-              stroke="#1c2740"
+              stroke="#1C212B"
               strokeWidth={1}
             />
           ))}
@@ -79,25 +95,23 @@ export function CriteriaRadar({ report }: { report: StormReport }) {
             const cos = Math.cos(a);
             // Anchor text based on which side of the circle it sits.
             const anchor = Math.abs(cos) < 0.25 ? "middle" : cos > 0 ? "start" : "end";
+            const lines = wrapLabel(c.label);
             return (
               <g key={c.criterion_id}>
-                <line
-                  x1={CX}
-                  y1={CY}
-                  x2={edge.x}
-                  y2={edge.y}
-                  stroke="#1c2740"
-                  strokeWidth={1}
-                />
+                <line x1={CX} y1={CY} x2={edge.x} y2={edge.y} stroke="#1C212B" strokeWidth={1} />
                 <text
                   x={label.x}
                   y={label.y}
                   textAnchor={anchor}
                   dominantBaseline="middle"
                   fontSize={9.5}
-                  fill="#8194b8"
+                  fill="#6F7A8E"
                 >
-                  {abbrev(c.label)}
+                  {lines.map((line, li) => (
+                    <tspan key={li} x={label.x} dy={li === 0 ? 0 : "1.05em"}>
+                      {line}
+                    </tspan>
+                  ))}
                 </text>
               </g>
             );
@@ -118,15 +132,9 @@ export function CriteriaRadar({ report }: { report: StormReport }) {
             const p = point(i, Math.max(0.02, v));
             const dotTone = toneFor(v);
             return (
-              <circle
-                key={criteria[i].criterion_id}
-                cx={p.x}
-                cy={p.y}
-                r={3}
-                fill={TONE_HEX[dotTone]}
-              >
+              <circle key={criteria[i].criterion_id} cx={p.x} cy={p.y} r={3} fill={TONE_HEX[dotTone]}>
                 <title>
-                  {criteria[i].label}: {Math.round(criteria[i].average_score * 100)}% raw
+                  {criteria[i].label}: {formatPercent(criteria[i].average_score)} raw
                 </title>
               </circle>
             );

@@ -1,14 +1,16 @@
 "use client";
 
 import clsx from "clsx";
-import { Card, Skeleton } from "@/components/ui";
+import { Alert } from "@/components/feedback";
+import { Card, CardHeader, Skeleton } from "@/components/ui";
+import { formatCredits, formatNumberCompact } from "@/lib/format";
 import type { Quote } from "@/lib/types";
 
 function Row({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   return (
     <div className="flex items-center justify-between text-sm">
       <span className={muted ? "text-storm-400" : "text-storm-300"}>{label}</span>
-      <span className={clsx("font-mono", muted ? "text-storm-400" : "text-storm-100")}>{value}</span>
+      <span className={muted ? "text-storm-400" : "text-storm-100"}>{value}</span>
     </div>
   );
 }
@@ -27,11 +29,19 @@ export function PricePreviewCard({
 
   return (
     <Card className="overflow-hidden">
-      <div className="border-b border-storm-800 px-5 py-3.5">
-        <h3 className="text-[13px] font-semibold uppercase tracking-[0.12em] text-storm-200">
-          Price preview
-        </h3>
-      </div>
+      <CardHeader
+        title={
+          <span className="flex items-center gap-3">
+            <span
+              aria-hidden
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-storm-700 text-[11px] font-semibold text-storm-300"
+            >
+              4
+            </span>
+            <span>Cost preview</span>
+          </span>
+        }
+      />
 
       <div className="space-y-3 p-5">
         {loading && !quote ? (
@@ -44,14 +54,14 @@ export function PricePreviewCard({
           <p className="text-sm text-signal-yellow">{error}</p>
         ) : quote ? (
           <>
-            <Row label="Base run" value={`${quote.base_run_credits}`} />
+            <Row label="Base simulation" value={formatCredits(quote.base_run_credits)} />
             <Row
-              label={`Personas — ${blocks} × ${quote.persona_count.toLocaleString()}/100`}
-              value={`${blocks * quote.credits_per_100_personas}`}
+              label={`Personas (${formatNumberCompact(quote.persona_count)})`}
+              value={formatCredits(blocks * quote.credits_per_100_personas)}
             />
             <Row
               label="Analyst report"
-              value={quote.analyst_report_credits > 0 ? `${quote.analyst_report_credits}` : "—"}
+              value={quote.analyst_report_credits > 0 ? formatCredits(quote.analyst_report_credits) : "—"}
               muted={quote.analyst_report_credits === 0}
             />
 
@@ -59,32 +69,27 @@ export function PricePreviewCard({
 
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-storm-100">Total</span>
-              <span className="font-mono text-2xl font-bold text-signal-cyan">
-                {quote.total_credits.toLocaleString()}
-                <span className="ml-1 text-xs font-medium text-storm-400">credits</span>
+              <span className="text-2xl font-semibold tracking-tight text-accent-primary">
+                {formatCredits(quote.total_credits)}
+                <span className="ml-1.5 text-xs font-medium text-storm-400">credits</span>
               </span>
             </div>
 
             <div className="mt-2 space-y-1.5 rounded-lg border border-storm-800 bg-storm-850/60 px-3 py-2.5">
-              <Row label="Wallet balance" value={quote.wallet_balance.toLocaleString()} muted />
+              <Row label="Wallet balance" value={formatCredits(quote.wallet_balance)} muted />
               <div className="flex items-center justify-between text-sm">
                 <span className="text-storm-400">Balance after run</span>
-                <span
-                  className={clsx(
-                    "font-mono font-bold",
-                    enough ? "text-storm-100" : "text-signal-red",
-                  )}
-                >
-                  {quote.balance_after.toLocaleString()}
+                <span className={clsx("font-semibold", enough ? "text-storm-100" : "text-accent-danger")}>
+                  {formatCredits(quote.balance_after)}
                 </span>
               </div>
             </div>
 
             {!enough && (
-              <div className="rounded-lg border border-signal-red/40 bg-signal-red/10 px-3 py-2.5 text-xs leading-relaxed text-signal-red">
-                Not enough credits for this run. Lower the persona count or ask an admin for a
-                top-up.
-              </div>
+              <Alert tone="yellow" title="Not enough credits for this run">
+                Lower the persona count or drop the analyst report to bring the total under your
+                balance, or ask an admin for a top-up.
+              </Alert>
             )}
           </>
         ) : (

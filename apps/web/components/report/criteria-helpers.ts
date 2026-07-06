@@ -36,15 +36,15 @@ export function toneFor(effective: number): ScoreTone {
 }
 
 export const TONE_HEX: Record<ScoreTone, string> = {
-  green: "#34d399",
-  yellow: "#fbbf24",
-  red: "#fb7185",
+  green: "#4CC38A",
+  yellow: "#D6A84F",
+  red: "#EF6A7A",
 };
 
 export const TONE_RGB: Record<ScoreTone, string> = {
-  green: "52, 211, 153",
-  yellow: "251, 191, 36",
-  red: "251, 113, 133",
+  green: "76, 195, 138",
+  yellow: "214, 168, 79",
+  red: "239, 106, 122",
 };
 
 export const TONE_TEXT: Record<ScoreTone, string> = {
@@ -52,8 +52,3 @@ export const TONE_TEXT: Record<ScoreTone, string> = {
   yellow: "text-signal-yellow",
   red: "text-signal-red",
 };
-
-/** Format a 0..1 score as a percent string. */
-export function pct(n: number): string {
-  return `${Math.round(n * 100)}%`;
-}

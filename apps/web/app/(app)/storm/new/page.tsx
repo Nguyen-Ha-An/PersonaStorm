@@ -1,13 +1,15 @@
 "use client";
 
+import clsx from "clsx";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { PricePreviewCard } from "@/components/dashboard/PricePreviewCard";
 import { Alert, ApiConfigAlert } from "@/components/feedback";
-import { Button, Card, Input, Label, Select, Textarea } from "@/components/ui";
+import { Button, Card, CardHeader, Input, Label, Select, Textarea } from "@/components/ui";
 import { ApiError, createStorm, getQuote } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { formatCredits, formatNumberCompact } from "@/lib/format";
 import { SAMPLES } from "@/lib/samples";
 import type { Quote, StimulusType, TargetMarket } from "@/lib/types";
 
@@ -30,6 +32,14 @@ const MARKETS: { value: TargetMarket; label: string }[] = [
 
 const COUNTS = [100, 250, 500, 1000, 1200];
 
+const COUNT_GLOSS: Record<number, string> = {
+  100: "A fast smoke test — directional signal only.",
+  250: "A light read — enough to catch obvious misses.",
+  500: "A solid baseline for an early positioning call.",
+  1000: "Full-depth run — the default for a launch decision.",
+  1200: "Maximum depth available for a run.",
+};
+
 const CATEGORIES: { value: string; label: string }[] = [
   { value: "auto", label: "Auto-detect" },
   { value: "ai_tool", label: "AI tool" },
@@ -44,6 +54,40 @@ const CATEGORIES: { value: string; label: string }[] = [
   { value: "generic", label: "Generic" },
 ];
 
+/** One numbered step in the research-setup flow. Wraps `Card`/`CardHeader`
+ *  so the visual language matches the rest of the design system. */
+function StepCard({
+  step,
+  title,
+  hint,
+  children,
+}: {
+  step: number;
+  title: ReactNode;
+  hint?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader
+        title={
+          <span className="flex items-center gap-3">
+            <span
+              aria-hidden
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-storm-700 text-[11px] font-semibold text-storm-300"
+            >
+              {step}
+            </span>
+            <span>{title}</span>
+          </span>
+        }
+        hint={hint}
+      />
+      <div className="space-y-4 p-5">{children}</div>
+    </Card>
+  );
+}
+
 export default function NewStormPage() {
   const router = useRouter();
   const { refreshMe } = useAuth();
@@ -55,6 +99,11 @@ export default function NewStormPage() {
   const [customDesc, setCustomDesc] = useState("");
   const [category, setCategory] = useState("auto");
   const [count, setCount] = useState(1000);
+
+  // Presentational-only: whether the field has been blurred yet, so we don't
+  // show an error border before the user has had a chance to type anything.
+  const [stimulusTouched, setStimulusTouched] = useState(false);
+  const [customTouched, setCustomTouched] = useState(false);
 
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(true);
@@ -110,7 +159,7 @@ export default function NewStormPage() {
         product_category: category === "auto" ? undefined : category,
         persona_count: count,
       });
-      await refreshMe(); // reflect the deduction in the wallet chip immediately
+      await refreshMe(); // reflect the deduction in the credit pill immediately
       router.push(`/storm/${resp.storm_id}`);
     } catch (e) {
       if (e instanceof ApiError && e.kind === "payment") {
@@ -132,32 +181,35 @@ export default function NewStormPage() {
   }
 
   return (
-    <DashboardShell title="New Storm" subtitle="Configure a run and see its price before you spend a credit.">
+    <DashboardShell
+      title="New simulation"
+      subtitle="Configure a run and preview its price before you spend a credit."
+    >
       <ApiConfigAlert />
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-        {/* form */}
-        <Card className="overflow-hidden">
-          <div className="border-b border-storm-800 px-6 py-4">
-            <h2 className="text-sm font-semibold text-storm-100">Test chamber</h2>
-            <p className="text-xs text-storm-400">Paste your stimulus, pick a market, and run the swarm.</p>
+      <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
+        {/* steps 1–3 */}
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-storm-400">Try a sample:</span>
+            {SAMPLES.map((s, i) => (
+              <button
+                key={s.name}
+                type="button"
+                onClick={() => loadSample(i)}
+                className="rounded-full border border-storm-700 bg-storm-850 px-3 py-1 text-xs text-storm-300 transition-colors hover:border-storm-600 hover:text-storm-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-storm-950"
+              >
+                {s.name}
+              </button>
+            ))}
           </div>
 
-          <div className="space-y-5 p-6">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-storm-400">Try a sample:</span>
-              {SAMPLES.map((s, i) => (
-                <button
-                  key={s.name}
-                  onClick={() => loadSample(i)}
-                  className="rounded-full border border-storm-700 bg-storm-850/60 px-3 py-1 text-xs text-storm-300 transition hover:border-signal-cyan/50 hover:text-storm-100"
-                >
-                  {s.name}
-                </button>
-              ))}
-            </div>
-
-            <div className="grid gap-5 sm:grid-cols-2">
+          <StepCard
+            step={1}
+            title="What are we testing"
+            hint="Paste the concept, page, ad, or price you want the market to react to."
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label htmlFor="title">Product / test name</Label>
                 <Input
@@ -187,17 +239,28 @@ export default function NewStormPage() {
                 rows={7}
                 value={stimulus}
                 onChange={(e) => setStimulus(e.target.value)}
+                onBlur={() => setStimulusTouched(true)}
                 placeholder="Paste your product concept, landing page copy, ad text, or pricing table…"
+                aria-invalid={!stimulusOk && stimulusTouched}
+                className={clsx(
+                  !stimulusOk && stimulusTouched && "border-signal-red/60 focus:border-signal-red/60 focus:ring-signal-red/20",
+                )}
               />
               <p className="mt-1 text-right text-xs text-storm-400">
                 {stimulus.trim().length} chars{" "}
-                {!stimulusOk && stimulus.length > 0 && (
-                  <span className="text-signal-yellow">· need ≥ 20</span>
+                {!stimulusOk && stimulusTouched && (
+                  <span className="text-signal-yellow">· need at least 20</span>
                 )}
               </p>
             </div>
+          </StepCard>
 
-            <div className="grid gap-5 sm:grid-cols-3">
+          <StepCard
+            step={2}
+            title="Target market"
+            hint="Choose who should read this the way a real buyer would."
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label htmlFor="market">Target market</Label>
                 <Select id="market" value={market} onChange={(e) => setMarket(e.target.value as TargetMarket)}>
@@ -218,16 +281,6 @@ export default function NewStormPage() {
                   ))}
                 </Select>
               </div>
-              <div>
-                <Label htmlFor="count">Persona count</Label>
-                <Select id="count" value={count} onChange={(e) => setCount(Number(e.target.value))}>
-                  {COUNTS.map((c) => (
-                    <option key={c} value={c}>
-                      {c.toLocaleString()} personas
-                    </option>
-                  ))}
-                </Select>
-              </div>
             </div>
 
             {market === "custom" && (
@@ -238,38 +291,64 @@ export default function NewStormPage() {
                   rows={2}
                   value={customDesc}
                   onChange={(e) => setCustomDesc(e.target.value)}
+                  onBlur={() => setCustomTouched(true)}
                   placeholder="e.g. privacy-conscious indie game developers in Southeast Asia"
+                  aria-invalid={!customOk && customTouched}
+                  className={clsx(
+                    !customOk && customTouched && "border-signal-red/60 focus:border-signal-red/60 focus:ring-signal-red/20",
+                  )}
                 />
-                {!customOk && customDesc.length > 0 && (
+                {!customOk && customTouched && (
                   <p className="mt-1 text-xs text-signal-yellow">
                     Need at least 12 characters so the persona builder has something to work with.
                   </p>
                 )}
               </div>
             )}
+          </StepCard>
 
-            {error && (
-              <Alert tone="red" title="Could not start the storm">
-                {error}
-              </Alert>
-            )}
-          </div>
-        </Card>
+          <StepCard
+            step={3}
+            title="Simulation depth"
+            hint="How many synthetic personas run through the swarm."
+          >
+            <div>
+              <Label htmlFor="count">Persona count</Label>
+              <Select id="count" value={count} onChange={(e) => setCount(Number(e.target.value))}>
+                {COUNTS.map((c) => (
+                  <option key={c} value={c}>
+                    {formatNumberCompact(c)} personas
+                  </option>
+                ))}
+              </Select>
+              <p className="mt-1.5 text-xs text-storm-400">{COUNT_GLOSS[count]}</p>
+            </div>
+          </StepCard>
 
-        {/* price + run */}
+          {error && (
+            <Alert tone="red" title="Could not start the simulation">
+              {error}
+            </Alert>
+          )}
+        </div>
+
+        {/* sticky rail: steps 4–5 */}
         <div className="space-y-4 lg:sticky lg:top-20 lg:self-start">
           <PricePreviewCard quote={quote} loading={quoteLoading} error={quoteError} />
-          <Button onClick={runStorm} disabled={!canRun} size="lg" className="w-full">
-            {submitting
-              ? "Spinning up the tunnel…"
-              : quote
-                ? `Run Storm — ${quote.total_credits} credits`
-                : "Run Storm"}
-          </Button>
-          <p className="text-center text-[11px] leading-relaxed text-storm-500">
-            Outputs are synthetic hypotheses from a calibrated model. Every report carries a trust
-            panel and a real-human validation queue.
-          </p>
+
+          <StepCard step={5} title="Run" hint="Review the price, then launch the swarm.">
+            <Button onClick={runStorm} disabled={!canRun} size="lg" className="w-full">
+              {submitting
+                ? "Spinning up the tunnel…"
+                : quote
+                  ? `Run wind tunnel — ${formatCredits(quote.total_credits)} credits`
+                  : "Open wind tunnel"}
+            </Button>
+            <p className="text-center text-[11px] leading-relaxed text-storm-500">
+              Outputs are synthetic hypotheses from a calibrated model. Every report carries a trust
+              panel and a real-human validation queue.
+            </p>
+          </StepCard>
         </div>
       </div>
     </DashboardShell>

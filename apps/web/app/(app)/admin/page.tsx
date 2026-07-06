@@ -18,6 +18,7 @@ import {
   Skeleton,
   StatusBadge,
 } from "@/components/ui";
+import { PageHeader } from "@/components/ui/PageHeader";
 import {
   ApiError,
   adminAdjustWallet,
@@ -28,7 +29,7 @@ import {
   adminUpdatePricing,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { formatDate } from "@/lib/format";
+import { formatCredits, formatDate, formatNumberCompact } from "@/lib/format";
 import type { AdminStormRun, AdminUser, Pricing } from "@/lib/types";
 
 type Tab = "overview" | "users" | "storms" | "pricing";
@@ -39,6 +40,16 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "pricing", label: "Pricing" },
 ];
 
+/** Distinguishes a failed GET (per resource) from a failed mutation, so the
+ *  alert names the right thing instead of a generic "Admin action failed". */
+type AdminErrorKind = "users" | "storms" | "pricing" | "action";
+const ERROR_TITLES: Record<AdminErrorKind, string> = {
+  users: "Couldn't load users",
+  storms: "Couldn't load storm runs",
+  pricing: "Couldn't load pricing",
+  action: "Admin action failed",
+};
+
 export default function AdminPage() {
   const { me, isAdmin, refreshMe } = useAuth();
   const [tab, setTab] = useState<Tab>("overview");
@@ -46,7 +57,7 @@ export default function AdminPage() {
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [storms, setStorms] = useState<AdminStormRun[] | null>(null);
   const [pricing, setPricing] = useState<Pricing | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ kind: AdminErrorKind; message: string } | null>(null);
 
   const [search, setSearch] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -57,11 +68,14 @@ export default function AdminPage() {
   const [adjustReason, setAdjustReason] = useState("");
   const [adjustError, setAdjustError] = useState<string | null>(null);
 
+  // role-change confirmation modal
+  const [roleTarget, setRoleTarget] = useState<AdminUser | null>(null);
+
   const loadUsers = useCallback(async (q?: string) => {
     try {
       setUsers(await adminListUsers(q || undefined));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load users.");
+      setError({ kind: "users", message: e instanceof Error ? e.message : "Failed to load users." });
     }
   }, []);
 
@@ -70,10 +84,20 @@ export default function AdminPage() {
     loadUsers();
     adminListStormRuns()
       .then(setStorms)
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load storm runs."));
+      .catch((e) =>
+        setError({
+          kind: "storms",
+          message: e instanceof Error ? e.message : "Failed to load storm runs.",
+        }),
+      );
     adminGetPricing()
       .then(setPricing)
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load pricing."));
+      .catch((e) =>
+        setError({
+          kind: "pricing",
+          message: e instanceof Error ? e.message : "Failed to load pricing.",
+        }),
+      );
   }, [isAdmin, loadUsers]);
 
   // --- gate on role -------------------------------------------------------
@@ -140,11 +164,26 @@ export default function AdminPage() {
       await loadUsers(search);
       await refreshMe();
     } catch (e) {
-      if (e instanceof ApiError) setError(e.message);
-      else setError(e instanceof Error ? e.message : "Role change failed.");
+      if (e instanceof ApiError) setError({ kind: "action", message: e.message });
+      else setError({ kind: "action", message: e instanceof Error ? e.message : "Role change failed." });
     } finally {
       setBusyId(null);
     }
+  }
+
+  // Opens the confirmation modal instead of mutating immediately — the one
+  // interaction addition allowed by the redesign. `onToggleRole`'s contract
+  // (called with the target user) is unchanged; `toggleRole` above still does
+  // the actual mutation once the admin confirms.
+  function requestRoleChange(u: AdminUser) {
+    setRoleTarget(u);
+  }
+
+  async function confirmRoleChange() {
+    if (!roleTarget) return;
+    const target = roleTarget;
+    setRoleTarget(null);
+    await toggleRole(target);
   }
 
   // --- overview metrics ---------------------------------------------------
@@ -152,6 +191,7 @@ export default function AdminPage() {
   const totalAdmins = users?.filter((u) => u.role === "admin").length ?? 0;
   const creditsInCirculation = users?.reduce((s, u) => s + u.balance_credits, 0) ?? 0;
   const totalStorms = storms?.length ?? 0;
+  const overviewLoading = users === null || storms === null;
 
   const stormCols: Column<AdminStormRun>[] = [
     {
@@ -164,7 +204,18 @@ export default function AdminPage() {
         </div>
       ),
     },
-    { key: "owner", header: "Owner", cell: (s) => <span className="text-storm-300">{s.user_email || s.user_id.slice(0, 8)}</span> },
+    {
+      key: "owner",
+      header: "Owner",
+      cell: (s) =>
+        s.user_email ? (
+          <span className="text-storm-300">{s.user_email}</span>
+        ) : (
+          <span className="font-mono text-xs text-storm-500" title={s.user_id}>
+            no name · {s.user_id.slice(0, 8)}
+          </span>
+        ),
+    },
     {
       key: "status",
       header: "Status",
@@ -177,86 +228,127 @@ export default function AdminPage() {
         </StatusBadge>
       ),
     },
-    { key: "personas", header: "Personas", align: "right", cell: (s) => <span className="font-mono">{s.persona_count.toLocaleString()}</span> },
-    { key: "cost", header: "Cost", align: "right", cell: (s) => <span className="font-mono text-storm-300">{s.price_credits}</span> },
-    { key: "date", header: "Created", align: "right", cell: (s) => <span className="whitespace-nowrap text-storm-400">{formatDate(s.created_at)}</span> },
+    {
+      key: "personas",
+      header: "Personas",
+      align: "right",
+      cell: (s) => <span className="text-storm-300">{formatNumberCompact(s.persona_count)}</span>,
+    },
+    {
+      key: "cost",
+      header: "Cost",
+      align: "right",
+      cell: (s) => <span className="text-storm-300">{formatCredits(s.price_credits)}</span>,
+    },
+    {
+      key: "date",
+      header: "Created",
+      align: "right",
+      cell: (s) => <span className="whitespace-nowrap text-storm-400">{formatDate(s.created_at)}</span>,
+    },
   ];
 
   return (
-    <DashboardShell title="Admin console" subtitle="Manage users, wallets, runs and pricing" width="wide">
-      {error && (
-        <Alert tone="red" title="Admin action failed" className="mb-5">
-          {error}
-        </Alert>
-      )}
+    <DashboardShell title="Admin" width="wide">
+      <div className="space-y-6">
+        <PageHeader title="Admin" subtitle="Manage users, wallets, storm runs, and pricing." />
 
-      {/* tabs */}
-      <div className="mb-6 flex flex-wrap gap-1 rounded-xl border border-storm-800 bg-storm-900/60 p-1">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={clsx(
-              "rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors",
-              tab === t.key ? "bg-signal-cyan/15 text-storm-100" : "text-storm-400 hover:text-storm-100",
+        {error && (
+          <Alert tone="red" title={ERROR_TITLES[error.kind]}>
+            {error.message}
+          </Alert>
+        )}
+
+        {/* tabs */}
+        <div
+          role="tablist"
+          aria-label="Admin sections"
+          className="flex flex-wrap gap-1 rounded-xl border border-storm-800 bg-storm-900/60 p-1"
+        >
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              role="tab"
+              aria-selected={tab === t.key}
+              onClick={() => setTab(t.key)}
+              className={clsx(
+                "rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60",
+                "focus-visible:ring-offset-2 focus-visible:ring-offset-storm-950",
+                tab === t.key ? "bg-storm-850 text-storm-100" : "text-storm-400 hover:text-storm-100",
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {tab === "overview" &&
+          (overviewLoading ? (
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <Skeleton className="h-[4.75rem] w-full" />
+              <Skeleton className="h-[4.75rem] w-full" />
+              <Skeleton className="h-[4.75rem] w-full" />
+              <Skeleton className="h-[4.75rem] w-full" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <MetricCard label="Total users" value={formatNumberCompact(totalUsers)} />
+              <MetricCard label="Admins" value={formatNumberCompact(totalAdmins)} />
+              <MetricCard label="Credits in circulation" value={formatNumberCompact(creditsInCirculation)} />
+              <MetricCard label="Storm runs" value={formatNumberCompact(totalStorms)} />
+            </div>
+          ))}
+
+        {tab === "users" && (
+          <div className="space-y-4">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                loadUsers(search);
+              }}
+              className="flex gap-2"
+            >
+              <Input
+                aria-label="Search users by email or name"
+                placeholder="Search by email or name…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              <Button type="submit" variant="outline">
+                Search
+              </Button>
+            </form>
+            {users === null ? (
+              <Skeleton className="h-64 w-full" />
+            ) : (
+              <AdminUserTable
+                users={users}
+                onAdjust={openAdjust}
+                onToggleRole={requestRoleChange}
+                busyId={busyId}
+              />
             )}
-          >
-            {t.label}
-          </button>
-        ))}
+          </div>
+        )}
+
+        {tab === "storms" && (
+          <>
+            {storms === null ? (
+              <Skeleton className="h-64 w-full" />
+            ) : (
+              <DataTable
+                columns={stormCols}
+                rows={storms}
+                rowKey={(s) => s.id}
+                empty={{ title: "No storm runs yet" }}
+              />
+            )}
+          </>
+        )}
+
+        {tab === "pricing" && <PricingEditor pricing={pricing} onSaved={setPricing} />}
       </div>
-
-      {tab === "overview" && (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <MetricCard label="Total users" value={totalUsers} tone="cyan" />
-          <MetricCard label="Admins" value={totalAdmins} />
-          <MetricCard label="Credits in circulation" value={creditsInCirculation.toLocaleString()} />
-          <MetricCard label="Storm runs" value={totalStorms} />
-        </div>
-      )}
-
-      {tab === "users" && (
-        <div className="space-y-4">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              loadUsers(search);
-            }}
-            className="flex gap-2"
-          >
-            <Input
-              placeholder="Search by email or name…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <Button type="submit" variant="outline">
-              Search
-            </Button>
-          </form>
-          {users === null ? (
-            <Skeleton className="h-64 w-full" />
-          ) : (
-            <AdminUserTable
-              users={users}
-              onAdjust={openAdjust}
-              onToggleRole={toggleRole}
-              busyId={busyId}
-            />
-          )}
-        </div>
-      )}
-
-      {tab === "storms" && (
-        <>
-          {storms === null ? (
-            <Skeleton className="h-64 w-full" />
-          ) : (
-            <DataTable columns={stormCols} rows={storms} rowKey={(s) => s.id} empty={{ title: "No storm runs yet" }} />
-          )}
-        </>
-      )}
-
-      {tab === "pricing" && <PricingEditor pricing={pricing} onSaved={setPricing} />}
 
       {/* adjust-wallet modal */}
       <Modal
@@ -276,8 +368,8 @@ export default function AdminPage() {
       >
         <p className="mb-4 text-xs text-storm-400">
           Current balance:{" "}
-          <span className="font-mono text-storm-200">
-            {(adjustUser?.balance_credits ?? 0).toLocaleString()}
+          <span className="font-medium text-storm-200">
+            {formatCredits(adjustUser?.balance_credits ?? 0)}
           </span>{" "}
           credits. Use a positive amount to grant, negative to debit.
         </p>
@@ -303,6 +395,29 @@ export default function AdminPage() {
           </div>
           {adjustError && <p className="text-xs text-signal-red">{adjustError}</p>}
         </div>
+      </Modal>
+
+      {/* role-change confirmation modal — the one allowed interaction addition */}
+      <Modal
+        open={roleTarget !== null}
+        onClose={() => setRoleTarget(null)}
+        title={`Change role for ${roleTarget?.email ?? ""}?`}
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setRoleTarget(null)}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={confirmRoleChange} disabled={busyId === roleTarget?.id}>
+              {roleTarget?.role === "admin" ? "Remove admin" : "Make admin"}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm leading-relaxed text-storm-300">
+          {roleTarget?.role === "admin"
+            ? "This removes admin access — they'll drop back to a standard user."
+            : "This grants full admin access, including wallet adjustments and pricing changes."}
+        </p>
       </Modal>
     </DashboardShell>
   );
@@ -367,11 +482,11 @@ function PricingEditor({ pricing, onSaved }: { pricing: Pricing | null; onSaved:
           </div>
         ))}
 
-        <div className="rounded-lg border border-storm-800 bg-storm-850/60 px-4 py-3 text-sm">
-          <span className="text-storm-400">A 1,000-persona run with analyst report costs </span>
-          <span className="font-mono font-bold text-signal-cyan">{preview}</span>
-          <span className="text-storm-400"> credits.</span>
-        </div>
+        <p className="text-xs text-storm-400">
+          A 1,000-persona run with the analyst report costs{" "}
+          <span className="font-medium text-storm-200">{formatCredits(preview)}</span> credits at
+          these rates.
+        </p>
 
         {msg && <p className="text-xs text-signal-green">{msg}</p>}
         {err && <p className="text-xs text-signal-red">{err}</p>}

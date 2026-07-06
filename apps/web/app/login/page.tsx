@@ -5,12 +5,27 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { AuthShell } from "@/components/AuthShell";
 import { Alert } from "@/components/feedback";
-import { Button, Card, Input, Label } from "@/components/ui";
+import { Button, Card, Input, Label, Skeleton } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
+
+function LoginFallback() {
+  return (
+    <AuthShell>
+      <Card className="p-7">
+        <div className="space-y-4" role="status" aria-label="Loading">
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-11 w-full" />
+        </div>
+      </Card>
+    </AuthShell>
+  );
+}
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<AuthShell><Card className="p-7"><p className="text-sm text-storm-400">Loading…</p></Card></AuthShell>}>
+    <Suspense fallback={<LoginFallback />}>
       <LoginForm />
     </Suspense>
   );
@@ -136,7 +151,7 @@ function LoginForm() {
         type="button"
         onClick={handleResend}
         disabled={resendState === "sending" || !configured}
-        className="text-xs font-semibold text-signal-cyan hover:underline disabled:opacity-50"
+        className="rounded text-xs font-semibold text-accent-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60 disabled:opacity-50"
       >
         {resendState === "sending" ? "Sending…" : "Resend confirmation email"}
       </button>
@@ -185,7 +200,7 @@ function LoginForm() {
               <Label htmlFor="password">Password</Label>
               <Link
                 href="/forgot-password"
-                className="mb-1.5 text-xs font-medium text-signal-cyan hover:underline"
+                className="mb-1.5 rounded text-xs font-medium text-accent-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60"
               >
                 Forgot password?
               </Link>
@@ -214,7 +229,10 @@ function LoginForm() {
 
         <p className="mt-6 text-center text-sm text-storm-400">
           New to PersonaStorm?{" "}
-          <Link href="/signup" className="font-medium text-signal-cyan hover:underline">
+          <Link
+            href="/signup"
+            className="rounded font-medium text-accent-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60"
+          >
             Create an account
           </Link>
         </p>

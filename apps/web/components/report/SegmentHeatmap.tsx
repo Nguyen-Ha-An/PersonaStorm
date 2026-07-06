@@ -61,7 +61,7 @@ function HeatCell({ value, tone }: { value: number; tone: "green" | "yellow" | "
         className="rounded-md px-2 py-1.5 text-center text-xs font-semibold"
         style={{
           backgroundColor: `rgba(${TONE_RGB[tone]}, ${0.08 + value * 0.55})`,
-          color: value > 0.05 ? "#F4F7FA" : "rgba(201,208,219,0.5)",
+          color: value > 0.05 ? "#F4F7FA" : "#A7B0C0",
         }}
       >
         {formatPercent(value)}

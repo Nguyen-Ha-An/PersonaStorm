@@ -89,7 +89,7 @@ export default function WalletPage() {
             {t.storm_id.replace("storm_", "").slice(0, 8)}
           </Link>
         ) : (
-          <span className="text-storm-600">—</span>
+          <span className="text-storm-400">—</span>
         ),
     },
     {

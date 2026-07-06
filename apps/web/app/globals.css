@@ -38,11 +38,6 @@ h3 {
     radial-gradient(70rem 34rem at 50% -12rem, rgba(53, 199, 217, 0.05), transparent 68%),
     radial-gradient(52rem 30rem at 100% -6rem, rgba(139, 124, 246, 0.04), transparent 70%);
 }
-.bg-tunnel > * {
-  position: relative;
-  z-index: 1;
-}
-
 ::selection {
   background: rgba(53, 199, 217, 0.22);
   color: #fff;

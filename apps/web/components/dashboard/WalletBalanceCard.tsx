@@ -2,8 +2,13 @@
 
 import Link from "next/link";
 import { Button, Card } from "@/components/ui";
+import { formatCredits } from "@/lib/format";
 import { IconWallet } from "./icons";
 
+/**
+ * Calm "Available credits" panel — the balance is informational, never the
+ * page hero. Props stay byte-compatible with the previous wallet-hero card.
+ */
 export function WalletBalanceCard({
   balance,
   lifetimeSpent,
@@ -15,27 +20,27 @@ export function WalletBalanceCard({
 }) {
   return (
     <Card className="overflow-hidden">
-      <div className="flex items-start justify-between p-5">
-        <div>
-          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-storm-400">
-            <IconWallet className="h-4 w-4 text-signal-cyan" /> Wallet balance
+      <div className="flex flex-wrap items-start justify-between gap-4 p-5">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-xs font-medium text-storm-400">
+            <IconWallet aria-hidden className="h-4 w-4 text-storm-400" />
+            Available credits
           </div>
-          <p className="mt-2 font-mono text-4xl font-bold leading-none text-storm-100">
-            {balance.toLocaleString()}
-            <span className="ml-2 text-sm font-medium text-storm-400">credits</span>
+          <p className="mt-2 text-3xl font-semibold tracking-tight text-storm-100">
+            {formatCredits(balance)}
           </p>
-          <p className="mt-2 text-xs text-storm-400">
-            {lifetimeSpent.toLocaleString()} credits spent all-time
+          <p className="mt-1.5 text-xs text-storm-400">
+            {formatCredits(lifetimeSpent)} credits spent all-time
           </p>
         </div>
         {!compact && (
-          <div className="flex flex-col gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             <Link href="/storm/new">
-              <Button size="sm">New Storm</Button>
+              <Button size="sm">New Simulation</Button>
             </Link>
-            <Link href="/wallet">
+            <Link href="/dashboard#history">
               <Button size="sm" variant="outline">
-                History
+                View Reports
               </Button>
             </Link>
           </div>

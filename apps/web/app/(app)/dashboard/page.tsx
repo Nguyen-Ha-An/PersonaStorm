@@ -4,13 +4,24 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
-import { WalletBalanceCard } from "@/components/dashboard/WalletBalanceCard";
 import { DataTable, type Column } from "@/components/dashboard/DataTable";
+import { IconStorm } from "@/components/dashboard/icons";
 import { Alert } from "@/components/feedback";
-import { Button, Card, CardHeader, MetricCard, Skeleton, StatusBadge } from "@/components/ui";
+import {
+  Button,
+  Card,
+  CardHeader,
+  MetricCard,
+  SectionHeader,
+  Skeleton,
+  StatusBadge,
+} from "@/components/ui";
+import { ActionPanel } from "@/components/ui/ActionPanel";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { PricingSummary } from "@/components/ui/PricingSummary";
 import { ApiError, getDashboard } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { formatDate } from "@/lib/format";
+import { formatCredits, formatDate, formatNumberCompact } from "@/lib/format";
 import type { DashboardData, StormHistoryItem } from "@/lib/types";
 
 function StatusPill({ status }: { status: string }) {
@@ -70,10 +81,10 @@ export default function DashboardPage() {
   const columns: Column<StormHistoryItem>[] = [
     {
       key: "title",
-      header: "Storm",
+      header: "Simulation",
       cell: (s) => (
         <div className="min-w-0">
-          <p className="truncate font-medium text-storm-100">{s.title}</p>
+          <p className="truncate text-sm font-medium text-storm-100">{s.title}</p>
           <p className="truncate font-mono text-[11px] text-storm-500">{s.id}</p>
         </div>
       ),
@@ -83,13 +94,13 @@ export default function DashboardPage() {
       key: "personas",
       header: "Personas",
       align: "right",
-      cell: (s) => <span className="font-mono">{s.persona_count.toLocaleString()}</span>,
+      cell: (s) => <span className="text-storm-300">{formatNumberCompact(s.persona_count)}</span>,
     },
     {
       key: "cost",
       header: "Cost",
       align: "right",
-      cell: (s) => <span className="font-mono text-storm-300">{s.price_credits}</span>,
+      cell: (s) => <span className="text-storm-300">{formatCredits(s.price_credits)}</span>,
     },
     {
       key: "date",
@@ -102,7 +113,7 @@ export default function DashboardPage() {
   // --- Session expired: never show CONNECTED or fake data. Offer a clean relogin.
   if (state.phase === "auth") {
     return (
-      <DashboardShell title="Dashboard">
+      <DashboardShell title="Overview">
         <Card className="mx-auto max-w-lg p-7 text-center">
           <h1 className="text-lg font-semibold text-storm-100">Your session has expired</h1>
           <p className="mt-2 text-sm leading-relaxed text-storm-300">
@@ -123,18 +134,9 @@ export default function DashboardPage() {
   }
 
   const data = state.phase === "ready" ? state.data : null;
-  const welcome = data ? data.user.full_name || data.user.email : undefined;
 
   return (
-    <DashboardShell
-      title="Dashboard"
-      subtitle={welcome ? `Welcome back, ${welcome}` : undefined}
-      actions={
-        <Link href="/storm/new" className="hidden sm:block">
-          <Button size="sm">New Storm</Button>
-        </Link>
-      }
-    >
+    <DashboardShell title="Overview">
       {state.phase === "error" ? (
         // A load error shows ONLY the alert — no skeletons/zeros that would read
         // as "still loading" or as real data.
@@ -144,7 +146,7 @@ export default function DashboardPage() {
           actions={
             <button
               onClick={() => load()}
-              className="text-xs font-semibold text-signal-cyan hover:underline"
+              className="text-xs font-semibold text-accent-primary hover:underline"
             >
               Retry
             </button>
@@ -153,76 +155,105 @@ export default function DashboardPage() {
           {state.message}
         </Alert>
       ) : (
-        <>
-          <div className="grid gap-4 lg:grid-cols-3">
-            <div className="lg:col-span-2">
+        <div className="space-y-8">
+          <PageHeader
+            eyebrow="Overview"
+            title="Good to see you back"
+            subtitle="Run a product wind tunnel or review your latest market signals."
+            actions={
+              <>
+                <Link href="/storm/new">
+                  <Button variant="primary">New Simulation</Button>
+                </Link>
+                <Link href="/dashboard#history">
+                  <Button variant="outline">View Reports</Button>
+                </Link>
+              </>
+            }
+          />
+
+          <div className="grid gap-6 lg:grid-cols-3">
+            <ActionPanel
+              className="lg:col-span-2"
+              icon={<IconStorm className="h-5 w-5" />}
+              title="Open the wind tunnel"
+              description="Push a concept, landing page, or price through a calibrated persona swarm."
+              primary={
+                <Link href="/storm/new">
+                  <Button variant="primary">New Simulation</Button>
+                </Link>
+              }
+              secondary={
+                <Link href="/dashboard#history">
+                  <Button variant="outline">View Reports</Button>
+                </Link>
+              }
+            />
+
+            <div className="grid grid-cols-1 gap-4">
               {data ? (
-                <WalletBalanceCard
-                  balance={data.wallet.balance_credits}
-                  lifetimeSpent={data.wallet.lifetime_spent_credits}
-                />
+                <>
+                  <MetricCard label="Simulations run" value={data.stats.storms_run} />
+                  <MetricCard label="Credits spent" value={formatCredits(data.stats.credits_spent)} />
+                  <MetricCard
+                    label="Available credits"
+                    value={formatCredits(data.wallet.balance_credits)}
+                  />
+                </>
               ) : (
-                <Skeleton className="h-32 w-full" />
+                <>
+                  <Skeleton className="h-20 w-full" />
+                  <Skeleton className="h-20 w-full" />
+                  <Skeleton className="h-20 w-full" />
+                </>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-1">
-              <MetricCard label="Storms run" value={data ? data.stats.storms_run : "—"} tone="cyan" />
-              <MetricCard
-                label="Credits spent"
-                value={data ? data.stats.credits_spent.toLocaleString() : "—"}
-              />
-            </div>
           </div>
 
-          {/* current pricing */}
-          <Card className="mt-4">
-            <CardHeader title="Current pricing" hint="credits per run" />
-            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-b-2xl bg-storm-800 sm:grid-cols-4">
-              {[
-                ["Base run", data?.pricing.base_run_credits],
-                ["Per 100 personas", data?.pricing.credits_per_100_personas],
-                ["Analyst report", data?.pricing.analyst_report_credits],
-                ["1,000-persona run", data?.pricing.thousand_persona_run],
-              ].map(([label, val]) => (
-                <div key={label as string} className="bg-storm-900 px-4 py-4">
-                  <p className="text-[10px] uppercase tracking-wider text-storm-400">{label}</p>
-                  <p className="mt-1 font-mono text-xl font-bold text-storm-100">
-                    {val === undefined || val === null ? "—" : (val as number).toLocaleString()}
-                  </p>
-                </div>
-              ))}
-            </div>
+          <Card>
+            <CardHeader title="What a run costs" />
+            {data ? (
+              <PricingSummary pricing={data.pricing} />
+            ) : (
+              <div className="space-y-3 p-5">
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
+              </div>
+            )}
           </Card>
 
-          {/* recent reports */}
-          <div id="history" className="mt-8 scroll-mt-20">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-storm-200">
-                Recent storms
-              </h2>
-              <Link href="/storm/new">
-                <Button size="sm" variant="outline">
-                  + New Storm
-                </Button>
-              </Link>
-            </div>
+          <div id="history" className="scroll-mt-20">
+            <SectionHeader
+              title="Recent simulations"
+              action={
+                <Link href="/storm/new">
+                  <Button size="sm" variant="outline">
+                    New Simulation
+                  </Button>
+                </Link>
+              }
+            />
 
-            {data === null ? (
-              <Skeleton className="h-40 w-full" />
-            ) : (
-              <DataTable
-                columns={columns}
-                rows={data.recent_storms}
-                rowKey={(s) => s.id}
-                onRowClick={(s) => router.push(targetHref(s))}
-                empty={{
-                  title: "No storms yet",
-                  message: "Run your first storm to see market reactions and a full evaluation report.",
-                }}
-              />
-            )}
+            <div className="mt-4">
+              {data === null ? (
+                <Skeleton className="h-40 w-full" />
+              ) : (
+                <DataTable
+                  columns={columns}
+                  rows={data.recent_storms}
+                  rowKey={(s) => s.id}
+                  onRowClick={(s) => router.push(targetHref(s))}
+                  empty={{
+                    title: "No simulations yet",
+                    message:
+                      "Run your first wind tunnel to see market reactions and a full validation report.",
+                  }}
+                />
+              )}
+            </div>
           </div>
-        </>
+        </div>
       )}
     </DashboardShell>
   );

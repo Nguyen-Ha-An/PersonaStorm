@@ -8,48 +8,43 @@
 
 body {
   @apply bg-storm-950 text-storm-200 antialiased;
-  font-feature-settings: "ss01", "cv05";
+  font-feature-settings: "cv05", "ss01";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* Tighter, more confident headings across the app. */
+/* Confident, tight headings. */
 h1,
 h2,
 h3 {
   letter-spacing: -0.02em;
 }
 
-/* Instrument-panel backdrop: a soft top-glow over a faint precision grid that
-   fades out toward the fold — calmer and less neon than a full-page grid. */
+/* Global focus policy: one visible ring, accent-tinted, never removed.
+   This is a fallback outline for any interactive element that doesn't
+   supply its own focus-visible ring classes; components that DO set their
+   own `focus-visible:ring-*` (and `focus-visible:outline-none`) override it. */
+:focus-visible {
+  outline: 2px solid rgba(53, 199, 217, 0.6);
+  outline-offset: 2px;
+}
+
+/* Instrument backdrop: a single soft pressure-field glow, no visible grid.
+   Calmer and far less neon than the old cyan grid. */
 .bg-tunnel {
   position: relative;
   background-color: theme("colors.storm.950");
   background-image:
-    radial-gradient(60rem 32rem at 50% -8rem, rgba(34, 211, 238, 0.06), transparent 70%),
-    radial-gradient(48rem 28rem at 100% 0%, rgba(52, 211, 153, 0.04), transparent 70%);
+    radial-gradient(70rem 34rem at 50% -12rem, rgba(53, 199, 217, 0.05), transparent 68%),
+    radial-gradient(52rem 30rem at 100% -6rem, rgba(139, 124, 246, 0.04), transparent 70%);
 }
-.bg-tunnel::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(rgba(58, 71, 97, 0.09) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(58, 71, 97, 0.09) 1px, transparent 1px);
-  background-size: 44px 44px;
-  -webkit-mask-image: radial-gradient(120% 80% at 50% 0%, #000 0%, transparent 65%);
-  mask-image: radial-gradient(120% 80% at 50% 0%, #000 0%, transparent 65%);
-}
-/* Keep real content above the fixed grid layer. */
 .bg-tunnel > * {
   position: relative;
   z-index: 1;
 }
 
 ::selection {
-  background: rgba(34, 211, 238, 0.28);
+  background: rgba(53, 199, 217, 0.22);
   color: #fff;
 }
 
@@ -69,15 +64,15 @@ h3 {
   background: theme("colors.storm.600");
 }
 
-/* Subtle status glows for the live grid — kept low so the UI reads clean. */
+/* Low status glows for the live persona grid — kept subtle. */
 .glow-green {
-  box-shadow: 0 0 6px rgba(52, 211, 153, 0.5);
+  box-shadow: 0 0 5px rgba(76, 195, 138, 0.45);
 }
 .glow-yellow {
-  box-shadow: 0 0 6px rgba(251, 191, 36, 0.45);
+  box-shadow: 0 0 5px rgba(214, 168, 79, 0.4);
 }
 .glow-red {
-  box-shadow: 0 0 6px rgba(251, 113, 133, 0.45);
+  box-shadow: 0 0 5px rgba(239, 106, 122, 0.4);
 }
 
 /* Skeleton shimmer used by loading states. */
@@ -94,7 +89,7 @@ h3 {
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(154, 168, 196, 0.08),
+    rgba(167, 176, 192, 0.08),
     transparent
   );
   @apply animate-shimmer;

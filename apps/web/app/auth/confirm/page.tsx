@@ -87,11 +87,11 @@ export default function AuthConfirmPage() {
   return (
     <AuthShell>
       <Card className="p-7 text-center">
-        <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center">
-          <span className="relative flex h-3 w-3">
-            <span className="absolute inline-flex h-full w-full animate-pulseglow rounded-full bg-signal-cyan opacity-60" />
-            <span className="relative inline-flex h-3 w-3 rounded-full bg-signal-cyan" />
-          </span>
+        <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center" role="status" aria-label="Confirming your email">
+          <span
+            className="h-6 w-6 animate-spin rounded-full border-2 border-storm-700 border-t-storm-300"
+            aria-hidden="true"
+          />
         </div>
         <h1 className="text-lg font-semibold text-storm-100">Confirming your email…</h1>
         <p className="mt-2 text-sm leading-relaxed text-storm-300">
@@ -99,7 +99,10 @@ export default function AuthConfirmPage() {
         </p>
         <p className="mt-4 text-xs text-storm-400">
           Stuck here?{" "}
-          <Link href="/login" className="font-medium text-signal-cyan hover:underline">
+          <Link
+            href="/login"
+            className="rounded font-medium text-accent-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60"
+          >
             Go to login
           </Link>
         </p>

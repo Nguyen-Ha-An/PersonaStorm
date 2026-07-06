@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { NavLinks, Sidebar } from "./Sidebar";
+import { Brand, NavLinks, Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
 /**
@@ -36,8 +36,8 @@ export function DashboardShell({
             onClick={() => setMobileNav(false)}
           />
           <div className="absolute inset-y-0 left-0 w-64 border-r border-storm-800 bg-storm-950 p-3 pt-5">
-            <div className="px-2 pb-6 font-mono text-sm font-bold tracking-[0.22em] text-storm-100">
-              PERSONA<span className="text-signal-cyan">STORM</span>
+            <div className="mb-6 pt-1">
+              <Brand />
             </div>
             <NavLinks onNavigate={() => setMobileNav(false)} />
           </div>
@@ -54,8 +54,8 @@ export function DashboardShell({
         <main
           className={
             width === "wide"
-              ? "mx-auto w-full max-w-[110rem] px-4 py-6 sm:px-6 lg:py-8"
-              : "mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:py-8"
+              ? "mx-auto w-full max-w-[86rem] px-5 py-6 sm:px-6 lg:py-8"
+              : "mx-auto w-full max-w-[75rem] px-5 py-6 sm:px-6 lg:py-8"
           }
         >
           {children}

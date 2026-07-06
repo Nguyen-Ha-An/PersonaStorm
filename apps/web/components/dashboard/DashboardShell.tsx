@@ -24,8 +24,18 @@ export function DashboardShell({
 }) {
   const [mobileNav, setMobileNav] = useState(false);
 
+  // NOTE: `bg-tunnel` intentionally lives on the CONTENT COLUMN, not on the
+  // outer wrapper. globals.css has `.bg-tunnel > * { position: relative }`
+  // (to lift content above the fixed grid backdrop); if the fixed <Sidebar>
+  // were a direct child of a `.bg-tunnel` element, that rule would override its
+  // `position: fixed` with `relative`, drop the ~346px sidebar into normal
+  // flow, and push the whole topbar + page down by that height on desktop —
+  // the "large empty grid area above the title" bug. Keeping the sidebar
+  // outside `.bg-tunnel` preserves `position: fixed` and pins the header to the
+  // top. The grid `::before` is fixed to the viewport, so the backdrop still
+  // covers the full screen.
   return (
-    <div className="min-h-screen bg-tunnel">
+    <div className="min-h-screen bg-storm-950">
       <Sidebar />
 
       {/* mobile nav drawer */}
@@ -44,7 +54,7 @@ export function DashboardShell({
         </div>
       )}
 
-      <div className="lg:pl-64">
+      <div className="bg-tunnel min-h-screen lg:pl-64">
         <Topbar
           title={title}
           subtitle={subtitle}

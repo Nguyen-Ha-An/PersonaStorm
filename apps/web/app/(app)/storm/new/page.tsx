@@ -165,7 +165,7 @@ export default function NewStormPage() {
       if (e instanceof ApiError && e.kind === "payment") {
         setError(e.message);
       } else {
-        setError(e instanceof Error ? e.message : "Failed to start the storm.");
+        setError(e instanceof Error ? e.message : "Failed to start the simulation.");
       }
       setSubmitting(false);
     }
@@ -344,7 +344,7 @@ export default function NewStormPage() {
                   ? `Run wind tunnel — ${formatCredits(quote.total_credits)} credits`
                   : "Open wind tunnel"}
             </Button>
-            <p className="text-center text-[11px] leading-relaxed text-storm-500">
+            <p className="text-center text-xs leading-relaxed text-storm-400">
               Outputs are synthetic hypotheses from a calibrated model. Every report carries a trust
               panel and a real-human validation queue.
             </p>

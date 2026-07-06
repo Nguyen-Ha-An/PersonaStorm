@@ -200,7 +200,7 @@ export default function AdminPage() {
       cell: (s) => (
         <div className="min-w-0">
           <p className="truncate font-medium text-storm-100">{s.title}</p>
-          <p className="truncate font-mono text-[11px] text-storm-500">{s.id}</p>
+          <p className="truncate font-mono text-xs text-storm-400">{s.id}</p>
         </div>
       ),
     },
@@ -211,7 +211,7 @@ export default function AdminPage() {
         s.user_email ? (
           <span className="text-storm-300">{s.user_email}</span>
         ) : (
-          <span className="font-mono text-xs text-storm-500" title={s.user_id}>
+          <span className="font-mono text-xs text-storm-400" title={s.user_id}>
             no name · {s.user_id.slice(0, 8)}
           </span>
         ),

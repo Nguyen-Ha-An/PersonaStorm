@@ -27,7 +27,7 @@ export default function LiveStormPage() {
 
   if (!stormId) {
     return (
-      <DashboardShell title="Live Simulation">
+      <DashboardShell title="Live simulation">
         <ErrorState title="No storm selected" message="This URL is missing a storm ID." />
       </DashboardShell>
     );
@@ -83,7 +83,7 @@ function LiveStormView({ stormId, onRetry }: { stormId: string; onRetry: () => v
 
   if (s.connectionError) {
     return (
-      <DashboardShell title="Live Simulation" subtitle={<span className="font-mono">{stormId}</span>}>
+      <DashboardShell title="Live simulation" subtitle={<span className="font-mono">{stormId}</span>}>
         <ErrorState
           title="Can't connect to the simulation stream"
           message={s.connectionError}
@@ -96,7 +96,7 @@ function LiveStormView({ stormId, onRetry }: { stormId: string; onRetry: () => v
   }
 
   return (
-    <DashboardShell title="Live Simulation" subtitle={<span className="font-mono">{stormId}</span>}>
+    <DashboardShell title="Live simulation" subtitle={<span className="font-mono">{stormId}</span>}>
       <div className="space-y-8">
         <PageHeader
           eyebrow="Live simulation"

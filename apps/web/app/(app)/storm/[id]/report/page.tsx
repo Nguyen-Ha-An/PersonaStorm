@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
-import { Button, Card, CardHeader, SectionRule, Skeleton } from "@/components/ui";
+import { Button, Card, SectionRule, Skeleton } from "@/components/ui";
 import { InsightCard } from "@/components/ui/InsightCard";
 import { ErrorState } from "@/components/feedback";
 import { MarketFitHero } from "@/components/report/MarketFitHero";
@@ -184,7 +184,6 @@ export default function ReportPage() {
         <div className="space-y-4">
           <SectionRule>Criterion deep-dives</SectionRule>
           <Card>
-            <CardHeader title="Criterion deep-dives" hint="trust · differentiation · pricing · workflow" />
             <div className="grid gap-5 p-5 sm:grid-cols-2 xl:grid-cols-4">
               <TrustProofPanel report={report} />
               <DifferentiationPanel report={report} />

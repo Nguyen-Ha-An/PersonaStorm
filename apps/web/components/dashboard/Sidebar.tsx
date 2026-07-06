@@ -100,7 +100,7 @@ export function Sidebar() {
       </div>
       <NavLinks />
       <div className="mt-auto px-2">
-        <p className="rounded-lg border border-storm-800 bg-storm-900 px-3 py-2.5 text-[11px] leading-relaxed text-storm-500">
+        <p className="rounded-lg border border-storm-800 bg-storm-900 px-3 py-2.5 text-xs leading-relaxed text-storm-400">
           The product wind tunnel. Synthetic signal, honestly labeled.
         </p>
       </div>

@@ -11,6 +11,9 @@ import { getPublicReport } from "@/lib/api";
 import { formatNumberCompact, formatPercent } from "@/lib/format";
 import { useStormStream } from "@/lib/useStormStream";
 import { DEMO_STORM_ID } from "@/lib/server/demo";
+import { useGuidedTour } from "@/components/Tour";
+import { reportTourSteps } from "@/lib/tour/steps";
+import { HowItWorks } from "@/components/HowItWorks";
 import type { StormReport } from "@/lib/types";
 
 const SKELETON_CELL_COUNT = 300;
@@ -40,6 +43,10 @@ export default function DemoPage() {
     };
   }, [s.complete]);
 
+  // Guided tour of the report — fires once when the report first appears; the
+  // "Tour" button in the header replays it.
+  const { startTour } = useGuidedTour({ steps: reportTourSteps, storageKey: "ps_tour_demo", active: !!report });
+
   const badge = s.complete
     ? { tone: "green" as const, label: "complete", pulse: false }
     : s.connected
@@ -57,6 +64,11 @@ export default function DemoPage() {
             <StatusBadge tone={badge.tone} pulse={badge.pulse}>
               {badge.label}
             </StatusBadge>
+            {report ? (
+              <Button variant="ghost" size="sm" onClick={startTour}>
+                Tour
+              </Button>
+            ) : null}
             <Link href="/signup">
               <Button size="sm">Run your own →</Button>
             </Link>
@@ -77,6 +89,8 @@ export default function DemoPage() {
             live, then diagnosed into a verdict-first market report.
           </p>
         </div>
+
+        <HowItWorks />
 
         {!s.complete && (
           <div className="space-y-4">

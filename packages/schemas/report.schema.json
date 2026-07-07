@@ -28,6 +28,44 @@
       }
     },
 
+    "verdict": {
+      "type": "object",
+      "description": "Derived headline verdict (Workstream 2). Computed from existing fields at build time; recomputed client-side for legacy runs. Additive and optional.",
+      "required": ["level", "headline", "rationale", "caveated"],
+      "additionalProperties": false,
+      "properties": {
+        "level": { "enum": ["strong", "conditional", "weak"] },
+        "headline": { "type": "string" },
+        "rationale": { "type": "string" },
+        "caveated": { "type": "boolean" }
+      }
+    },
+    "top_actions": {
+      "type": "array",
+      "description": "Up to 3 derived, evidence-enriched next actions (Workstream 2), each scroll-linked to a report panel via anchorId.",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["rank", "imperative", "why", "anchorId"],
+        "additionalProperties": false,
+        "properties": {
+          "rank": { "type": "integer", "minimum": 1, "maximum": 3 },
+          "imperative": { "type": "string" },
+          "why": { "type": "string" },
+          "evidence": {
+            "type": "object",
+            "required": ["stat"],
+            "additionalProperties": false,
+            "properties": {
+              "stat": { "type": "string" },
+              "quote": { "type": "string" }
+            }
+          },
+          "anchorId": { "type": "string" }
+        }
+      }
+    },
+
     "adoption": {
       "type": "object",
       "required": ["green", "yellow", "red"],

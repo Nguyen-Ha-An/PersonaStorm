@@ -24,6 +24,10 @@ import { ObjectionsTable } from "@/components/report/ObjectionsTable";
 import { KillQuoteCard } from "@/components/report/KillQuoteCard";
 import { Recommendations } from "@/components/report/Recommendations";
 import { NextValidationPanel } from "@/components/report/NextValidationPanel";
+import { VerdictBanner } from "@/components/report/VerdictBanner";
+import { TopActions } from "@/components/report/TopActions";
+import { AtAGlance } from "@/components/report/AtAGlance";
+import { deriveVerdict, selectTopActions, type DerivableReport } from "@/lib/server/engine/verdict";
 import { getReport } from "@/lib/api";
 import { formatNumberCompact } from "@/lib/format";
 import type { StormReport } from "@/lib/types";
@@ -147,6 +151,11 @@ export default function ReportPage() {
     </div>
   );
 
+  // Prefer the server-persisted verdict/actions; recompute client-side for any
+  // legacy run generated before the derivation shipped (identical output).
+  const verdict = report.verdict ?? deriveVerdict(report as unknown as DerivableReport);
+  const topActions = report.top_actions ?? selectTopActions(report as unknown as DerivableReport);
+
   return (
     <DashboardShell
       title={report.title}
@@ -155,59 +164,87 @@ export default function ReportPage() {
       width="wide"
     >
       <div className="space-y-8">
-        {/* Tier 1 — hero + the narrative read + calibration, all read before anything else */}
+        {/* Verdict-first — the answer, the KPIs, and what to fix, before the depth */}
         <div className="space-y-4">
-          <MarketFitHero report={report} />
-          <InsightCard title="Executive summary" tone="insight">
-            {report.summary}
-          </InsightCard>
-          <TrustPanel report={report} />
+          <VerdictBanner verdict={verdict} />
+          <AtAGlance report={report} />
+          <TopActions actions={topActions} />
         </div>
 
-        {/* Tier 2 — what's driving (or blocking) adoption */}
-        <div className="space-y-4">
-          <SectionRule>What's driving adoption</SectionRule>
-          <BlockerCards report={report} />
-          <StrengthCards report={report} />
-        </div>
-
-        {/* Tier 3 — criteria diagnosis */}
-        <div className="space-y-4">
-          <SectionRule>Criteria diagnosis</SectionRule>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <CriteriaRadar report={report} />
-            <CriteriaBreakdown report={report} />
-          </div>
-        </div>
-
-        {/* Tier 4 — criterion deep-dives, merged into one denser grid */}
-        <div className="space-y-4">
-          <SectionRule>Criterion deep-dives</SectionRule>
-          <Card>
-            <div className="grid gap-5 p-5 sm:grid-cols-2 xl:grid-cols-4">
-              <TrustProofPanel report={report} />
-              <DifferentiationPanel report={report} />
-              <PricingFitPanel report={report} />
-              <WorkflowFitPanel report={report} />
+        <SectionRule>Full diagnostics</SectionRule>
+        <div id="full-diagnostics" className="scroll-mt-24 space-y-8">
+          {/* Tier 1 — hero + the narrative read + calibration */}
+          <div className="space-y-4">
+            <MarketFitHero report={report} />
+            <InsightCard title="Executive summary" tone="insight">
+              {report.summary}
+            </InsightCard>
+            <div id="quality" className="scroll-mt-24">
+              <TrustPanel report={report} />
             </div>
-          </Card>
-        </div>
+          </div>
 
-        {/* Tier 5 — evidence */}
-        <div className="space-y-4">
-          <SectionRule>Evidence</SectionRule>
-          <PriceCurve report={report} />
-          <SegmentHeatmap report={report} />
-          <AgeCohortBreakdown report={report} />
-          <ObjectionsTable report={report} />
-          <KillQuoteCard report={report} />
-        </div>
+          {/* Tier 2 — what's driving (or blocking) adoption */}
+          <div className="space-y-4">
+            <SectionRule>What's driving adoption</SectionRule>
+            <BlockerCards report={report} />
+            <StrengthCards report={report} />
+          </div>
 
-        {/* Tier 6 — next steps (the "next validation" hand-off to fieldwork) */}
-        <div className="space-y-4">
-          <SectionRule>Next steps</SectionRule>
-          <Recommendations report={report} />
-          <NextValidationPanel report={report} />
+          {/* Tier 3 — criteria diagnosis */}
+          <div className="space-y-4">
+            <SectionRule>Criteria diagnosis</SectionRule>
+            <div className="grid gap-6 lg:grid-cols-2">
+              <CriteriaRadar report={report} />
+              <div id="criteria" className="scroll-mt-24">
+                <CriteriaBreakdown report={report} />
+              </div>
+            </div>
+          </div>
+
+          {/* Tier 4 — criterion deep-dives, merged into one denser grid */}
+          <div className="space-y-4">
+            <SectionRule>Criterion deep-dives</SectionRule>
+            <Card>
+              <div className="grid gap-5 p-5 sm:grid-cols-2 xl:grid-cols-4">
+                <div id="trust" className="scroll-mt-24">
+                  <TrustProofPanel report={report} />
+                </div>
+                <div id="differentiation" className="scroll-mt-24">
+                  <DifferentiationPanel report={report} />
+                </div>
+                <div id="pricing" className="scroll-mt-24">
+                  <PricingFitPanel report={report} />
+                </div>
+                <WorkflowFitPanel report={report} />
+              </div>
+            </Card>
+          </div>
+
+          {/* Tier 5 — evidence */}
+          <div className="space-y-4">
+            <SectionRule>Evidence</SectionRule>
+            <div id="price-curve" className="scroll-mt-24">
+              <PriceCurve report={report} />
+            </div>
+            <div id="segments" className="scroll-mt-24">
+              <SegmentHeatmap report={report} />
+            </div>
+            <AgeCohortBreakdown report={report} />
+            <div id="objections" className="scroll-mt-24">
+              <ObjectionsTable report={report} />
+            </div>
+            <KillQuoteCard report={report} />
+          </div>
+
+          {/* Tier 6 — next steps (the "next validation" hand-off to fieldwork) */}
+          <div className="space-y-4">
+            <SectionRule>Next steps</SectionRule>
+            <Recommendations report={report} />
+            <div id="next-validation" className="scroll-mt-24">
+              <NextValidationPanel report={report} />
+            </div>
+          </div>
         </div>
       </div>
     </DashboardShell>

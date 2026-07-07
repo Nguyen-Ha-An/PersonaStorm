@@ -325,9 +325,39 @@ export interface StormReport {
   recommendations: Recommendation[];
   next_human_validation: NextValidation[];
   persona_count: number;
+  verdict?: Verdict;
+  top_actions?: TopAction[];
   stimulus_type: string;
   target_market: string;
   avg_max_price: number;
   generated_at: string;
   disclaimer: string;
+}
+
+/**
+ * Client-facing mirror of the engine's derivation types
+ * (lib/server/engine/types.ts). Kept identical so the isomorphic
+ * deriveVerdict / selectTopActions fallback in report/page.tsx yields the
+ * exact same shapes the server persisted.
+ */
+export type VerdictLevel = "strong" | "conditional" | "weak";
+
+export interface Verdict {
+  level: VerdictLevel;
+  headline: string;
+  rationale: string;
+  caveated: boolean;
+}
+
+export interface TopActionEvidence {
+  stat: string;
+  quote?: string;
+}
+
+export interface TopAction {
+  rank: number;
+  imperative: string;
+  why: string;
+  evidence?: TopActionEvidence;
+  anchorId: string;
 }

@@ -20,6 +20,7 @@ import "./only";
 
 // Isomorphic + secret-free — safe to import into a server-only module.
 import { validateSupabaseUrl } from "../supabase/config";
+import { DEMO_SIGNUP_CREDITS } from "./demo";
 
 function trimmed(v: string | undefined): string {
   return (v ?? "").trim();
@@ -79,7 +80,7 @@ export function getConfig(): ServerConfig {
     supabaseAnonKey,
     supabaseServiceRoleKey: trimmed(process.env.SUPABASE_SERVICE_ROLE_KEY),
     supabaseJwtSecret: trimmed(process.env.SUPABASE_JWT_SECRET),
-    starterCredits: intEnv("STARTER_CREDITS", 100),
+    starterCredits: intEnv("STARTER_CREDITS", DEMO_SIGNUP_CREDITS),
     apiEnv: trimmed(process.env.API_ENV).toLowerCase() === "prod" ? "prod" : "dev",
     inferenceProvider: inference === "nvidia" ? "nvidia" : "mock",
     analystProvider: analyst === "nvidia" ? "nvidia" : "mock",

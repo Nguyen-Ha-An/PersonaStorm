@@ -187,6 +187,37 @@ export function streamUrl(stormId: string, token: string | null): string {
   return `${API_BASE}/storm/${stormId}/stream${q}`;
 }
 
+// ── stimulus helper ──────────────────────────────────────────────────────────
+export interface StimulusCheck {
+  key: string;
+  label: string;
+  ok: boolean;
+  hint: string;
+}
+export interface StimulusInsight {
+  wordCount: number;
+  category: string;
+  priceCount: number;
+  checks: StimulusCheck[];
+}
+
+/**
+ * Analyze a draft stimulus (no cost, no auth) so a user can strengthen it BEFORE
+ * spending a run — returns the signals the engine detects (pricing, proof, etc.).
+ */
+export async function inspectStimulus(body: {
+  stimulus: string;
+  title?: string;
+  stimulus_type?: string;
+}): Promise<StimulusInsight> {
+  const resp = await safeFetch(`${API_BASE}/stimulus/inspect`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return handle<StimulusInsight>(resp);
+}
+
 // ── admin ───────────────────────────────────────────────────────────────────
 export const adminListUsers = (search?: string) =>
   apiGet<AdminUser[]>(`/admin/users${search ? `?search=${encodeURIComponent(search)}` : ""}`);

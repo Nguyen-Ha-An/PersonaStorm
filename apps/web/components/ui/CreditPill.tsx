@@ -23,7 +23,7 @@ export function CreditPill({
   return (
     <Link
       href={href}
-      aria-label={`${formatCredits(credits)} ${label} available`}
+      aria-label={`${formatCredits(credits)} ${label}`}
       className={clsx(
         "inline-flex items-center gap-1.5 rounded-full border border-storm-800 bg-storm-850 font-medium text-storm-200",
         "transition-colors hover:border-storm-700 hover:bg-storm-800",

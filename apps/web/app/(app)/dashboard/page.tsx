@@ -160,16 +160,6 @@ export default function DashboardPage() {
             eyebrow="Overview"
             title="Good to see you back"
             subtitle="Run a product wind tunnel or review your latest market signals."
-            actions={
-              <>
-                <Link href="/storm/new">
-                  <Button variant="primary">New Simulation</Button>
-                </Link>
-                <Link href="/dashboard#history">
-                  <Button variant="outline">View Reports</Button>
-                </Link>
-              </>
-            }
           />
 
           <div className="grid gap-6 lg:grid-cols-3">
@@ -193,7 +183,10 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 gap-4">
               {data ? (
                 <>
-                  <MetricCard label="Simulations run" value={data.stats.storms_run} />
+                  <MetricCard
+                    label="Simulations run"
+                    value={formatNumberCompact(data.stats.storms_run)}
+                  />
                   <MetricCard label="Credits spent" value={formatCredits(data.stats.credits_spent)} />
                   <MetricCard
                     label="Available credits"

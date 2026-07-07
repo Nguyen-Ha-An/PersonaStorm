@@ -59,7 +59,6 @@ export function LiveCounters({ progress, total }: { progress: ProgressEvent | nu
           <MetricCard
             label="Avg. market fit"
             value={formatPercent(p?.avg_market_fit ?? 0)}
-            tone="cyan"
           />
           <MetricCard
             className="col-span-2"
@@ -73,7 +72,7 @@ export function LiveCounters({ progress, total }: { progress: ProgressEvent | nu
           <MetricCard
             className="col-span-2"
             label="Collapse risk"
-            value={<LevelBadge level={p?.collapse_risk ?? "low"} invert />}
+            value={<LevelBadge level={p?.collapse_risk ?? "low"} />}
           />
         </div>
       </div>

@@ -18,7 +18,7 @@ export function CriterionStat({
     return (
       <div className="rounded-lg border border-storm-800 bg-storm-850 p-3.5">
         <p className="text-xs font-semibold text-storm-300">{labelOverride ?? "—"}</p>
-        <p className="mt-1 text-[11px] text-storm-500">not measured this run</p>
+        <p className="mt-1 text-xs text-storm-400">not measured this run</p>
       </div>
     );
   }
@@ -36,7 +36,7 @@ export function CriterionStat({
         </p>
         <span className={`text-sm font-semibold ${TONE_TEXT[tone]}`}>{formatPercent(criterion.average_score)}</span>
       </div>
-      <p className="mt-1.5 text-[11px] leading-relaxed text-storm-400">{criterion.interpretation}</p>
+      <p className="mt-1.5 text-xs leading-relaxed text-storm-300">{criterion.interpretation}</p>
     </div>
   );
 }

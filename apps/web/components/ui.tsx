@@ -12,6 +12,7 @@
 import clsx from "clsx";
 import {
   useEffect,
+  useId,
   useRef,
   type ButtonHTMLAttributes,
   type HTMLAttributes,
@@ -336,6 +337,7 @@ export function Modal({
   footer?: ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     if (!open) return;
@@ -355,12 +357,12 @@ export function Modal({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={typeof title === "string" ? title : undefined}
+        aria-labelledby={titleId}
         tabIndex={-1}
         className="relative w-full max-w-md overflow-hidden rounded-2xl border border-storm-700 bg-storm-900 shadow-card focus:outline-none"
       >
         <div className="flex items-center justify-between border-b border-storm-800 px-5 py-4">
-          <h3 className="text-sm font-semibold text-storm-100">{title}</h3>
+          <h3 id={titleId} className="text-sm font-semibold text-storm-100">{title}</h3>
           <button
             onClick={onClose}
             aria-label="Close"

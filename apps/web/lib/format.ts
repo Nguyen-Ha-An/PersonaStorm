@@ -37,7 +37,10 @@ export function formatNumberCompact(n: number): string {
     [1e3, "K"],
   ];
   for (const [div, suffix] of units) {
-    if (abs >= div) return `${(n / div).toFixed(1)}${suffix}`;
+    const scaled = (n / div).toFixed(1);
+    // Pick the unit once the 1-decimal rounding reaches 1.0, so boundary
+    // values like 999,999,700 render as "1.0B", never "1000.0M".
+    if (Math.abs(Number(scaled)) >= 1) return `${scaled}${suffix}`;
   }
   return n.toLocaleString();
 }

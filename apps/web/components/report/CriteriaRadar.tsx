@@ -104,8 +104,8 @@ export function CriteriaRadar({ report }: { report: StormReport }) {
                   y={label.y}
                   textAnchor={anchor}
                   dominantBaseline="middle"
-                  fontSize={9.5}
-                  fill="#6F7A8E"
+                  fontSize={11}
+                  fill="#A7B0C0"
                 >
                   {lines.map((line, li) => (
                     <tspan key={li} x={label.x} dy={li === 0 ? 0 : "1.05em"}>

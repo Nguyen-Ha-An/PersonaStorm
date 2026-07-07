@@ -25,6 +25,7 @@ jobs:
   api-tests:
     name: API tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
@@ -54,6 +55,7 @@ jobs:
   web-build:
     name: Web build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
@@ -85,6 +87,7 @@ jobs:
   supabase-deploy:
     name: Deploy Supabase migrations
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [api-tests, web-build]
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     environment: production
@@ -142,6 +145,10 @@ jobs:
   vercel-preview-deploy:
     name: Deploy web to Vercel (Preview)
     runs-on: ubuntu-latest
+    # Bounded so a hung `vercel deploy` fails the job in minutes instead of
+    # stalling for the 6h GitHub default. Must exceed the in-step deploy
+    # budget (2 attempts x 12m) plus install/build overhead.
+    timeout-minutes: 30
     needs: [api-tests, web-build]
     if: github.event_name == 'pull_request'
 
@@ -250,19 +257,54 @@ jobs:
       - name: Deploy preview to Vercel
         id: deploy
         working-directory: apps/web
+        # `vercel deploy` can hang (an upload/build stall) — without a bound it
+        # would sit until the job timeout. Each attempt is capped with `timeout`
+        # and retried once; the FULL Vercel output is streamed to the console
+        # (not swallowed by `tail`) so a failure is diagnosable in the log, and
+        # `--archive=tgz` uploads the source as one tarball to avoid the
+        # file-by-file upload stalls that hang `vercel deploy` in CI.
         run: |
           set -o pipefail
           # Bake a build marker into the deployed bundle so /api/debug/auth-config
           # can prove WHICH commit is live (detects a stale Vercel build). These
           # are non-secret NEXT_PUBLIC_* build args, inlined at build time.
           DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          deployment_url=$(vercel deploy --yes --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG \
-            --build-env NEXT_PUBLIC_COMMIT_SHA="${GITHUB_SHA}" \
-            --build-env NEXT_PUBLIC_DEPLOYED_AT="${DEPLOYED_AT}" \
-            2>&1 | tee vercel-deploy.log | tail -n 1)
+          attempts=2
+          per_attempt_timeout=12m
+          status=1
+          for attempt in $(seq 1 "$attempts"); do
+            echo "::group::vercel deploy (preview, attempt ${attempt}/${attempts})"
+            set +e
+            timeout -k 30 "$per_attempt_timeout" \
+              vercel deploy --yes --archive=tgz --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG \
+                --build-env NEXT_PUBLIC_COMMIT_SHA="${GITHUB_SHA}" \
+                --build-env NEXT_PUBLIC_DEPLOYED_AT="${DEPLOYED_AT}" \
+                2>&1 | tee vercel-deploy.log
+            status=${PIPESTATUS[0]}
+            set -e
+            echo "::endgroup::"
+            if [ "$status" -eq 0 ]; then break; fi
+            if [ "$status" -eq 124 ]; then
+              echo "::warning::vercel deploy timed out after ${per_attempt_timeout} (attempt ${attempt}/${attempts})."
+            else
+              echo "::warning::vercel deploy exited ${status} (attempt ${attempt}/${attempts})."
+            fi
+            if [ "$attempt" -lt "$attempts" ]; then echo "Retrying in 15s..."; sleep 15; fi
+          done
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Vercel preview deploy failed after ${attempts} attempts (exit ${status}). See the streamed output above and the vercel-preview-deploy-log artifact."
+            exit "$status"
+          fi
+          # Deployment URL = last *.vercel.app URL the CLI printed; fall back to
+          # the last URL of any kind. `|| true` keeps `set -e`+pipefail from
+          # aborting when grep finds no match.
+          deployment_url=$(grep -Eio 'https://[a-z0-9._-]+\.vercel\.app' vercel-deploy.log | tail -n 1 || true)
+          if [ -z "$deployment_url" ]; then
+            deployment_url=$(grep -Eo 'https?://[^[:space:]]+' vercel-deploy.log | tail -n 1 || true)
+          fi
           echo "deployment_url=$deployment_url" >> "$GITHUB_OUTPUT"
           echo "### Vercel preview deployment" >> "$GITHUB_STEP_SUMMARY"
-          echo "$deployment_url" >> "$GITHUB_STEP_SUMMARY"
+          echo "${deployment_url:-(no URL captured — see logs)}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Vercel deploy log
         if: always()
@@ -281,6 +323,10 @@ jobs:
   vercel-production-deploy:
     name: Deploy web to Vercel (Production)
     runs-on: ubuntu-latest
+    # Bounded so a hung `vercel deploy` fails the job in minutes instead of
+    # stalling for the 6h GitHub default. Must exceed the local verify build
+    # (~2m) plus the in-step deploy budget (2 attempts x 12m) and overhead.
+    timeout-minutes: 35
     needs: [api-tests, web-build, supabase-deploy]
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     environment: production
@@ -490,19 +536,54 @@ jobs:
       - name: Deploy web to Vercel production
         id: deploy
         working-directory: apps/web
+        # `vercel deploy` can hang (an upload/build stall) — without a bound it
+        # would sit until the job timeout. Each attempt is capped with `timeout`
+        # and retried once; the FULL Vercel output is streamed to the console
+        # (not swallowed by `tail`) so a failure is diagnosable in the log, and
+        # `--archive=tgz` uploads the source as one tarball to avoid the
+        # file-by-file upload stalls that hang `vercel deploy` in CI.
         run: |
           set -o pipefail
           # Bake a build marker into the deployed bundle so /api/debug/auth-config
           # can prove WHICH commit is live (detects a stale Vercel build). These
           # are non-secret NEXT_PUBLIC_* build args, inlined at build time.
           DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          deployment_url=$(vercel deploy --prod --yes --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG \
-            --build-env NEXT_PUBLIC_COMMIT_SHA="${GITHUB_SHA}" \
-            --build-env NEXT_PUBLIC_DEPLOYED_AT="${DEPLOYED_AT}" \
-            2>&1 | tee vercel-deploy.log | tail -n 1)
+          attempts=2
+          per_attempt_timeout=12m
+          status=1
+          for attempt in $(seq 1 "$attempts"); do
+            echo "::group::vercel deploy (production, attempt ${attempt}/${attempts})"
+            set +e
+            timeout -k 30 "$per_attempt_timeout" \
+              vercel deploy --prod --yes --archive=tgz --token="$VERCEL_TOKEN" $VERCEL_SCOPE_ARG \
+                --build-env NEXT_PUBLIC_COMMIT_SHA="${GITHUB_SHA}" \
+                --build-env NEXT_PUBLIC_DEPLOYED_AT="${DEPLOYED_AT}" \
+                2>&1 | tee vercel-deploy.log
+            status=${PIPESTATUS[0]}
+            set -e
+            echo "::endgroup::"
+            if [ "$status" -eq 0 ]; then break; fi
+            if [ "$status" -eq 124 ]; then
+              echo "::warning::vercel deploy timed out after ${per_attempt_timeout} (attempt ${attempt}/${attempts})."
+            else
+              echo "::warning::vercel deploy exited ${status} (attempt ${attempt}/${attempts})."
+            fi
+            if [ "$attempt" -lt "$attempts" ]; then echo "Retrying in 15s..."; sleep 15; fi
+          done
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Vercel production deploy failed after ${attempts} attempts (exit ${status}). See the streamed output above and the vercel-deploy-log artifact."
+            exit "$status"
+          fi
+          # Deployment URL = last *.vercel.app URL the CLI printed; fall back to
+          # the last URL of any kind. `|| true` keeps `set -e`+pipefail from
+          # aborting when grep finds no match.
+          deployment_url=$(grep -Eio 'https://[a-z0-9._-]+\.vercel\.app' vercel-deploy.log | tail -n 1 || true)
+          if [ -z "$deployment_url" ]; then
+            deployment_url=$(grep -Eo 'https?://[^[:space:]]+' vercel-deploy.log | tail -n 1 || true)
+          fi
           echo "deployment_url=$deployment_url" >> "$GITHUB_OUTPUT"
           echo "### Vercel production deployment" >> "$GITHUB_STEP_SUMMARY"
-          echo "$deployment_url" >> "$GITHUB_STEP_SUMMARY"
+          echo "${deployment_url:-(no URL captured — see logs)}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Vercel deploy log
         if: always()

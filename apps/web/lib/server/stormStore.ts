@@ -196,10 +196,13 @@ export async function createAndRunStorm(
 }
 
 /** A storm row the caller is allowed to see, or a 404 (never leaks existence). */
-async function ownedStormRow(gateway: Gateway, stormId: string, user: CurrentUser): Promise<Record<string, any>> {
+async function ownedStormRow(gateway: Gateway, stormId: string, user: CurrentUser | null): Promise<Record<string, any>> {
   const row = await gateway.getStorm(stormId);
   if (!row) throw new HttpError(404, `storm '${stormId}' not found`);
-  if (row.user_id !== user.id && !user.isAdmin) throw new HttpError(404, `storm '${stormId}' not found`);
+  // Public demo runs are readable by anyone (including anonymous visitors). All
+  // other rows require an owner (or admin) and never leak existence otherwise.
+  if (row.is_demo) return row;
+  if (!user || (row.user_id !== user.id && !user.isAdmin)) throw new HttpError(404, `storm '${stormId}' not found`);
   return row;
 }
 
@@ -221,12 +224,12 @@ function metaFromRow(row: Record<string, any>): StormMeta {
   };
 }
 
-export async function getStormMeta(gateway: Gateway, stormId: string, user: CurrentUser): Promise<StormMeta> {
+export async function getStormMeta(gateway: Gateway, stormId: string, user: CurrentUser | null): Promise<StormMeta> {
   return metaFromRow(await ownedStormRow(gateway, stormId, user));
 }
 
 /** Returns the report, or null while still running (→ 202 at the route layer). */
-export async function getStormReport(gateway: Gateway, stormId: string, user: CurrentUser): Promise<StormReport | null> {
+export async function getStormReport(gateway: Gateway, stormId: string, user: CurrentUser | null): Promise<StormReport | null> {
   const row = await ownedStormRow(gateway, stormId, user);
   if (row.report_json) return row.report_json as StormReport;
   if (row.status === "failed") throw new HttpError(500, row.error ?? "storm failed");
@@ -234,7 +237,7 @@ export async function getStormReport(gateway: Gateway, stormId: string, user: Cu
 }
 
 /** Everything the SSE stream needs to replay a completed run. */
-export async function getStreamData(gateway: Gateway, stormId: string, user: CurrentUser): Promise<StreamData> {
+export async function getStreamData(gateway: Gateway, stormId: string, user: CurrentUser | null): Promise<StreamData> {
   const row = await ownedStormRow(gateway, stormId, user);
   const meta = metaFromRow(row);
   const stored = row.reactions_json as { reactions?: ReactionEvent[]; progress?: ProgressEvent } | null;

@@ -21,6 +21,7 @@ import { classifyCategory } from "./engine/criteria/classifier";
 import { PersonaGenerator } from "./engine/persona/generator";
 import { getProvider } from "./engine/providers";
 import { buildReport, type ReportRequest } from "./engine/aggregation/reportBuilder";
+import { attachVerdictAndActions } from "./engine/verdict";
 import { computeQuality } from "./engine/quality/metrics";
 import { parseStimulus } from "./engine/stimulusParser";
 import { mostCommon, normalizeObjection, round } from "./engine/text";
@@ -112,6 +113,10 @@ export async function runStorm(input: StormInput, cfg: ServerConfig = getConfig(
   } catch (err) {
     console.warn("[personastorm engine] analyst enhance failed, keeping deterministic report:", (err as Error).message);
   }
+
+  // Derive the verdict + top actions from the FINAL report (post-analyst) so they
+  // reflect the narrated recommendations, and persist them on the report JSON.
+  report = attachVerdictAndActions(report);
 
   // 6) stream events + final progress snapshot.
   const reactionEvents: ReactionEvent[] = reactions.map((r, i) => ({

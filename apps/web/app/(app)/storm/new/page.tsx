@@ -8,6 +8,7 @@ import { PricePreviewCard } from "@/components/dashboard/PricePreviewCard";
 import { Alert, ApiConfigAlert } from "@/components/feedback";
 import { Button, Card, CardHeader, Input, Label, Select, Textarea } from "@/components/ui";
 import { ApiError, createStorm, getQuote } from "@/lib/api";
+import { StimulusHelper } from "@/components/storm/StimulusHelper";
 import { useAuth } from "@/lib/auth";
 import { formatCredits, formatNumberCompact } from "@/lib/format";
 import { SAMPLES } from "@/lib/samples";
@@ -252,6 +253,9 @@ export default function NewStormPage() {
                   <span className="text-signal-yellow">· need at least 20</span>
                 )}
               </p>
+              <div className="mt-3">
+                <StimulusHelper stimulus={stimulus} title={title} stimulusType={stimulusType} />
+              </div>
             </div>
           </StepCard>
 

@@ -133,8 +133,8 @@ export default function LandingPage() {
                 {...fadeUp(170)}
                 className={clsx(fadeUp(170).className, "mt-8 flex flex-wrap items-center gap-3")}
               >
-                <Link href="/signup">
-                  <Button size="lg">Get started</Button>
+                <Link href="/demo">
+                  <Button size="lg">▶ Watch a 60-second live demo</Button>
                 </Link>
                 <Link href="#how-it-works">
                   <Button size="lg" variant="outline">
@@ -142,6 +142,12 @@ export default function LandingPage() {
                   </Button>
                 </Link>
               </div>
+              <p
+                {...fadeUp(210)}
+                className={clsx(fadeUp(210).className, "mt-3 text-sm text-storm-400")}
+              >
+                No signup — watch a real 1,000-persona run stream live, then read the full report.
+              </p>
             </div>
 
             {/* Real component preview: same UI language as the live report */}

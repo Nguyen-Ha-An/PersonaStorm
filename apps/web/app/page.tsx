@@ -296,7 +296,7 @@ export default function LandingPage() {
                 Read the market before you launch.
               </h2>
               <p className="mt-2 text-[15px] text-storm-300">
-                Sign up and get 100 credits for your first simulation.
+                Sign up and get 240 free credits for your first simulations.
               </p>
             </div>
             <Link href="/signup">

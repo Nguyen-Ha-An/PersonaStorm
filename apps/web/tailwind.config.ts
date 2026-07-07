@@ -57,6 +57,7 @@ const config: Config = {
       },
       fontFamily: {
         sans: [
+          "var(--font-inter)",
           "InterVariable",
           "Inter",
           "-apple-system",

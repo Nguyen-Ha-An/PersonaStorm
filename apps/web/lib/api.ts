@@ -162,6 +162,20 @@ export async function getReport(stormId: string): Promise<StormReport | null> {
 }
 
 /**
+ * Anonymous-capable report fetch for a PUBLIC (is_demo) storm. Sends the access
+ * token if a session exists, omits it otherwise — so the no-signup demo works
+ * for logged-out visitors (the server route allows anon reads of demo rows).
+ */
+export async function getPublicReport(stormId: string): Promise<StormReport | null> {
+  const token = await getAccessToken().catch(() => null);
+  const resp = await safeFetch(`${API_BASE}/storm/${stormId}/report`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (resp.status === 202) return null;
+  return handle<StormReport>(resp);
+}
+
+/**
  * Build the SSE stream URL — same-origin (`/api/storm/{id}/stream`).
  * EventSource cannot set an Authorization header, so the access token travels
  * as a query parameter; the server route only honors `?access_token=` on this

@@ -4,6 +4,8 @@
  * the existing React report components render unchanged.
  */
 
+import type { Verdict, TopAction } from "./types";
+
 export const DISCLAIMER =
   "PersonaStorm output is a synthetic signal produced by a calibrated persona " +
   "model. It is a hypothesis generator for pre-research — objections and price " +
@@ -138,6 +140,10 @@ export interface StormReport {
   recommendations: Recommendation[];
   next_human_validation: NextValidation[];
   persona_count: number;
+  // Derived at build time by attachVerdictAndActions (see ./verdict). Optional
+  // so in-progress builds and legacy runs remain valid StormReports.
+  verdict?: Verdict;
+  top_actions?: TopAction[];
   stimulus_type: string;
   target_market: string;
   avg_max_price: number;

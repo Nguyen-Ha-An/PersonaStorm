@@ -52,7 +52,6 @@ export function TrustPanel({ report }: { report: StormReport }) {
     {
       label: "Collapse risk",
       level: q.collapse_risk,
-      invert: true,
       hint: "is the swarm mode-collapsing into one voice?",
     },
     {
@@ -71,6 +70,9 @@ export function TrustPanel({ report }: { report: StormReport }) {
             <p className="text-xs text-storm-400">{t.label}</p>
             <p className={clsx("mt-1 text-lg font-semibold", t.good ? "text-signal-green" : "text-signal-yellow")}>
               {t.value}
+              <span className="ml-1.5 align-middle text-[10px] font-medium text-storm-400">
+                {t.good ? "OK" : "low"}
+              </span>
             </p>
             <p className="mt-1 text-[11px] leading-snug text-storm-400">{t.hint}</p>
           </div>

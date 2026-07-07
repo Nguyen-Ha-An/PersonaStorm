@@ -38,12 +38,12 @@ export function PriceCurve({ report }: { report: StormReport }) {
               dataKey="price"
               tickFormatter={(v: number) => `$${v}`}
               stroke="#39414F"
-              tick={{ fill: "#6F7A8E", fontSize: 11 }}
+              tick={{ fill: "#A7B0C0", fontSize: 11 }}
             />
             <YAxis
               tickFormatter={(v: number) => `${v}%`}
               stroke="#39414F"
-              tick={{ fill: "#6F7A8E", fontSize: 11 }}
+              tick={{ fill: "#A7B0C0", fontSize: 11 }}
               domain={[0, 100]}
             />
             <Tooltip

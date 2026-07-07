@@ -26,12 +26,12 @@ export function AdminUserTable({
           <p
             className={clsx(
               "truncate",
-              u.full_name ? "font-medium text-storm-100" : "font-mono text-sm text-storm-500",
+              u.full_name ? "font-medium text-storm-100" : "font-mono text-sm text-storm-400",
             )}
           >
             {u.full_name || "no name"}
           </p>
-          <p className="truncate text-xs text-storm-500">{u.email || "—"}</p>
+          <p className="truncate text-xs text-storm-300">{u.email || "—"}</p>
         </div>
       ),
     },

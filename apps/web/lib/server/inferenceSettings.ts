@@ -1,6 +1,7 @@
 import "./only";
 
 import { getConfig, type AnalystProvider, type InferenceProvider, type ServerConfig } from "./env";
+import type { Gateway } from "./gateway";
 
 export interface InferenceSettings {
   inferenceProvider: InferenceProvider;
@@ -47,9 +48,31 @@ export function inferenceSettingsFromRow(
 }
 
 export async function getInferenceSettings(
-  gateway: { getActiveInferenceSettings(): Promise<Record<string, unknown> | null> },
+  gateway: Gateway,
   env: ServerConfig = getConfig(),
 ): Promise<InferenceSettings> {
   const row = await gateway.getActiveInferenceSettings();
   return inferenceSettingsFromRow(row, env);
+}
+
+/**
+ * Effective server config = DB settings layered over env, per-storm. The API
+ * key and base URL are ALWAYS taken from env — never from the DB row — so a
+ * settings row can never repoint the endpoint or smuggle a key.
+ */
+export async function resolveEffectiveConfig(
+  gateway: Gateway,
+  env: ServerConfig = getConfig(),
+): Promise<ServerConfig> {
+  const s = await getInferenceSettings(gateway, env);
+  return {
+    ...env,
+    inferenceProvider: s.inferenceProvider,
+    analystProvider: s.analystProvider,
+    nvidiaModel: s.nvidiaModel,
+    analystModel: s.analystModel,
+    nvidiaMaxTokens: s.nvidiaMaxTokens,
+    analystMaxTokens: s.analystMaxTokens,
+    // nvidiaApiKey + nvidiaBaseUrl deliberately left as `...env`.
+  };
 }

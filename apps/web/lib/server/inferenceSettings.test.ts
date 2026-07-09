@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { getConfig } from "./env";
-import { inferenceSettingsFromRow } from "./inferenceSettings";
+import { inferenceSettingsFromRow, resolveEffectiveConfig } from "./inferenceSettings";
 
 const env = getConfig();
 
@@ -38,5 +38,33 @@ describe("inferenceSettingsFromRow", () => {
   it("falls back analyst_model to nvidia_model when unset", () => {
     const s = inferenceSettingsFromRow({ nvidia_model: "m/x", analyst_model: "" }, env);
     expect(s.analystModel).toBe("m/x");
+  });
+});
+
+describe("resolveEffectiveConfig", () => {
+  it("with no row equals the env config for the editable fields", async () => {
+    const gw = { async getActiveInferenceSettings() { return null; } } as any;
+    const eff = await resolveEffectiveConfig(gw, env);
+    expect(eff.inferenceProvider).toBe(env.inferenceProvider);
+    expect(eff.nvidiaModel).toBe(env.nvidiaModel);
+  });
+
+  it("overrides editable fields from the row but keeps key + base_url from env", async () => {
+    const gw = {
+      async getActiveInferenceSettings() {
+        return {
+          inference_provider: "nvidia", analyst_provider: "nvidia", nvidia_model: "x/y",
+          analyst_model: "a/b", nvidia_max_tokens: 8192, analyst_max_tokens: 8192,
+          // a malicious row trying to smuggle secrets must be ignored:
+          nvidia_api_key: "nvapi-HACK", nvidia_base_url: "https://evil.example",
+        };
+      },
+    } as any;
+    const eff = await resolveEffectiveConfig(gw, env);
+    expect(eff.inferenceProvider).toBe("nvidia");
+    expect(eff.nvidiaModel).toBe("x/y");
+    expect(eff.analystModel).toBe("a/b");
+    expect(eff.nvidiaApiKey).toBe(env.nvidiaApiKey);       // NOT the row's key
+    expect(eff.nvidiaBaseUrl).toBe(env.nvidiaBaseUrl);     // NOT the row's url
   });
 });

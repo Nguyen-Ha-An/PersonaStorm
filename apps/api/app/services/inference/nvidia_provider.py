@@ -40,7 +40,7 @@ from ...schemas.persona import Persona
 from ...schemas.reaction import PersonaReaction
 from ..stimulus_parser import StimulusFeatures
 from .base import PersonaInferenceProvider, ProviderNotConfiguredError
-from .llm_common import parse_llm_reaction
+from .llm_common import apply_reasoning_params, parse_llm_reaction, post_with_retry
 from .prompts import REACTION_JSON_SCHEMA, build_system_prompt, build_user_prompt
 
 logger = logging.getLogger(__name__)
@@ -54,8 +54,11 @@ class NvidiaProvider(PersonaInferenceProvider):
         api_key: str | None,
         base_url: str,
         model: str,
-        use_guided_json: bool = True,
+        structured_output: str = "guided_json",
         max_tokens: int = 2048,
+        enable_thinking: bool = False,
+        reasoning_budget: int | None = None,
+        max_retries: int = 3,
         timeout_s: float = 120.0,
     ):
         if not base_url:
@@ -72,11 +75,20 @@ class NvidiaProvider(PersonaInferenceProvider):
                 "NVIDIA_API_KEY is not set. Generate an 'nvapi-' key at "
                 "build.nvidia.com, set NVIDIA_API_KEY in .env, or switch to mock."
             )
+        if enable_thinking and reasoning_budget is not None and max_tokens <= reasoning_budget:
+            raise ProviderNotConfiguredError(
+                f"NVIDIA_MAX_TOKENS ({max_tokens}) must exceed NVIDIA_REASONING_BUDGET "
+                f"({reasoning_budget}) when NVIDIA_ENABLE_THINKING=true, or the JSON "
+                "answer gets starved by reasoning tokens."
+            )
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
-        self.use_guided_json = use_guided_json
+        self.structured_output = structured_output
         self.max_tokens = max_tokens
+        self.enable_thinking = enable_thinking
+        self.reasoning_budget = reasoning_budget
+        self.max_retries = max_retries
         self._client = httpx.AsyncClient(timeout=timeout_s)
 
     def _headers(self) -> dict[str, str]:
@@ -102,24 +114,27 @@ class NvidiaProvider(PersonaInferenceProvider):
             "max_tokens": self.max_tokens,
             "temperature": 0.8,  # persona texture needs some heat
         }
-        if self.use_guided_json:
+        apply_reasoning_params(
+            payload, enable_thinking=self.enable_thinking, reasoning_budget=self.reasoning_budget
+        )
+        if self.structured_output == "guided_json":
             # NIM's OpenAI-schema extension: hard-constrain output to the schema.
             payload["nvext"] = {"guided_json": REACTION_JSON_SCHEMA}
-        else:
+        elif self.structured_output == "json_object":
             payload["response_format"] = {"type": "json_object"}
+        # "none": no structured-output field; rely on parse_llm_reaction.
 
-        # TODO(live-key): retry w/ exponential backoff on 429/5xx — the hosted
-        #   free endpoint is rate-limited, so large storms will hit 429s.
-        # TODO(live-key): track token usage per storm for cost reporting.
-        resp = await self._client.post(
+        resp = await post_with_retry(
+            self._client,
             f"{self.base_url}/chat/completions",
             headers=self._headers(),
-            json=payload,
+            json_body=payload,
+            max_retries=self.max_retries,
         )
-        resp.raise_for_status()
         message = resp.json()["choices"][0]["message"]
         # Reasoning models split chain-of-thought into reasoning_content and the
-        # answer into content; we only ever parse content (the constrained JSON).
+        # answer into content; parse only content. Empty content (budget spent on
+        # thinking) raises in parse_llm_reaction -> counts as a failed persona.
         content = message.get("content") or ""
         return parse_llm_reaction(content, persona, features, category)
 

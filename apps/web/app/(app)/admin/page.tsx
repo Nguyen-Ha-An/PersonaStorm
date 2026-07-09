@@ -649,6 +649,29 @@ function InferenceEditor({
           </div>
         </div>
 
+        {form.orchestration && (
+          <div className="rounded-lg border border-storm-800 bg-storm-900/40 p-4">
+            <p className="mb-2 text-xs font-semibold text-storm-200">
+              Nemotron / Fireworks worker swarm
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <StatusBadge tone={form.orchestration.orchestration_enabled ? "green" : "yellow"}>
+                {form.orchestration.orchestration_enabled ? "orchestration: on" : "orchestration: off"}
+              </StatusBadge>
+              <StatusBadge tone={form.fireworks_api_key_configured ? "green" : "yellow"}>
+                {form.fireworks_api_key_configured ? "Fireworks key: configured" : "Fireworks key: not set"}
+              </StatusBadge>
+            </div>
+            <p className="mt-2 text-xs text-storm-400">
+              Main brain: Nemotron ({form.orchestration.orchestrator_model}). Workers:{" "}
+              {form.orchestration.worker_model || "DeepSeek-V4-Flash"} via Fireworks. Physical
+              workers: {form.orchestration.max_physical_workers} (hard cap{" "}
+              {form.orchestration.max_physical_workers_cap}); ~
+              {form.orchestration.virtual_agents_per_worker} virtual agents each.
+            </p>
+          </div>
+        )}
+
         {msg && <p className="text-xs text-signal-green">{msg}</p>}
         {err && <p className="text-xs text-signal-red">{err}</p>}
 

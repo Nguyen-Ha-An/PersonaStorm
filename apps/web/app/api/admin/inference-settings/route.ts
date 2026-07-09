@@ -27,7 +27,9 @@ export async function POST(request: Request) {
     await requireAdmin(request, gateway);
     const env = getConfig();
     const input = validateInferenceSettingsBody(await readJson(request));
-    await gateway.updateActiveInferenceSettings(input);
+    // Flatten the orchestration sub-object into the flat DB row shape.
+    const { orchestration, ...classic } = input;
+    await gateway.updateActiveInferenceSettings({ ...classic, ...orchestration });
     const settings = await getInferenceSettings(gateway, env);
     return jsonResponse(toInferenceSettingsView(settings, env));
   });

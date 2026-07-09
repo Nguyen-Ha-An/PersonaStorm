@@ -29,6 +29,11 @@ function trimmed(v: string | undefined): string {
 export type InferenceProvider = "mock" | "nvidia";
 export type AnalystProvider = "mock" | "nvidia";
 
+/** Default Nemotron orchestrator model ("main brain"). */
+export const DEFAULT_ORCHESTRATOR_MODEL = "nvidia/nemotron-3-ultra-550b-a55b";
+/** Default Fireworks DeepSeek worker model if FIREWORKS_DEEPSEEK_MODEL is unset. */
+export const DEFAULT_WORKER_MODEL = "accounts/fireworks/models/deepseek-v4-flash";
+
 export interface ServerConfig {
   supabaseUrl: string;
   supabaseAnonKey: string;
@@ -48,6 +53,11 @@ export interface ServerConfig {
   // Live-replay pacing for the SSE stream (data is precomputed at create time).
   streamBatchSize: number;
   streamBatchIntervalMs: number;
+  // ── Nemotron-orchestrated Fireworks worker swarm (server-only secrets) ──
+  fireworksApiKey: string;
+  fireworksBaseUrl: string;
+  fireworksDeepseekModel: string;
+  orchestratorModel: string;
 }
 
 function intEnv(name: string, fallback: number): number {
@@ -94,6 +104,11 @@ export function getConfig(): ServerConfig {
     personaSeed: intEnv("PERSONA_SEED", 1337),
     streamBatchSize: intEnv("STREAM_BATCH_SIZE", 25),
     streamBatchIntervalMs: intEnv("STREAM_BATCH_INTERVAL_MS", 45),
+    // Fireworks worker swarm — keys/base URLs ALWAYS from env, never a DB row.
+    fireworksApiKey: trimmed(process.env.FIREWORKS_API_KEY),
+    fireworksBaseUrl: trimmed(process.env.FIREWORKS_BASE_URL) || "https://api.fireworks.ai/inference/v1",
+    fireworksDeepseekModel: trimmed(process.env.FIREWORKS_DEEPSEEK_MODEL) || DEFAULT_WORKER_MODEL,
+    orchestratorModel: trimmed(process.env.NVIDIA_ORCHESTRATOR_MODEL) || DEFAULT_ORCHESTRATOR_MODEL,
   };
 }
 

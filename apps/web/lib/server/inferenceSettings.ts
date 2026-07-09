@@ -3,6 +3,25 @@ import "./only";
 import { getConfig, type AnalystProvider, type InferenceProvider, type ServerConfig } from "./env";
 import type { Gateway } from "./gateway";
 import { HttpError } from "./errors";
+import { clampPhysicalWorkers, MAX_PHYSICAL_SWARM_WORKERS } from "./engine/orchestration/caps";
+
+/** Runtime-tunable orchestration knobs (subset stored in the DB row). */
+export interface OrchestrationSettings {
+  orchestrationEnabled: boolean;
+  orchestratorProvider: "nvidia";
+  orchestratorModel: string;
+  workerProvider: "fireworks";
+  workerModel: string;
+  /** ALWAYS in [1, MAX_PHYSICAL_SWARM_WORKERS] after resolution. */
+  maxPhysicalWorkers: number;
+  virtualAgentsPerWorker: number;
+  workerMaxTokens: number;
+  orchestratorMaxTokens: number;
+  workerTemperature: number;
+  orchestratorTemperature: number;
+  enableWorkerWebResearch: boolean;
+  workerWebResearchMaxQueries: number;
+}
 
 export interface InferenceSettings {
   inferenceProvider: InferenceProvider;
@@ -11,6 +30,7 @@ export interface InferenceSettings {
   analystModel: string;
   nvidiaMaxTokens: number;
   analystMaxTokens: number;
+  orchestration: OrchestrationSettings;
   id: string | null;
 }
 
@@ -22,6 +42,44 @@ function coerceProvider(v: unknown, fallback: "mock" | "nvidia"): "mock" | "nvid
 function posInt(v: unknown, fallback: number): number {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+}
+
+function boolField(v: unknown, fallback: boolean): boolean {
+  return typeof v === "boolean" ? v : fallback;
+}
+
+function tempField(v: unknown, fallback: number): number {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 && n <= 2 ? n : fallback;
+}
+
+/**
+ * Resolve orchestration settings from a DB row, defaulting to env. The physical
+ * worker count is ALWAYS clamped to [1, MAX_PHYSICAL_SWARM_WORKERS] and the
+ * virtual-agents-per-worker floored at 1 — no stored value can exceed the cap.
+ */
+export function orchestrationSettingsFromRow(
+  r: Record<string, unknown>,
+  env: ServerConfig,
+): OrchestrationSettings {
+  const rawWorkerModel = typeof r.worker_model === "string" ? r.worker_model.trim() : "";
+  const rawOrchModel = typeof r.orchestrator_model === "string" ? r.orchestrator_model.trim() : "";
+  return {
+    orchestrationEnabled: boolField(r.orchestration_enabled, false),
+    orchestratorProvider: "nvidia",
+    orchestratorModel: rawOrchModel || env.orchestratorModel,
+    workerProvider: "fireworks",
+    workerModel: rawWorkerModel || env.fireworksDeepseekModel,
+    // Hard cap enforced here, regardless of what the DB stored.
+    maxPhysicalWorkers: clampPhysicalWorkers(posInt(r.max_physical_workers, MAX_PHYSICAL_SWARM_WORKERS)),
+    virtualAgentsPerWorker: Math.max(1, posInt(r.virtual_agents_per_worker, 5)),
+    workerMaxTokens: posInt(r.worker_max_tokens, 1024),
+    orchestratorMaxTokens: posInt(r.orchestrator_max_tokens, 4096),
+    workerTemperature: tempField(r.worker_temperature, 0.6),
+    orchestratorTemperature: tempField(r.orchestrator_temperature, 0.4),
+    enableWorkerWebResearch: boolField(r.enable_worker_web_research, false),
+    workerWebResearchMaxQueries: Math.max(0, posInt(r.worker_web_research_max_queries, 3)),
+  };
 }
 
 /**
@@ -44,6 +102,7 @@ export function inferenceSettingsFromRow(
     analystModel,
     nvidiaMaxTokens: posInt(r.nvidia_max_tokens, env.nvidiaMaxTokens),
     analystMaxTokens: posInt(r.analyst_max_tokens, env.analystMaxTokens),
+    orchestration: orchestrationSettingsFromRow(r, env),
     id: typeof r.id === "string" ? r.id : null,
   };
 }
@@ -81,6 +140,20 @@ export async function resolveEffectiveConfig(
 const MIN_TOKENS = 1;
 const MAX_TOKENS = 200_000;
 
+export interface OrchestrationSettingsInput {
+  orchestration_enabled: boolean;
+  orchestrator_model: string;
+  worker_model: string;
+  max_physical_workers: number;
+  virtual_agents_per_worker: number;
+  worker_max_tokens: number;
+  orchestrator_max_tokens: number;
+  worker_temperature: number;
+  orchestrator_temperature: number;
+  enable_worker_web_research: boolean;
+  worker_web_research_max_queries: number;
+}
+
 export interface InferenceSettingsInput {
   inference_provider: "mock" | "nvidia";
   analyst_provider: "mock" | "nvidia";
@@ -88,6 +161,7 @@ export interface InferenceSettingsInput {
   analyst_model: string;
   nvidia_max_tokens: number;
   analyst_max_tokens: number;
+  orchestration: OrchestrationSettingsInput;
 }
 
 function providerField(v: unknown, label: string): "mock" | "nvidia" {
@@ -103,6 +177,58 @@ function tokensField(v: unknown, label: string): number {
   return n;
 }
 
+function optTokens(v: unknown, label: string, fallback: number): number {
+  if (v == null) return fallback;
+  return tokensField(v, label);
+}
+
+function optBool(v: unknown, fallback: boolean): boolean {
+  return typeof v === "boolean" ? v : fallback;
+}
+
+function optTemp(v: unknown, label: string, fallback: number): number {
+  if (v == null) return fallback;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0 || n > 2) throw new HttpError(400, `${label} must be a number in [0, 2].`);
+  return n;
+}
+
+function optCount(v: unknown, label: string, min: number, max: number, fallback: number): number {
+  if (v == null) return fallback;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < min || n > max) {
+    throw new HttpError(400, `${label} must be an integer in [${min}, ${max}].`);
+  }
+  return n;
+}
+
+/**
+ * Validate the orchestration sub-object. `max_physical_workers` is CLAMPED to
+ * the hard cap here on write — an admin can never persist a value that would
+ * exceed MAX_PHYSICAL_SWARM_WORKERS (the resolver clamps again on read, so this
+ * is belt-and-suspenders).
+ */
+export function validateOrchestrationBody(body: unknown): OrchestrationSettingsInput {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const orchestrator_model = typeof b.orchestrator_model === "string" ? b.orchestrator_model.trim().slice(0, 200) : "";
+  const worker_model = typeof b.worker_model === "string" ? b.worker_model.trim().slice(0, 200) : "";
+  return {
+    orchestration_enabled: optBool(b.orchestration_enabled, false),
+    orchestrator_model,
+    worker_model,
+    max_physical_workers: clampPhysicalWorkers(
+      optCount(b.max_physical_workers, "max_physical_workers", 1, 10_000, MAX_PHYSICAL_SWARM_WORKERS),
+    ),
+    virtual_agents_per_worker: optCount(b.virtual_agents_per_worker, "virtual_agents_per_worker", 1, 200, 5),
+    worker_max_tokens: optTokens(b.worker_max_tokens, "worker_max_tokens", 1024),
+    orchestrator_max_tokens: optTokens(b.orchestrator_max_tokens, "orchestrator_max_tokens", 4096),
+    worker_temperature: optTemp(b.worker_temperature, "worker_temperature", 0.6),
+    orchestrator_temperature: optTemp(b.orchestrator_temperature, "orchestrator_temperature", 0.4),
+    enable_worker_web_research: optBool(b.enable_worker_web_research, false),
+    worker_web_research_max_queries: optCount(b.worker_web_research_max_queries, "worker_web_research_max_queries", 0, 20, 3),
+  };
+}
+
 export function validateInferenceSettingsBody(body: unknown): InferenceSettingsInput {
   const b = (body ?? {}) as Record<string, unknown>;
   const nvidia_model =
@@ -116,15 +242,49 @@ export function validateInferenceSettingsBody(body: unknown): InferenceSettingsI
     analyst_model,
     nvidia_max_tokens: tokensField(b.nvidia_max_tokens, "nvidia_max_tokens"),
     analyst_max_tokens: tokensField(b.analyst_max_tokens, "analyst_max_tokens"),
+    orchestration: validateOrchestrationBody(b.orchestration),
   };
+}
+
+export interface OrchestrationSettingsView extends OrchestrationSettingsInput {
+  orchestrator_provider: "nvidia";
+  worker_provider: "fireworks";
+  /** Compile-time reminder of the hard ceiling, surfaced read-only to the UI. */
+  max_physical_workers_cap: number;
 }
 
 export interface InferenceSettingsView extends InferenceSettingsInput {
   nvidia_base_url: string;
   nvidia_api_key_configured: boolean;
+  fireworks_base_url: string;
+  fireworks_api_key_configured: boolean;
+  orchestration: OrchestrationSettingsView;
 }
 
-/** Client-facing view. NEVER includes the API key — only a boolean + base URL. */
+function toOrchestrationView(o: OrchestrationSettings): OrchestrationSettingsView {
+  return {
+    orchestration_enabled: o.orchestrationEnabled,
+    orchestrator_provider: o.orchestratorProvider,
+    orchestrator_model: o.orchestratorModel,
+    worker_provider: o.workerProvider,
+    worker_model: o.workerModel,
+    max_physical_workers: o.maxPhysicalWorkers,
+    virtual_agents_per_worker: o.virtualAgentsPerWorker,
+    worker_max_tokens: o.workerMaxTokens,
+    orchestrator_max_tokens: o.orchestratorMaxTokens,
+    worker_temperature: o.workerTemperature,
+    orchestrator_temperature: o.orchestratorTemperature,
+    enable_worker_web_research: o.enableWorkerWebResearch,
+    worker_web_research_max_queries: o.workerWebResearchMaxQueries,
+    max_physical_workers_cap: MAX_PHYSICAL_SWARM_WORKERS,
+  };
+}
+
+/**
+ * Client-facing view. NEVER includes any API key — only booleans + base URLs.
+ * Both the NVIDIA (orchestrator) and Fireworks (worker) credentials are exposed
+ * strictly as `*_api_key_configured` flags.
+ */
 export function toInferenceSettingsView(s: InferenceSettings, env: ServerConfig): InferenceSettingsView {
   return {
     inference_provider: s.inferenceProvider,
@@ -133,7 +293,10 @@ export function toInferenceSettingsView(s: InferenceSettings, env: ServerConfig)
     analyst_model: s.analystModel,
     nvidia_max_tokens: s.nvidiaMaxTokens,
     analyst_max_tokens: s.analystMaxTokens,
+    orchestration: toOrchestrationView(s.orchestration),
     nvidia_base_url: env.nvidiaBaseUrl,
     nvidia_api_key_configured: Boolean(env.nvidiaApiKey),
+    fireworks_base_url: env.fireworksBaseUrl,
+    fireworks_api_key_configured: Boolean(env.fireworksApiKey),
   };
 }

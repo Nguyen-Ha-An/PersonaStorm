@@ -17,6 +17,8 @@ import { getPricingRule, quotePrice } from "./pricing";
 import { chargeForStorm, refundStorm } from "./wallet";
 import { runStorm, type ProgressEvent, type ReactionEvent } from "./stormEngine";
 import type { StormReport } from "./engine/report";
+import type { OrchestrationRecord } from "./engine/orchestration/types";
+import { maybeRunOrchestration } from "./orchestrationRunner";
 
 export interface CreateStormPayload {
   title: string;
@@ -177,11 +179,26 @@ export async function createAndRunStorm(
       effectiveCfg,
     );
 
+    // Optional Nemotron/Fireworks orchestration layer (opt-in; default off, so
+    // this is a no-op returning null unless an admin enabled it). Best-effort —
+    // it never throws, so it can't fail an otherwise-successful storm.
+    const orchestration = await maybeRunOrchestration(
+      gateway,
+      {
+        objective: payload.title,
+        stimulus: payload.stimulus,
+        stimulusType: payload.stimulus_type,
+        targetPersonaCount: payload.persona_count,
+      },
+      effectiveCfg,
+    );
+
     await gateway.updateStorm(stormId, {
       status: "complete",
       completed_at: new Date().toISOString(),
       report_json: result.report,
       reactions_json: { reactions: result.reactions, progress: result.progress },
+      ...(orchestration ? { orchestration_json: orchestration } : {}),
     });
 
     return { storm_id: stormId, status: "complete", price_credits: quote.total_credits, wallet_balance_after: balanceAfter };
@@ -259,6 +276,21 @@ export async function getStreamData(gateway: Gateway, stormId: string, user: Cur
       elapsed_ms: 0,
     };
   return { meta, reactions, progress };
+}
+
+/**
+ * The persisted orchestration record (plan + worker shard outputs + final
+ * synthesis + server numerics), or null if this run had no orchestration. Same
+ * owner gate as every other read — a non-owner gets a 404. This is what lets a
+ * completed run's orchestration survive a page reload.
+ */
+export async function getStormOrchestration(
+  gateway: Gateway,
+  stormId: string,
+  user: CurrentUser | null,
+): Promise<OrchestrationRecord | null> {
+  const row = await ownedStormRow(gateway, stormId, user);
+  return (row.orchestration_json as OrchestrationRecord | null) ?? null;
 }
 
 export async function listUserHistory(gateway: Gateway, userId: string): Promise<Record<string, any>[]> {

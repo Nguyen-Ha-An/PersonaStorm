@@ -5,9 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import clsx from "clsx";
 import { Brand } from "@/components/dashboard/Sidebar";
-import { IconReport, IconShield, IconStorm } from "@/components/dashboard/icons";
 import { Button, Card, LevelBadge } from "@/components/ui";
-import { InsightCard } from "@/components/ui/InsightCard";
 import { useAuth } from "@/lib/auth";
 
 // Deterministic (no Math.random — avoids any SSR/CSR hydration mismatch) mock
@@ -22,49 +20,63 @@ const MOCK_CELLS: MockTone[] = Array.from({ length: 60 }, (_, i): MockTone => {
   return "pending";
 });
 
-const CAPABILITIES: {
-  title: string;
-  tone: "insight" | "success" | "risk";
-  icon: JSX.Element;
-  body: string;
-}[] = [
-  {
-    title: "Market simulation",
-    tone: "insight",
-    icon: <IconStorm className="h-4 w-4" />,
-    body: "Push a concept, ad, or pricing table through a calibrated swarm of synthetic personas and watch reactions land cell by cell, live.",
-  },
-  {
-    title: "Structured validation report",
-    tone: "success",
-    icon: <IconReport className="h-4 w-4" />,
-    body: "Objections clustered by theme, a price-sensitivity curve, and segment-level adoption — organized so the verdict is obvious before the detail.",
-  },
-  {
-    title: "Honest calibration",
-    tone: "risk",
-    icon: <IconShield className="h-4 w-4" />,
-    body: "Every report ships with a calibration panel — collapse risk, model adherence, and confidence — so you know exactly how much to trust it.",
-  },
-];
+const TONE_CLASS: Record<MockTone, string> = {
+  green: "bg-signal-green/85",
+  yellow: "bg-signal-yellow/80",
+  red: "bg-signal-red/80",
+  pending: "bg-storm-800/70",
+};
 
-const STEPS: { n: string; title: string; body: string }[] = [
+const STEPS: { title: string; body: string }[] = [
   {
-    n: "01",
     title: "Configure",
     body: "Describe your concept, choose a target segment, and pick a persona depth.",
   },
   {
-    n: "02",
     title: "Simulate",
-    body: "A calibrated persona swarm reacts live — the grid fills in cell by cell as responses arrive.",
+    body: "A calibrated persona swarm reacts live. The grid fills in cell by cell as responses arrive.",
   },
   {
-    n: "03",
     title: "Validate",
     body: "Read a structured report: adoption forecast, objections, pricing fit, and an honesty check.",
   },
 ];
+
+/** Entry cascade for the hero; static under prefers-reduced-motion. */
+function fadeUp(delayMs: number) {
+  return {
+    className: "animate-fade-up motion-reduce:animate-none",
+    style: { animationDelay: `${delayMs}ms` },
+  };
+}
+
+function SwarmCells({ cells }: { cells: MockTone[] }) {
+  return (
+    <>
+      {cells.map((tone, i) => (
+        <div
+          key={i}
+          aria-hidden="true"
+          className={clsx("aspect-square rounded-[2px]", TONE_CLASS[tone])}
+        />
+      ))}
+    </>
+  );
+}
+
+function AdoptionBar({ className }: { className?: string }) {
+  return (
+    <div
+      className={clsx("flex overflow-hidden rounded-full border border-storm-700", className)}
+      role="img"
+      aria-label="Adoption split: 62 percent adopts, 25 percent unsure, 13 percent rejects"
+    >
+      <div className="bg-signal-green/85" style={{ width: "62%" }} />
+      <div className="bg-signal-yellow/80" style={{ width: "25%" }} />
+      <div className="bg-signal-red/80" style={{ width: "13%" }} />
+    </div>
+  );
+}
 
 export default function LandingPage() {
   const router = useRouter();
@@ -76,7 +88,7 @@ export default function LandingPage() {
   }, [loading, session, router]);
 
   return (
-    <div className="bg-tunnel flex min-h-screen flex-col">
+    <div className="bg-tunnel flex min-h-[100dvh] flex-col">
       <header className="sticky top-0 z-20 border-b border-storm-800 bg-storm-950/80 px-5 py-3 backdrop-blur-md sm:px-6">
         <div className="mx-auto flex w-full max-w-[75rem] items-center justify-between">
           <Brand />
@@ -94,143 +106,210 @@ export default function LandingPage() {
       </header>
 
       <main className="mx-auto w-full max-w-[75rem] flex-1 px-5 sm:px-6">
-        {/* Hero */}
-        <section className="animate-fade-up py-16 text-center sm:py-24">
-          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-storm-400">
-            Pre-launch validation
-          </p>
-          <h1 className="mx-auto mt-4 max-w-3xl text-4xl font-semibold leading-[1.08] tracking-tight text-storm-100 sm:text-6xl">
-            The product wind tunnel.
-          </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-storm-300 sm:text-lg">
-            Push a concept, landing page, ad, or price through a calibrated swarm of synthetic
-            personas — and read the market&rsquo;s reaction before you launch.
-          </p>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <Link href="/signup">
-              <Button size="lg">Start free — 100 credits</Button>
-            </Link>
-            <Link href="#how-it-works">
-              <Button size="lg" variant="outline">
-                See how it works
-              </Button>
-            </Link>
-          </div>
-          <p className="mx-auto mt-4 max-w-xl text-xs text-storm-400">
-            Synthetic signal, honestly labeled — not a replacement for real research.
-          </p>
-        </section>
+        {/* Hero: asymmetric split — copy left, the product's own report UI right */}
+        <section className="py-14 lg:py-20">
+          <div className="grid items-center gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
+            <div>
+              <h1
+                {...fadeUp(0)}
+                className={clsx(
+                  fadeUp(0).className,
+                  "text-4xl font-semibold leading-[1.06] tracking-tight text-storm-100 sm:text-5xl lg:text-6xl",
+                )}
+              >
+                The product wind tunnel.
+              </h1>
+              <p
+                {...fadeUp(110)}
+                className={clsx(
+                  fadeUp(110).className,
+                  "mt-5 max-w-xl text-[17px] leading-relaxed text-storm-300",
+                )}
+              >
+                Push a concept, ad, or price through a calibrated swarm of synthetic personas and
+                read the market before you launch.
+              </p>
+              <div
+                {...fadeUp(170)}
+                className={clsx(fadeUp(170).className, "mt-8 flex flex-wrap items-center gap-3")}
+              >
+                <Link href="/demo">
+                  <Button size="lg">▶ Watch a 60-second live demo</Button>
+                </Link>
+                <Link href="#how-it-works">
+                  <Button size="lg" variant="outline">
+                    See how it works
+                  </Button>
+                </Link>
+              </div>
+              <p
+                {...fadeUp(210)}
+                className={clsx(fadeUp(210).className, "mt-3 text-sm text-storm-400")}
+              >
+                No signup — watch a real 1,000-persona run stream live, then read the full report.
+              </p>
+            </div>
 
-        {/* Product proof: a stylized mock of the live persona grid + report hero */}
-        <section className="pb-20">
-          <Card className="overflow-hidden p-6 sm:p-8">
-            <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-storm-400">
-              Sample report
-            </p>
-            <div className="mt-5 grid gap-8 lg:grid-cols-[1.2fr_1fr] lg:gap-10">
-              {/* mock persona grid */}
-              <div>
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold text-storm-100">Persona responses</h3>
-                  <div className="flex items-center gap-3 text-xs text-storm-400">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-signal-green" aria-hidden="true" />
-                      Adopts
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-signal-yellow" aria-hidden="true" />
-                      Unsure
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-signal-red" aria-hidden="true" />
-                      Rejects
-                    </span>
-                  </div>
-                </div>
-                <div
-                  className="mt-4 grid grid-cols-10 gap-1 sm:grid-cols-12"
-                  role="img"
-                  aria-label="Illustrative persona swarm grid, mostly adopting with some unsure and rejecting"
-                >
-                  {MOCK_CELLS.map((tone, i) => (
-                    <div
-                      key={i}
-                      aria-hidden="true"
-                      className={clsx(
-                        "aspect-square rounded-[2px]",
-                        tone === "green" && "bg-signal-green/85",
-                        tone === "yellow" && "bg-signal-yellow/80",
-                        tone === "red" && "bg-signal-red/80",
-                        tone === "pending" && "bg-storm-800/70",
-                      )}
-                    />
-                  ))}
+            {/* Real component preview: same UI language as the live report */}
+            <Card {...fadeUp(230)} className={clsx(fadeUp(230).className, "p-6")}>
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-storm-300">
+                Illustrative sample
+              </p>
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-storm-100">Persona responses</h3>
+                <div className="flex items-center gap-3 text-xs text-storm-300">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-signal-green" aria-hidden="true" />
+                    Adopts
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-signal-yellow" aria-hidden="true" />
+                    Unsure
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-signal-red" aria-hidden="true" />
+                    Rejects
+                  </span>
                 </div>
               </div>
-
-              {/* mock report hero */}
-              <div className="border-t border-storm-800 pt-6 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
-                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-storm-400">
+              <div
+                className="mt-4 grid grid-cols-10 gap-1 sm:grid-cols-12"
+                role="img"
+                aria-label="Illustrative persona swarm grid, mostly adopting with some unsure and rejecting"
+              >
+                <SwarmCells cells={MOCK_CELLS} />
+              </div>
+              <div className="mt-6 border-t border-storm-800 pt-5">
+                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-storm-300">
                   Market-fit diagnosis
                 </p>
                 <div className="mt-2 flex items-baseline gap-1">
-                  <span className="text-4xl font-semibold tracking-tight text-signal-green sm:text-5xl">
-                    78
-                  </span>
+                  <span className="text-4xl font-semibold tracking-tight text-signal-green">78</span>
                   <span className="text-xl font-semibold tracking-tight text-signal-green">%</span>
                 </div>
                 <p className="mt-2 text-sm font-semibold text-signal-green">
                   Strong market fit signal
                 </p>
-                <div className="mt-4 flex h-4 w-full overflow-hidden rounded-full border border-storm-700">
-                  <div className="bg-signal-green/85" style={{ width: "62%" }} />
-                  <div className="bg-signal-yellow/80" style={{ width: "25%" }} />
-                  <div className="bg-signal-red/80" style={{ width: "13%" }} />
-                </div>
-                <div className="mt-3 flex items-center gap-2 text-xs text-storm-400">
+                <AdoptionBar className="mt-4 h-4 w-full" />
+                <div className="mt-3 flex items-center gap-2 text-xs text-storm-300">
                   <span>Confidence</span>
                   <LevelBadge level="strong" />
                 </div>
               </div>
-            </div>
-          </Card>
+            </Card>
+          </div>
         </section>
 
-        {/* Capabilities */}
-        <section className="grid grid-cols-1 gap-4 pb-20 sm:grid-cols-3">
-          {CAPABILITIES.map((c) => (
-            <InsightCard key={c.title} title={c.title} tone={c.tone} icon={c.icon}>
-              {c.body}
-            </InsightCard>
-          ))}
-        </section>
-
-        {/* How it works */}
-        <section id="how-it-works" className="scroll-mt-20 pb-24">
-          <p className="text-center text-[11px] font-medium uppercase tracking-[0.14em] text-storm-400">
-            How it works
+        {/* Honesty strip: the brand voice, promoted out of the hero */}
+        <section className="border-y border-storm-800 py-12">
+          <p className="max-w-3xl text-[22px] font-semibold leading-snug tracking-tight text-storm-100">
+            Synthetic signal, <span className="text-accent-primary">honestly labeled</span>.
           </p>
-          <h2 className="mt-2 text-center text-base font-semibold tracking-tight text-storm-100 sm:text-lg">
+          <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-storm-300">
+            PersonaStorm is a pre-research wind tunnel. It sharpens what you take into real
+            research; it never replaces talking to real humans.
+          </p>
+        </section>
+
+        {/* Capabilities: asymmetric bento (2 + 1 + full-width), product-data motifs */}
+        <section className="pt-20">
+          <h2 className="text-[28px] font-semibold tracking-tight text-storm-100">
+            Built to pressure-test ideas
+          </h2>
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
+            <Card className="relative min-h-[13rem] overflow-hidden p-7 md:col-span-2">
+              <h3 className="text-[15px] font-semibold text-storm-100">Market simulation</h3>
+              <p className="mt-2.5 max-w-xl text-sm leading-relaxed text-storm-300">
+                Push a concept, ad, or pricing table through a calibrated swarm of synthetic
+                personas and watch reactions land cell by cell, live.
+              </p>
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute -bottom-5 -right-4 grid w-[55%] grid-cols-10 gap-[3px] opacity-50"
+              >
+                <SwarmCells cells={MOCK_CELLS.slice(0, 30)} />
+              </div>
+            </Card>
+
+            <Card className="p-7">
+              <h3 className="text-[15px] font-semibold text-storm-100">
+                Structured validation report
+              </h3>
+              <p className="mt-2.5 text-sm leading-relaxed text-storm-300">
+                Objections clustered by theme, a price-sensitivity curve, and segment-level
+                adoption, organized so the verdict is obvious before the detail.
+              </p>
+              <AdoptionBar className="mt-5 h-2.5 w-full max-w-[14rem]" />
+            </Card>
+
+            <Card className="grid items-center gap-8 p-7 md:col-span-3 md:grid-cols-[1.2fr_1fr]">
+              <div>
+                <h3 className="text-[15px] font-semibold text-storm-100">Honest calibration</h3>
+                <p className="mt-2.5 max-w-xl text-sm leading-relaxed text-storm-300">
+                  Every report ships with a calibration panel covering collapse risk, model
+                  adherence, and confidence, so you know exactly how much to trust it.
+                </p>
+              </div>
+              <div className="flex flex-col gap-3" aria-hidden="true">
+                <div className="grid grid-cols-[8.5rem_auto] items-center gap-3 text-xs text-storm-300">
+                  <span>Collapse risk</span>
+                  <LevelBadge level="low" className="w-fit" />
+                </div>
+                <div className="grid grid-cols-[8.5rem_auto] items-center gap-3 text-xs text-storm-300">
+                  <span>Model adherence</span>
+                  <span className="inline-flex w-fit items-center rounded-full border border-accent-primary/40 bg-accent-primary/15 px-2.5 py-0.5 font-mono text-xs font-semibold text-accent-primary">
+                    0.86
+                  </span>
+                </div>
+                <div className="grid grid-cols-[8.5rem_auto] items-center gap-3 text-xs text-storm-300">
+                  <span>Confidence</span>
+                  <LevelBadge level="strong" className="w-fit" />
+                </div>
+              </div>
+            </Card>
+          </div>
+        </section>
+
+        {/* How it works: definition rows, anchor preserved */}
+        <section id="how-it-works" className="scroll-mt-20 pt-20">
+          <h2 className="text-[28px] font-semibold tracking-tight text-storm-100">
             Three steps from idea to signal
           </h2>
-          <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="mt-6">
             {STEPS.map((s) => (
-              <Card key={s.n} className="p-5">
-                <span className="flex h-8 w-8 items-center justify-center rounded-full border border-storm-700 text-sm font-semibold text-accent-primary">
-                  {s.n}
-                </span>
-                <h3 className="mt-3 text-sm font-semibold text-storm-100">{s.title}</h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-storm-400">{s.body}</p>
-              </Card>
+              <div
+                key={s.title}
+                className="grid gap-1.5 border-t border-storm-800 py-5 md:grid-cols-[11rem_1fr] md:gap-6"
+              >
+                <h3 className="text-[15px] font-semibold text-storm-100">{s.title}</h3>
+                <p className="max-w-2xl text-sm leading-relaxed text-storm-300">{s.body}</p>
+              </div>
             ))}
           </div>
+        </section>
+
+        {/* Closing CTA: the page no longer dead-ends after how-it-works */}
+        <section className="py-20">
+          <Card className="flex flex-wrap items-center justify-between gap-8 bg-[radial-gradient(38rem_16rem_at_12%_-6rem,rgba(53,199,217,0.07),transparent_70%)] p-7 sm:p-10">
+            <div>
+              <h2 className="text-[26px] font-semibold tracking-tight text-storm-100">
+                Read the market before you launch.
+              </h2>
+              <p className="mt-2 text-[15px] text-storm-300">
+                Sign up and get 240 free credits for your first simulations.
+              </p>
+            </div>
+            <Link href="/signup">
+              <Button size="lg">Get started</Button>
+            </Link>
+          </Card>
         </section>
       </main>
 
       <footer className="mx-auto w-full max-w-[75rem] px-5 pb-8 sm:px-6">
-        <p className="border-t border-storm-800 pt-4 text-center text-xs leading-relaxed text-storm-400">
-          PersonaStorm generates <span className="text-storm-300">synthetic hypotheses</span> from
-          calibrated persona models. It is a pre-research wind tunnel — it does not replace talking
+        <p className="border-t border-storm-800 pt-4 text-center text-xs leading-relaxed text-storm-300">
+          PersonaStorm generates <span className="text-storm-200">synthetic hypotheses</span> from
+          calibrated persona models. It is a pre-research wind tunnel. It does not replace talking
           to real humans, and its personas are not real people.
         </p>
       </footer>

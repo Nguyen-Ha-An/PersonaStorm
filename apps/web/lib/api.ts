@@ -162,6 +162,20 @@ export async function getReport(stormId: string): Promise<StormReport | null> {
 }
 
 /**
+ * Anonymous-capable report fetch for a PUBLIC (is_demo) storm. Sends the access
+ * token if a session exists, omits it otherwise — so the no-signup demo works
+ * for logged-out visitors (the server route allows anon reads of demo rows).
+ */
+export async function getPublicReport(stormId: string): Promise<StormReport | null> {
+  const token = await getAccessToken().catch(() => null);
+  const resp = await safeFetch(`${API_BASE}/storm/${stormId}/report`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (resp.status === 202) return null;
+  return handle<StormReport>(resp);
+}
+
+/**
  * Build the SSE stream URL — same-origin (`/api/storm/{id}/stream`).
  * EventSource cannot set an Authorization header, so the access token travels
  * as a query parameter; the server route only honors `?access_token=` on this
@@ -171,6 +185,37 @@ export async function getReport(stormId: string): Promise<StormReport | null> {
 export function streamUrl(stormId: string, token: string | null): string {
   const q = token ? `?access_token=${encodeURIComponent(token)}` : "";
   return `${API_BASE}/storm/${stormId}/stream${q}`;
+}
+
+// ── stimulus helper ──────────────────────────────────────────────────────────
+export interface StimulusCheck {
+  key: string;
+  label: string;
+  ok: boolean;
+  hint: string;
+}
+export interface StimulusInsight {
+  wordCount: number;
+  category: string;
+  priceCount: number;
+  checks: StimulusCheck[];
+}
+
+/**
+ * Analyze a draft stimulus (no cost, no auth) so a user can strengthen it BEFORE
+ * spending a run — returns the signals the engine detects (pricing, proof, etc.).
+ */
+export async function inspectStimulus(body: {
+  stimulus: string;
+  title?: string;
+  stimulus_type?: string;
+}): Promise<StimulusInsight> {
+  const resp = await safeFetch(`${API_BASE}/stimulus/inspect`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return handle<StimulusInsight>(resp);
 }
 
 // ── admin ───────────────────────────────────────────────────────────────────

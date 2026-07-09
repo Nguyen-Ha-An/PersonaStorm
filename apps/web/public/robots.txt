@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /storm/
+Disallow: /api/
+
+Sitemap: https://personastorm.nguyenhaan.id.vn/sitemap.xml

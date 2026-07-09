@@ -76,6 +76,21 @@ export async function getCurrentUser(request: Request, gateway?: Gateway): Promi
 
 export const requireUser = getCurrentUser;
 
+/**
+ * Like getCurrentUser but returns null instead of throwing 401 when there is no
+ * token — for routes that also serve public (is_demo) storms to anonymous
+ * visitors. A present-but-invalid token still throws (that's a real auth error,
+ * not an anonymous request).
+ */
+export async function getOptionalUser(request: Request, gateway?: Gateway): Promise<CurrentUser | null> {
+  try {
+    return await getCurrentUser(request, gateway);
+  } catch (err) {
+    if (err instanceof HttpError && err.status === 401) return null;
+    throw err;
+  }
+}
+
 export async function requireAdmin(request: Request, gateway?: Gateway): Promise<CurrentUser> {
   const user = await getCurrentUser(request, gateway);
   if (!user.isAdmin) throw new HttpError(403, "Admin access required.");

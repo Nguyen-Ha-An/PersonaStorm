@@ -2,6 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { getConfig } from "./env";
 import { inferenceSettingsFromRow, resolveEffectiveConfig } from "./inferenceSettings";
+import { validateInferenceSettingsBody, toInferenceSettingsView, inferenceSettingsFromRow as fromRow } from "./inferenceSettings";
 
 const env = getConfig();
 
@@ -66,5 +67,39 @@ describe("resolveEffectiveConfig", () => {
     expect(eff.analystModel).toBe("a/b");
     expect(eff.nvidiaApiKey).toBe(env.nvidiaApiKey);       // NOT the row's key
     expect(eff.nvidiaBaseUrl).toBe(env.nvidiaBaseUrl);     // NOT the row's url
+  });
+});
+
+describe("validateInferenceSettingsBody", () => {
+  const ok = {
+    inference_provider: "nvidia", analyst_provider: "mock", nvidia_model: "x/y",
+    analyst_model: "", nvidia_max_tokens: 8192, analyst_max_tokens: 8192,
+  };
+  it("accepts a valid body", () => {
+    expect(validateInferenceSettingsBody(ok).nvidia_model).toBe("x/y");
+  });
+  it("rejects a bad provider", () => {
+    expect(() => validateInferenceSettingsBody({ ...ok, inference_provider: "bogus" })).toThrow();
+  });
+  it("rejects an empty model", () => {
+    expect(() => validateInferenceSettingsBody({ ...ok, nvidia_model: "  " })).toThrow();
+  });
+  it("rejects non-integer / out-of-range tokens", () => {
+    expect(() => validateInferenceSettingsBody({ ...ok, nvidia_max_tokens: 0 })).toThrow();
+    expect(() => validateInferenceSettingsBody({ ...ok, analyst_max_tokens: 9_999_999 })).toThrow();
+  });
+});
+
+describe("toInferenceSettingsView", () => {
+  it("exposes the key-configured boolean but NEVER the key", () => {
+    const settings = fromRow(null, env);
+    const view = toInferenceSettingsView(settings, { ...env, nvidiaApiKey: "nvapi-SECRET", nvidiaBaseUrl: "https://x/v1" });
+    expect(view.nvidia_api_key_configured).toBe(true);
+    expect(view.nvidia_base_url).toBe("https://x/v1");
+    expect(JSON.stringify(view)).not.toContain("nvapi-SECRET");
+  });
+  it("reports not-configured when the env key is empty", () => {
+    const view = toInferenceSettingsView(fromRow(null, env), { ...env, nvidiaApiKey: "" });
+    expect(view.nvidia_api_key_configured).toBe(false);
   });
 });

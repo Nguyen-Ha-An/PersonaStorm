@@ -41,6 +41,7 @@ export interface ServerConfig {
   nvidiaApiKey: string;
   nvidiaBaseUrl: string;
   nvidiaModel: string;
+  analystModel: string;
   nvidiaMaxTokens: number;
   analystMaxTokens: number;
   personaSeed: number;
@@ -87,6 +88,7 @@ export function getConfig(): ServerConfig {
     nvidiaApiKey: trimmed(process.env.NVIDIA_API_KEY),
     nvidiaBaseUrl: trimmed(process.env.NVIDIA_BASE_URL) || "https://integrate.api.nvidia.com/v1",
     nvidiaModel: trimmed(process.env.NVIDIA_MODEL) || "z-ai/glm-5.2",
+    analystModel: trimmed(process.env.ANALYST_MODEL),
     nvidiaMaxTokens: intEnv("NVIDIA_MAX_TOKENS", 2048),
     analystMaxTokens: intEnv("ANALYST_MAX_TOKENS", 4096),
     personaSeed: intEnv("PERSONA_SEED", 1337),

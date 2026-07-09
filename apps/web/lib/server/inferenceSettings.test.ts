@@ -11,6 +11,7 @@ describe("inferenceSettingsFromRow", () => {
     expect(s.inferenceProvider).toBe(env.inferenceProvider);
     expect(s.analystProvider).toBe(env.analystProvider);
     expect(s.nvidiaModel).toBe(env.nvidiaModel);
+    expect(s.analystModel).toBe(env.analystModel || env.nvidiaModel);
     expect(s.nvidiaMaxTokens).toBe(env.nvidiaMaxTokens);
     expect(s.analystMaxTokens).toBe(env.analystMaxTokens);
     expect(s.id).toBeNull();

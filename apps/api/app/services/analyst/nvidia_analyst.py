@@ -169,7 +169,7 @@ class NvidiaAnalyst(AnalystProvider):
                 enhanced.kill_quote = kill_quote
             enhanced.quality.notes = [
                 *enhanced.quality.notes,
-                "Report narrated by NVIDIA GLM-5.2 analyst.",
+                f"Report narrated by NVIDIA {self.model} analyst.",
             ]
             return enhanced
         except Exception as exc:  # noqa: BLE001 — analyst must never crash a storm

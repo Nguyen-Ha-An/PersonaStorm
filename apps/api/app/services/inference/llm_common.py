@@ -172,6 +172,9 @@ def apply_reasoning_params(
         payload["reasoning_budget"] = reasoning_budget
 
 
+_RETRY_AFTER_CAP_S = 30.0  # never honor a Retry-After longer than this
+
+
 def _parse_retry_after(value: str | None) -> float | None:
     if not value:
         return None
@@ -182,7 +185,11 @@ def _parse_retry_after(value: str | None) -> float | None:
 
 
 async def _sleep_before_retry(attempt: int, retry_after: float | None, base: float) -> None:
-    delay = retry_after if retry_after is not None else base * (2 ** attempt) + random.uniform(0, base)
+    delay = (
+        min(retry_after, _RETRY_AFTER_CAP_S)
+        if retry_after is not None
+        else base * (2 ** attempt) + random.uniform(0, base)
+    )
     if delay > 0:
         await asyncio.sleep(delay)
 

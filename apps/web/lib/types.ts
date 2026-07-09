@@ -72,6 +72,17 @@ export interface Pricing {
   analyst_report_credits: number;
 }
 
+export interface InferenceSettings {
+  inference_provider: "mock" | "nvidia";
+  analyst_provider: "mock" | "nvidia";
+  nvidia_model: string;
+  analyst_model: string;
+  nvidia_max_tokens: number;
+  analyst_max_tokens: number;
+  nvidia_base_url: string;
+  nvidia_api_key_configured: boolean;
+}
+
 export interface DashboardPricing {
   base_run_credits: number;
   credits_per_100_personas: number;

@@ -8,7 +8,12 @@ dependency on any specific provider's HTTP plumbing.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
+import random
+
+import httpx
 
 from ...schemas.persona import Persona
 from ...schemas.reaction import (
@@ -23,6 +28,8 @@ from ..criteria.classifier import classify_category, is_high_risk
 from ..criteria.registry import CORE_IDS
 from ..criteria.scoring import compute_market_fit
 from ..stimulus_parser import StimulusFeatures
+
+logger = logging.getLogger(__name__)
 
 _PRICING_MODELS = {
     "one_time", "subscription", "usage_based", "seat_based",
@@ -147,3 +154,19 @@ def parse_llm_reaction(
         reasoning_summary=str(data.get("reasoning_summary", ""))[:400],
         market_fit_breakdown=breakdown,
     )
+
+
+def apply_reasoning_params(
+    payload: dict, *, enable_thinking: bool, reasoning_budget: int | None
+) -> None:
+    """Inject reasoning-model request params in place (nemotron-style).
+
+    Maps the OpenAI-SDK `extra_body={"chat_template_kwargs":..., "reasoning_budget":...}`
+    from the verified snippet to top-level JSON keys for a raw httpx POST.
+    No-op when reasoning is disabled, so non-reasoning models are unaffected.
+    """
+    if not enable_thinking:
+        return
+    payload["chat_template_kwargs"] = {"enable_thinking": True}
+    if reasoning_budget is not None:
+        payload["reasoning_budget"] = reasoning_budget

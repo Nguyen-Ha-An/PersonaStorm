@@ -9,11 +9,14 @@ INFERENCE_PROVIDER in the environment. Nothing above this layer changes.
 from __future__ import annotations
 
 import asyncio
+import logging
 from abc import ABC, abstractmethod
 
 from ...schemas.persona import Persona
 from ...schemas.reaction import PersonaReaction
 from ..stimulus_parser import StimulusFeatures
+
+logger = logging.getLogger(__name__)
 
 
 class ProviderNotConfiguredError(RuntimeError):
@@ -67,7 +70,16 @@ class PersonaInferenceProvider(ABC):
             async with sem:
                 return await self.react(p, stimulus, stimulus_type, features, category)
 
-        return list(await asyncio.gather(*(_one(p) for p in personas)))
+        results = await asyncio.gather(*(_one(p) for p in personas), return_exceptions=True)
+        reactions: list[PersonaReaction] = []
+        for persona, res in zip(personas, results):
+            if isinstance(res, Exception):
+                logger.warning(
+                    "dropping persona %s after inference failure: %s", persona.persona_id, res
+                )
+                continue
+            reactions.append(res)
+        return reactions
 
     async def health_check(self) -> bool:
         return True

@@ -154,6 +154,8 @@ def test_nvidia_analyst_enhance_report_bad_json_falls_back(sample_report):
     analyst = NvidiaAnalyst("nvapi-test", "https://integrate.api.nvidia.com/v1", "z-ai/glm-5.2")
 
     class _FakeResp:
+        status_code = 200
+
         def raise_for_status(self):
             return None
 
@@ -188,6 +190,8 @@ def test_nvidia_analyst_enhance_report_happy_path(sample_report):
     }
 
     class _FakeResp:
+        status_code = 200
+
         def raise_for_status(self):
             return None
 
@@ -272,3 +276,74 @@ def test_nvidia_analyst_failure_path_does_not_mutate_original_report():
         "local report builder" in n.lower() or "unavailable" in n.lower()
         for n in out.quality.notes
     )
+
+
+# --------------------------------------------------------------------------- reasoning / retry
+
+
+def test_nvidia_analyst_sends_reasoning_params_when_enabled(sample_report):
+    analyst = NvidiaAnalyst(
+        "nvapi-test", "https://integrate.api.nvidia.com/v1",
+        "nvidia/nemotron-3-ultra-550b-a55b", max_tokens=8192,
+        enable_thinking=True, reasoning_budget=4096,
+    )
+    captured = {}
+    payload = {
+        "executive_summary": "Clear signal; pricing is the blocker.",
+        "recommendations": [
+            {"title": "Clarify pricing", "detail": "Add a pricing FAQ.", "priority": "now"},
+        ],
+        "top_objection_labels": ["Price unclear"],
+        "kill_quote": "Too pricey for what it does.",
+    }
+
+    class _Resp:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            import json as _j
+            return {"choices": [{"message": {"content": _j.dumps(payload),
+                                             "reasoning_content": "…"}}]}
+
+    async def _fake_post(url, headers=None, json=None):
+        captured["json"] = json
+        return _Resp()
+
+    analyst._client.post = _fake_post
+    out = asyncio.run(analyst.enhance_report(sample_report))
+
+    assert captured["json"]["chat_template_kwargs"] == {"enable_thinking": True}
+    assert captured["json"]["reasoning_budget"] == 4096
+    assert out.summary == payload["executive_summary"]
+
+
+def test_nvidia_analyst_empty_content_falls_back(sample_report):
+    analyst = NvidiaAnalyst("nvapi-test", "https://integrate.api.nvidia.com/v1", "z-ai/glm-5.2")
+
+    class _Resp:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"choices": [{"message": {"content": "", "reasoning_content": "all budget"}}]}
+
+    async def _fake_post(url, headers=None, json=None):
+        return _Resp()
+
+    analyst._client.post = _fake_post
+    out = asyncio.run(analyst.enhance_report(sample_report))
+    assert any("unavailable" in n.lower() for n in out.quality.notes)
+
+
+def test_nvidia_analyst_reasoning_budget_exceeds_max_tokens_raises():
+    from app.services.inference.base import ProviderNotConfiguredError
+    with pytest.raises(ProviderNotConfiguredError):
+        NvidiaAnalyst(
+            "nvapi-test", "https://integrate.api.nvidia.com/v1", "m",
+            max_tokens=2048, enable_thinking=True, reasoning_budget=4096,
+        )

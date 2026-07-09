@@ -12,6 +12,7 @@ import { getConfig, type ServerConfig } from "./env";
 import { HttpError, InsufficientCreditsError, SupabaseError } from "./errors";
 import type { CurrentUser } from "./auth";
 import type { Gateway } from "./gateway";
+import { resolveEffectiveConfig } from "./inferenceSettings";
 import { getPricingRule, quotePrice } from "./pricing";
 import { chargeForStorm, refundStorm } from "./wallet";
 import { runStorm, type ProgressEvent, type ReactionEvent } from "./stormEngine";
@@ -160,6 +161,7 @@ export async function createAndRunStorm(
       price_credits: quote.total_credits,
     });
 
+    const effectiveCfg = await resolveEffectiveConfig(gateway, cfg);
     const result = await runStorm(
       {
         stormId,
@@ -172,7 +174,7 @@ export async function createAndRunStorm(
         personaCount: payload.persona_count,
         seed: payload.seed ?? null,
       },
-      cfg,
+      effectiveCfg,
     );
 
     await gateway.updateStorm(stormId, {

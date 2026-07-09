@@ -100,7 +100,7 @@ export function getAnalyst(cfg: ServerConfig): AnalystProvider {
       console.warn("[personastorm analyst] ANALYST_PROVIDER=nvidia but NVIDIA_API_KEY missing; using mock analyst.");
       return new MockAnalyst();
     }
-    return new NvidiaAnalyst(cfg.nvidiaApiKey, cfg.nvidiaBaseUrl, cfg.nvidiaModel, cfg.analystMaxTokens);
+    return new NvidiaAnalyst(cfg.nvidiaApiKey, cfg.nvidiaBaseUrl, cfg.analystModel || cfg.nvidiaModel, cfg.analystMaxTokens);
   }
   return new MockAnalyst();
 }

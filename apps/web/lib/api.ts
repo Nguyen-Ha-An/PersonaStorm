@@ -6,6 +6,7 @@ import type {
   DashboardData,
   InferenceSettings,
   Me,
+  OrchestrationRecord,
   Pricing,
   Quote,
   QuoteRequest,
@@ -174,6 +175,21 @@ export async function getPublicReport(stormId: string): Promise<StormReport | nu
   });
   if (resp.status === 202) return null;
   return handle<StormReport>(resp);
+}
+
+/**
+ * The persisted orchestration record for a run, or null if the run had no
+ * orchestration layer (HTTP 204). Anonymous-capable so a public demo reloads
+ * cleanly. This is what lets the report page re-hydrate worker shards + the
+ * final Nemotron synthesis after a page reload.
+ */
+export async function getOrchestration(stormId: string): Promise<OrchestrationRecord | null> {
+  const token = await getAccessToken().catch(() => null);
+  const resp = await safeFetch(`${API_BASE}/storm/${stormId}/orchestration`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (resp.status === 204) return null;
+  return handle<OrchestrationRecord>(resp);
 }
 
 /**

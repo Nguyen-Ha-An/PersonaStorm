@@ -7,9 +7,10 @@ import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { Button, Skeleton } from "@/components/ui";
 import { ErrorState } from "@/components/feedback";
 import { ReportView } from "@/components/report/ReportView";
-import { getReport } from "@/lib/api";
+import { OrchestrationView } from "@/components/orchestration/OrchestrationView";
+import { getReport, getOrchestration } from "@/lib/api";
 import { formatNumberCompact } from "@/lib/format";
-import type { StormReport } from "@/lib/types";
+import type { OrchestrationRecord, StormReport } from "@/lib/types";
 
 const MARKET_LABELS: Record<string, string> = {
   sea_genz: "SEA Gen Z",
@@ -35,6 +36,7 @@ export default function ReportPage() {
   const params = useParams<{ id: string }>();
   const stormId = params?.id;
   const [report, setReport] = useState<StormReport | null>(null);
+  const [orchestration, setOrchestration] = useState<OrchestrationRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
 
@@ -60,6 +62,22 @@ export default function ReportPage() {
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
+    };
+  }, [stormId, retryKey]);
+
+  // Re-hydrate the orchestration layer (if any) on load — survives page reload.
+  useEffect(() => {
+    if (!stormId) return;
+    let cancelled = false;
+    getOrchestration(stormId as string)
+      .then((r) => {
+        if (!cancelled) setOrchestration(r);
+      })
+      .catch(() => {
+        if (!cancelled) setOrchestration(null);
+      });
+    return () => {
+      cancelled = true;
     };
   }, [stormId, retryKey]);
 
@@ -138,6 +156,11 @@ export default function ReportPage() {
       width="wide"
     >
       <ReportView report={report} />
+      {orchestration ? (
+        <div className="mt-8">
+          <OrchestrationView record={orchestration} />
+        </div>
+      ) : null}
     </DashboardShell>
   );
 }

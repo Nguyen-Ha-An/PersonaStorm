@@ -72,6 +72,23 @@ export interface Pricing {
   analyst_report_credits: number;
 }
 
+export interface OrchestrationSettingsView {
+  orchestration_enabled: boolean;
+  orchestrator_provider: "nvidia";
+  orchestrator_model: string;
+  worker_provider: "fireworks";
+  worker_model: string;
+  max_physical_workers: number;
+  virtual_agents_per_worker: number;
+  worker_max_tokens: number;
+  orchestrator_max_tokens: number;
+  worker_temperature: number;
+  orchestrator_temperature: number;
+  enable_worker_web_research: boolean;
+  worker_web_research_max_queries: number;
+  max_physical_workers_cap: number;
+}
+
 export interface InferenceSettings {
   inference_provider: "mock" | "nvidia";
   analyst_provider: "mock" | "nvidia";
@@ -81,6 +98,101 @@ export interface InferenceSettings {
   analyst_max_tokens: number;
   nvidia_base_url: string;
   nvidia_api_key_configured: boolean;
+  // Nemotron/Fireworks orchestration — keys exposed only as booleans.
+  fireworks_base_url: string;
+  fireworks_api_key_configured: boolean;
+  orchestration: OrchestrationSettingsView;
+}
+
+// ── Nemotron-orchestrated Fireworks worker swarm (client-facing shapes) ─────
+
+export type OrchestrationStatus =
+  | "queued"
+  | "planning"
+  | "running_workers"
+  | "synthesizing"
+  | "completed"
+  | "failed";
+
+export interface OrchestrationVirtualAgent {
+  virtual_agent_id: string;
+  persona_or_role: string;
+  angle: string;
+}
+
+export interface OrchestrationShard {
+  shard_id: string;
+  role_name: string;
+  system_prompt: string;
+  task_prompt: string;
+  virtual_agents: OrchestrationVirtualAgent[];
+  expected_output_schema: string;
+}
+
+export interface OrchestrationPlan {
+  objective: string;
+  worker_count: number;
+  virtual_agent_count: number;
+  worker_shards: OrchestrationShard[];
+  synthesis_instructions: string;
+}
+
+export interface OrchestrationVirtualAgentResult {
+  virtual_agent_id: string;
+  perspective: string;
+  reaction_summary: string;
+  objections: string[];
+  purchase_or_adoption_drivers: string[];
+  confusion_points: string[];
+  raw_criteria_scores?: Record<string, number>;
+}
+
+export interface OrchestrationShardOutput {
+  shard_id: string;
+  role_name: string;
+  virtual_agent_results: OrchestrationVirtualAgentResult[];
+  shard_summary: string;
+  confidence: "low" | "medium" | "high";
+  failure_risks: string[];
+}
+
+export interface OrchestrationServerNumerics {
+  physical_worker_count: number;
+  virtual_agent_count: number;
+  successful_workers: number;
+  failed_workers: number;
+  market_fit_score: number;
+  status: "green" | "yellow" | "red";
+  green: number;
+  yellow: number;
+  red: number;
+  avg_confidence: number;
+}
+
+export interface OrchestratedStormReport {
+  executive_summary: string;
+  strongest_signals: string[];
+  weakest_signals: string[];
+  segment_insights: { segment: string; insight: string; evidence_from_workers: string[] }[];
+  objections_to_fix: string[];
+  messaging_recommendations: string[];
+  product_recommendations: string[];
+  pricing_or_offer_notes: string[];
+  final_recommendation: string;
+  confidence: "low" | "medium" | "high";
+}
+
+export interface OrchestrationRecord {
+  status: OrchestrationStatus;
+  plan: OrchestrationPlan | null;
+  worker_shard_outputs: OrchestrationShardOutput[];
+  final: OrchestratedStormReport | null;
+  server_numerics: OrchestrationServerNumerics | null;
+  physical_worker_count: number;
+  virtual_agent_count: number;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface DashboardPricing {

@@ -25,6 +25,27 @@ const TXN_TYPES = new Set<TxnType>(["credit_grant", "storm_charge", "refund", "a
 
 type Row = Record<string, any>;
 
+/** Flat DB shape for a settings write (classic inference + orchestration columns). */
+export interface InferenceSettingsRow {
+  inference_provider: string;
+  analyst_provider: string;
+  nvidia_model: string;
+  analyst_model: string;
+  nvidia_max_tokens: number;
+  analyst_max_tokens: number;
+  orchestration_enabled?: boolean;
+  orchestrator_model?: string;
+  worker_model?: string;
+  max_physical_workers?: number;
+  virtual_agents_per_worker?: number;
+  worker_max_tokens?: number;
+  orchestrator_max_tokens?: number;
+  worker_temperature?: number;
+  orchestrator_temperature?: number;
+  enable_worker_web_research?: boolean;
+  worker_web_research_max_queries?: number;
+}
+
 export interface Gateway {
   ensureAndGetProfile(userId: string, email: string, fullName: string | null): Promise<Row>;
   getProfile(userId: string): Promise<Row | null>;
@@ -47,14 +68,7 @@ export interface Gateway {
   getActivePricing(): Promise<Row | null>;
   updateActivePricing(input: { base_run_credits: number; credits_per_100_personas: number; analyst_report_credits: number; name: string }): Promise<Row>;
   getActiveInferenceSettings(): Promise<Row | null>;
-  updateActiveInferenceSettings(input: {
-    inference_provider: string;
-    analyst_provider: string;
-    nvidia_model: string;
-    analyst_model: string;
-    nvidia_max_tokens: number;
-    analyst_max_tokens: number;
-  }): Promise<Row>;
+  updateActiveInferenceSettings(input: InferenceSettingsRow): Promise<Row>;
   recordStorm(row: Row): Promise<void>;
   updateStorm(stormId: string, fields: Row): Promise<void>;
   getStorm(stormId: string): Promise<Row | null>;
@@ -197,10 +211,7 @@ class InMemoryGateway implements Gateway {
     return this.inferenceSettings ? { ...this.inferenceSettings } : null;
   }
 
-  async updateActiveInferenceSettings(input: {
-    inference_provider: string; analyst_provider: string; nvidia_model: string;
-    analyst_model: string; nvidia_max_tokens: number; analyst_max_tokens: number;
-  }): Promise<Row> {
+  async updateActiveInferenceSettings(input: InferenceSettingsRow): Promise<Row> {
     const id = this.inferenceSettings?.id ?? cryptoRandom();
     this.inferenceSettings = { ...(this.inferenceSettings ?? {}), id, is_active: true, ...input, updated_at: nowIso() };
     return { ...this.inferenceSettings };
@@ -408,10 +419,7 @@ class HttpGateway implements Gateway {
     return rows[0] ?? null;
   }
 
-  async updateActiveInferenceSettings(input: {
-    inference_provider: string; analyst_provider: string; nvidia_model: string;
-    analyst_model: string; nvidia_max_tokens: number; analyst_max_tokens: number;
-  }): Promise<Row> {
+  async updateActiveInferenceSettings(input: InferenceSettingsRow): Promise<Row> {
     const current = await this.getActiveInferenceSettings();
     if (current) {
       const rows = await this.admin.mutate("PATCH", "inference_settings", { params: { id: `eq.${current.id}` }, json: input });

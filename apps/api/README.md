@@ -129,6 +129,8 @@ NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
 NVIDIA_MODEL=z-ai/glm-5.2
 ```
 
+- Live nemotron reasoning inference (both roles): see the "live nemotron" block in `.env.example` and `docs/inference-roadmap.md`. Test at `persona_count=50`.
+
 ## After deploying
 
 1. Verify: `curl https://your-backend-domain.com/api/health`

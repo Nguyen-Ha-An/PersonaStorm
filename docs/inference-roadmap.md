@@ -88,6 +88,25 @@ Gemma 27B as the analyst/swarm model. Fireworks has been removed in favor of
 NVIDIA NIM GLM-5.2 as the primary non-mock path; nothing above depends on
 Fireworks.*
 
+### Nemotron (reasoning model) variant
+
+`nvidia/nemotron-3-ultra-550b-a55b` is a hybrid-reasoning model usable for
+either role. Unlike GLM-5.2 it needs reasoning opted in per request and a
+larger token budget:
+
+    NVIDIA_MODEL=nvidia/nemotron-3-ultra-550b-a55b
+    NVIDIA_ENABLE_THINKING=true      # -> chat_template_kwargs.enable_thinking
+    NVIDIA_REASONING_BUDGET=4096     # -> reasoning_budget
+    NVIDIA_MAX_TOKENS=8192           # must exceed the reasoning budget
+    ANALYST_MAX_TOKENS=8192
+    NVIDIA_STRUCTURED_OUTPUT=json_object  # or 'none' if the endpoint rejects it
+
+Reasoning text returns in a separate `reasoning_content` field and is ignored;
+only `content` (the JSON answer) is parsed. Swarm calls retry on 429/5xx and
+tolerate a bounded fraction of per-persona failures (SWARM_MAX_DROP_FRACTION);
+run live swarm tests at small persona_count (e.g. 50). Numbers stay
+Python-computed, exactly as with GLM-5.2.
+
 ## Stage 2 — vLLM on AMD MI300X / ROCm (target architecture)
 
 ### Serving

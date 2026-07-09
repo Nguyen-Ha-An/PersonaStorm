@@ -8,7 +8,12 @@ dependency on any specific provider's HTTP plumbing.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
+import random
+
+import httpx
 
 from ...schemas.persona import Persona
 from ...schemas.reaction import (
@@ -23,6 +28,8 @@ from ..criteria.classifier import classify_category, is_high_risk
 from ..criteria.registry import CORE_IDS
 from ..criteria.scoring import compute_market_fit
 from ..stimulus_parser import StimulusFeatures
+
+logger = logging.getLogger(__name__)
 
 _PRICING_MODELS = {
     "one_time", "subscription", "usage_based", "seat_based",
@@ -147,3 +154,78 @@ def parse_llm_reaction(
         reasoning_summary=str(data.get("reasoning_summary", ""))[:400],
         market_fit_breakdown=breakdown,
     )
+
+
+def apply_reasoning_params(
+    payload: dict, *, enable_thinking: bool, reasoning_budget: int | None
+) -> None:
+    """Inject reasoning-model request params in place (nemotron-style).
+
+    Maps the OpenAI-SDK `extra_body={"chat_template_kwargs":..., "reasoning_budget":...}`
+    from the verified snippet to top-level JSON keys for a raw httpx POST.
+    No-op when reasoning is disabled, so non-reasoning models are unaffected.
+    """
+    if not enable_thinking:
+        return
+    payload["chat_template_kwargs"] = {"enable_thinking": True}
+    if reasoning_budget is not None:
+        payload["reasoning_budget"] = reasoning_budget
+
+
+_RETRY_AFTER_CAP_S = 30.0  # never honor a Retry-After longer than this
+
+
+def _parse_retry_after(value: str | None) -> float | None:
+    if not value:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None  # HTTP-date form not supported; fall back to backoff
+
+
+async def _sleep_before_retry(attempt: int, retry_after: float | None, base: float) -> None:
+    delay = (
+        min(retry_after, _RETRY_AFTER_CAP_S)
+        if retry_after is not None
+        else base * (2 ** attempt) + random.uniform(0, base)
+    )
+    if delay > 0:
+        await asyncio.sleep(delay)
+
+
+async def post_with_retry(
+    client,
+    url: str,
+    *,
+    headers: dict,
+    json_body: dict,
+    max_retries: int = 3,
+    backoff_base: float = 0.5,
+) -> httpx.Response:
+    """POST with bounded exponential backoff on 429/5xx/transport errors.
+
+    Honors a numeric Retry-After header. Calls raise_for_status() and returns
+    the response on success; re-raises the final error once retries are spent.
+    Shared by NvidiaProvider (swarm) and NvidiaAnalyst.
+    """
+    attempt = 0
+    while True:
+        try:
+            resp = await client.post(url, headers=headers, json=json_body)
+        except httpx.TransportError:
+            if attempt >= max_retries:
+                raise
+            logger.warning("transport error POSTing (attempt %d), retrying", attempt + 1)
+            await _sleep_before_retry(attempt, None, backoff_base)
+            attempt += 1
+            continue
+        if resp.status_code == 429 or resp.status_code >= 500:
+            if attempt >= max_retries:
+                resp.raise_for_status()  # spent — raise the final error
+            logger.warning("HTTP %d (attempt %d), retrying", resp.status_code, attempt + 1)
+            await _sleep_before_retry(attempt, _parse_retry_after(resp.headers.get("retry-after")), backoff_base)
+            attempt += 1
+            continue
+        resp.raise_for_status()
+        return resp

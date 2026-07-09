@@ -43,6 +43,23 @@ class Settings(BaseSettings):
     # reasoning tokens count against max_tokens, so give it more headroom than nvidia_max_tokens.
     analyst_max_tokens: int = 4096
 
+    # --- live reasoning-model inference (nemotron) ---------------------------
+    # Opt-in reasoning: send chat_template_kwargs.enable_thinking + reasoning_budget.
+    # OFF by default so GLM-5.2 / mock / vllm paths are unchanged.
+    nvidia_enable_thinking: bool = False
+    nvidia_reasoning_budget: int | None = None
+    # Swarm structured-output mode. None -> fall back to the legacy
+    # nvidia_use_guided_json bool (True->guided_json, False->json_object).
+    # "none" sends no structured-output field (matches nemotron's verified call).
+    nvidia_structured_output: Literal["guided_json", "json_object", "none"] | None = None
+    # Retry attempts on 429/5xx/transport errors for real providers.
+    nvidia_max_retries: int = 3
+    # Max fraction of persona reactions allowed to fail-after-retry before the
+    # storm fails honestly rather than shipping a thin report.
+    swarm_max_drop_fraction: float = 0.10
+    # Optional analyst-only model override; falls back to nvidia_model.
+    analyst_model: str | None = None
+
     # --- swarm pacing --------------------------------------------------------
     # The mock provider is instant, so we pace batches to make the live grid
     # readable for a human audience. Real providers replace pacing with actual
@@ -99,6 +116,14 @@ class Settings(BaseSettings):
     def supabase_configured(self) -> bool:
         """True when we have enough to talk to a real Supabase project."""
         return bool(self.supabase_url and self.supabase_service_role_key)
+
+    @property
+    def effective_structured_output(self) -> str:
+        """Swarm structured-output mode. Explicit nvidia_structured_output wins;
+        otherwise map the legacy nvidia_use_guided_json bool."""
+        if self.nvidia_structured_output is not None:
+            return self.nvidia_structured_output
+        return "guided_json" if self.nvidia_use_guided_json else "json_object"
 
 
 @lru_cache

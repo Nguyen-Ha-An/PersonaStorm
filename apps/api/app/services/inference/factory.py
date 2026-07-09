@@ -24,8 +24,11 @@ def get_provider(settings: Settings) -> PersonaInferenceProvider:
                 api_key=settings.nvidia_api_key,
                 base_url=settings.nvidia_base_url,
                 model=settings.nvidia_model,
-                use_guided_json=settings.nvidia_use_guided_json,
+                structured_output=settings.effective_structured_output,
                 max_tokens=settings.nvidia_max_tokens,
+                enable_thinking=settings.nvidia_enable_thinking,
+                reasoning_budget=settings.nvidia_reasoning_budget,
+                max_retries=settings.nvidia_max_retries,
             )
         case other:  # pragma: no cover — pydantic Literal blocks this earlier
             raise ValueError(f"Unknown INFERENCE_PROVIDER: {other}")

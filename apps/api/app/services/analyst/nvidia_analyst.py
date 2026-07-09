@@ -1,4 +1,4 @@
-"""NvidiaAnalyst — NVIDIA GLM-5.2 re-narration of the deterministic report.
+"""NvidiaAnalyst — NVIDIA GLM-5.2 / nemotron re-narration of the deterministic report.
 
 Design principle (critical): the calibrated engine computes ALL numbers
 (market_fit, criteria scores, counts, curves). This analyst ONLY re-narrates
@@ -7,6 +7,12 @@ quote) from those aggregates. It MUST NEVER change any number. On any failure
 (missing key, network error, invalid JSON) it logs server-side (no secrets)
 and returns the ORIGINAL deterministic report unchanged, plus a note. A storm
 must NEVER crash because of the analyst — enhance_report never raises.
+
+Reasoning models (e.g. nemotron) are opted in via NVIDIA_ENABLE_THINKING=true,
+which adds chat_template_kwargs.enable_thinking + reasoning_budget to the
+request (ANALYST_MAX_TOKENS must exceed the reasoning budget). Requests retry
+on 429/5xx via post_with_retry, and an optional ANALYST_MODEL can override
+NVIDIA_MODEL for this analyst only.
 """
 
 from __future__ import annotations
@@ -18,6 +24,7 @@ import httpx
 
 from ...schemas.report import ObjectionCluster, Recommendation, StormReport
 from ..inference.base import ProviderNotConfiguredError
+from ..inference.llm_common import apply_reasoning_params, post_with_retry
 from .base import AnalystProvider
 from .prompts import ANALYST_SYSTEM_PROMPT, build_analyst_user_prompt
 
@@ -37,6 +44,9 @@ class NvidiaAnalyst(AnalystProvider):
         base_url: str,
         model: str,
         max_tokens: int = 4096,
+        enable_thinking: bool = False,
+        reasoning_budget: int | None = None,
+        max_retries: int = 3,
         timeout_s: float = 60.0,
     ):
         if not base_url:
@@ -51,10 +61,18 @@ class NvidiaAnalyst(AnalystProvider):
                 "NVIDIA_API_KEY is not set. Generate an 'nvapi-' key at "
                 "build.nvidia.com, set NVIDIA_API_KEY in .env, or switch to mock."
             )
+        if enable_thinking and reasoning_budget is not None and max_tokens <= reasoning_budget:
+            raise ProviderNotConfiguredError(
+                f"ANALYST_MAX_TOKENS ({max_tokens}) must exceed NVIDIA_REASONING_BUDGET "
+                f"({reasoning_budget}) when NVIDIA_ENABLE_THINKING=true."
+            )
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.max_tokens = max_tokens
+        self.enable_thinking = enable_thinking
+        self.reasoning_budget = reasoning_budget
+        self.max_retries = max_retries
         self._client = httpx.AsyncClient(timeout=timeout_s)
 
     def _headers(self) -> dict[str, str]:
@@ -111,12 +129,16 @@ class NvidiaAnalyst(AnalystProvider):
                 "top_p": 0.9,
                 "max_tokens": self.max_tokens,
             }
-            resp = await self._client.post(
+            apply_reasoning_params(
+                payload, enable_thinking=self.enable_thinking, reasoning_budget=self.reasoning_budget
+            )
+            resp = await post_with_retry(
+                self._client,
                 f"{self.base_url}/chat/completions",
                 headers=self._headers(),
-                json=payload,
+                json_body=payload,
+                max_retries=self.max_retries,
             )
-            resp.raise_for_status()
             message = resp.json()["choices"][0]["message"]
             content = message.get("content") or ""
             data = self._extract_json(content)
@@ -147,7 +169,7 @@ class NvidiaAnalyst(AnalystProvider):
                 enhanced.kill_quote = kill_quote
             enhanced.quality.notes = [
                 *enhanced.quality.notes,
-                "Report narrated by NVIDIA GLM-5.2 analyst.",
+                f"Report narrated by NVIDIA {self.model} analyst.",
             ]
             return enhanced
         except Exception as exc:  # noqa: BLE001 — analyst must never crash a storm

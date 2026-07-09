@@ -46,6 +46,15 @@ export interface Gateway {
   ): Promise<number>;
   getActivePricing(): Promise<Row | null>;
   updateActivePricing(input: { base_run_credits: number; credits_per_100_personas: number; analyst_report_credits: number; name: string }): Promise<Row>;
+  getActiveInferenceSettings(): Promise<Row | null>;
+  updateActiveInferenceSettings(input: {
+    inference_provider: string;
+    analyst_provider: string;
+    nvidia_model: string;
+    analyst_model: string;
+    nvidia_max_tokens: number;
+    analyst_max_tokens: number;
+  }): Promise<Row>;
   recordStorm(row: Row): Promise<void>;
   updateStorm(stormId: string, fields: Row): Promise<void>;
   getStorm(stormId: string): Promise<Row | null>;
@@ -81,6 +90,7 @@ class InMemoryGateway implements Gateway {
     created_at: nowIso(),
     updated_at: nowIso(),
   };
+  private inferenceSettings: Row | null = null;
 
   constructor(private starterCredits = 100) {}
 
@@ -181,6 +191,19 @@ class InMemoryGateway implements Gateway {
   async updateActivePricing(input: { base_run_credits: number; credits_per_100_personas: number; analyst_report_credits: number; name: string }): Promise<Row> {
     this.pricing = { ...this.pricing, ...input, updated_at: nowIso() };
     return { ...this.pricing };
+  }
+
+  async getActiveInferenceSettings(): Promise<Row | null> {
+    return this.inferenceSettings ? { ...this.inferenceSettings } : null;
+  }
+
+  async updateActiveInferenceSettings(input: {
+    inference_provider: string; analyst_provider: string; nvidia_model: string;
+    analyst_model: string; nvidia_max_tokens: number; analyst_max_tokens: number;
+  }): Promise<Row> {
+    const id = this.inferenceSettings?.id ?? cryptoRandom();
+    this.inferenceSettings = { ...(this.inferenceSettings ?? {}), id, is_active: true, ...input, updated_at: nowIso() };
+    return { ...this.inferenceSettings };
   }
 
   async recordStorm(row: Row): Promise<void> {
@@ -377,6 +400,24 @@ class HttpGateway implements Gateway {
       return rows[0] ?? { ...input, is_active: true };
     }
     const rows = await this.admin.mutate("POST", "pricing_rules", { json: { ...input, is_active: true } });
+    return rows[0] ?? { ...input, is_active: true };
+  }
+
+  async getActiveInferenceSettings(): Promise<Row | null> {
+    const rows = await this.admin.get("inference_settings", { is_active: "eq.true", select: "*", order: "updated_at.desc", limit: "1" });
+    return rows[0] ?? null;
+  }
+
+  async updateActiveInferenceSettings(input: {
+    inference_provider: string; analyst_provider: string; nvidia_model: string;
+    analyst_model: string; nvidia_max_tokens: number; analyst_max_tokens: number;
+  }): Promise<Row> {
+    const current = await this.getActiveInferenceSettings();
+    if (current) {
+      const rows = await this.admin.mutate("PATCH", "inference_settings", { params: { id: `eq.${current.id}` }, json: input });
+      return rows[0] ?? { ...input, is_active: true };
+    }
+    const rows = await this.admin.mutate("POST", "inference_settings", { json: { ...input, is_active: true } });
     return rows[0] ?? { ...input, is_active: true };
   }
 

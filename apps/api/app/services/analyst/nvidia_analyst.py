@@ -1,4 +1,4 @@
-"""NvidiaAnalyst — NVIDIA GLM-5.2 re-narration of the deterministic report.
+"""NvidiaAnalyst — NVIDIA GLM-5.2 / nemotron re-narration of the deterministic report.
 
 Design principle (critical): the calibrated engine computes ALL numbers
 (market_fit, criteria scores, counts, curves). This analyst ONLY re-narrates
@@ -7,6 +7,12 @@ quote) from those aggregates. It MUST NEVER change any number. On any failure
 (missing key, network error, invalid JSON) it logs server-side (no secrets)
 and returns the ORIGINAL deterministic report unchanged, plus a note. A storm
 must NEVER crash because of the analyst — enhance_report never raises.
+
+Reasoning models (e.g. nemotron) are opted in via NVIDIA_ENABLE_THINKING=true,
+which adds chat_template_kwargs.enable_thinking + reasoning_budget to the
+request (ANALYST_MAX_TOKENS must exceed the reasoning budget). Requests retry
+on 429/5xx via post_with_retry, and an optional ANALYST_MODEL can override
+NVIDIA_MODEL for this analyst only.
 """
 
 from __future__ import annotations

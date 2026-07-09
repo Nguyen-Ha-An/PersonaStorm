@@ -44,6 +44,32 @@ def new_storm_id() -> str:
     return f"storm_{uuid.uuid4().hex[:12]}"
 
 
+class SwarmDropCapExceeded(RuntimeError):
+    """Raised when too many persona reactions failed after retries."""
+
+
+def evaluate_drop_cap(generated: int, completed: int, max_fraction: float) -> str | None:
+    """Decide what to do about persona reactions dropped after retries.
+
+    Returns None when nothing was dropped, a note string when the dropped
+    fraction is within `max_fraction`, and raises SwarmDropCapExceeded when it
+    exceeds the cap (a systemic failure — bad key, endpoint down, always
+    truncating — should fail the storm honestly, not ship a thin report).
+    """
+    dropped = generated - completed
+    if dropped <= 0:
+        return None
+    if generated > 0 and dropped / generated > max_fraction:
+        raise SwarmDropCapExceeded(
+            f"{dropped} of {generated} persona reactions failed after retries "
+            f"({dropped / generated:.0%} > {max_fraction:.0%} cap)"
+        )
+    return (
+        f"{dropped} of {generated} persona reactions dropped after retries "
+        "(live provider) — report reflects the smaller sample."
+    )
+
+
 class StormRun:
     def __init__(
         self,
@@ -248,6 +274,13 @@ class StormManager:
                 if provider.name == "mock" and interval > 0:
                     await asyncio.sleep(interval)
 
+            # Bounded failure tolerance: react_batch drops personas that fail
+            # after retries. Enforce the cap (raises -> storm fails + refund) and
+            # remember the note to attach to the report below.
+            drop_note = evaluate_drop_cap(
+                len(run.personas), len(run.reactions), s.swarm_max_drop_fraction
+            )
+
             # 5) Quality Checker + Collapse Detector (full-run pass)
             run.status = StormStatus.aggregating
             run.notify()
@@ -261,6 +294,8 @@ class StormManager:
                 run.id, run.request, run.personas, run.reactions, run.features,
                 quality, run.category,
             )
+            if drop_note:
+                run.report.quality.notes.append(drop_note)
             # enhance_report() is contractually safe (never raises), but we
             # guard it here too: a storm must NEVER fail because of the
             # analyst, whatever goes wrong.

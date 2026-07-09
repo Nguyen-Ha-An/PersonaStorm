@@ -15,19 +15,35 @@ shapes:
         NVIDIA_API_KEY=not-needed           # unless the container enforces a key
         NVIDIA_MODEL=z-ai/glm-5.2
 
-Structured output (why nvext, not response_format):
-    NVIDIA recommends constraining output with the `nvext.guided_json`
-    extension instead of `response_format={"type":"json_object"}`, because
-    json_object mode permits ANY valid JSON (including empty objects), whereas
-    guided_json hard-constrains generation to REACTION_JSON_SCHEMA. This mirrors
-    the vLLM provider's guided decoding and drives schema-validity toward 100%.
-    Toggle with NVIDIA_USE_GUIDED_JSON=false to fall back to json_object mode if
-    a given model/endpoint doesn't support nvext.
+Structured output (3-way, via `structured_output`):
+    Selected by `structured_output` (from Settings.effective_structured_output,
+    env NVIDIA_STRUCTURED_OUTPUT):
+      - "guided_json": sets `nvext.guided_json` to REACTION_JSON_SCHEMA, NVIDIA's
+        OpenAI-schema extension that hard-constrains generation to the schema.
+        This mirrors the vLLM provider's guided decoding and drives
+        schema-validity toward 100%.
+      - "json_object": sets response_format={"type": "json_object"}, which only
+        guarantees valid JSON (including empty objects), not schema conformance.
+      - "none": no structured-output field is sent; relies entirely on the
+        shared, defensive parse_llm_reaction() to salvage a reaction.
+    When NVIDIA_STRUCTURED_OUTPUT is unset, the legacy NVIDIA_USE_GUIDED_JSON
+    bool still applies: true -> guided_json, false -> json_object.
 
-Model note: z-ai/glm-5.2 is a reasoning/agentic model. Reasoning tokens count
+Reasoning models (e.g. nvidia/nemotron-3-ultra-550b-a55b): when
+NVIDIA_ENABLE_THINKING=true, the request also carries
+`chat_template_kwargs.enable_thinking` and `reasoning_budget`. NVIDIA_MAX_TOKENS
+must exceed NVIDIA_REASONING_BUDGET (enforced at construction) or the JSON
+answer gets starved by reasoning tokens. The response's `reasoning_content` is
+ignored; only `content` is parsed. NVIDIA_ENABLE_THINKING defaults to false so
+the default z-ai/glm-5.2, mock, and vLLM paths are unchanged.
+
+Model note: z-ai/glm-5.2 is a reasoning/agentic model that reasons internally
+without the enable_thinking flag above. Its reasoning tokens still count
 against max_tokens, so NVIDIA_MAX_TOKENS defaults higher than the other
 providers to avoid truncating the final JSON. Response parsing reuses the
 shared, defensive parse_llm_reaction().
+
+Requests retry on 429/5xx/transport errors via post_with_retry().
 """
 
 from __future__ import annotations
@@ -124,6 +140,7 @@ class NvidiaProvider(PersonaInferenceProvider):
             payload["response_format"] = {"type": "json_object"}
         # "none": no structured-output field; rely on parse_llm_reaction.
 
+        # TODO(live-key): track token usage per storm for cost reporting.
         resp = await post_with_retry(
             self._client,
             f"{self.base_url}/chat/completions",

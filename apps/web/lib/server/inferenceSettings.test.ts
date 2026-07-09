@@ -1,8 +1,13 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { getConfig } from "./env";
-import { inferenceSettingsFromRow, resolveEffectiveConfig } from "./inferenceSettings";
-import { validateInferenceSettingsBody, toInferenceSettingsView, inferenceSettingsFromRow as fromRow } from "./inferenceSettings";
+import {
+  inferenceSettingsFromRow,
+  resolveEffectiveConfig,
+  validateInferenceSettingsBody,
+  toInferenceSettingsView,
+  inferenceSettingsFromRow as fromRow,
+} from "./inferenceSettings";
 
 const env = getConfig();
 
@@ -87,6 +92,7 @@ describe("validateInferenceSettingsBody", () => {
   it("rejects non-integer / out-of-range tokens", () => {
     expect(() => validateInferenceSettingsBody({ ...ok, nvidia_max_tokens: 0 })).toThrow();
     expect(() => validateInferenceSettingsBody({ ...ok, analyst_max_tokens: 9_999_999 })).toThrow();
+    expect(() => validateInferenceSettingsBody({ ...ok, nvidia_max_tokens: 100.5 })).toThrow();
   });
 });
 

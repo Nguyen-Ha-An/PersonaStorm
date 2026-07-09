@@ -4,6 +4,7 @@ import type {
   AdminUser,
   AdminUserDetail,
   DashboardData,
+  InferenceSettings,
   Me,
   Pricing,
   Quote,
@@ -238,3 +239,12 @@ export const adminUpdatePricing = (p: {
   credits_per_100_personas: number;
   analyst_report_credits: number;
 }) => apiSend<Pricing>("POST", "/admin/pricing", p);
+export const adminGetInferenceSettings = () => apiGet<InferenceSettings>("/admin/inference-settings");
+export const adminUpdateInferenceSettings = (body: {
+  inference_provider: string;
+  analyst_provider: string;
+  nvidia_model: string;
+  analyst_model: string;
+  nvidia_max_tokens: number;
+  analyst_max_tokens: number;
+}) => apiSend<InferenceSettings>("POST", "/admin/inference-settings", body);

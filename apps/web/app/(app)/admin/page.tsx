@@ -15,6 +15,7 @@ import {
   Label,
   MetricCard,
   Modal,
+  Select,
   Skeleton,
   StatusBadge,
 } from "@/components/ui";
@@ -22,31 +23,35 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import {
   ApiError,
   adminAdjustWallet,
+  adminGetInferenceSettings,
   adminGetPricing,
   adminListStormRuns,
   adminListUsers,
   adminSetRole,
+  adminUpdateInferenceSettings,
   adminUpdatePricing,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatCredits, formatDate, formatNumberCompact } from "@/lib/format";
-import type { AdminStormRun, AdminUser, Pricing } from "@/lib/types";
+import type { AdminStormRun, AdminUser, InferenceSettings, Pricing } from "@/lib/types";
 
-type Tab = "overview" | "users" | "storms" | "pricing";
+type Tab = "overview" | "users" | "storms" | "pricing" | "inference";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "users", label: "Users" },
   { key: "storms", label: "Storm Runs" },
   { key: "pricing", label: "Pricing" },
+  { key: "inference", label: "Inference" },
 ];
 
 /** Distinguishes a failed GET (per resource) from a failed mutation, so the
  *  alert names the right thing instead of a generic "Admin action failed". */
-type AdminErrorKind = "users" | "storms" | "pricing" | "action";
+type AdminErrorKind = "users" | "storms" | "pricing" | "inference" | "action";
 const ERROR_TITLES: Record<AdminErrorKind, string> = {
   users: "Couldn't load users",
   storms: "Couldn't load storm runs",
   pricing: "Couldn't load pricing",
+  inference: "Couldn't load inference settings",
   action: "Admin action failed",
 };
 
@@ -57,6 +62,7 @@ export default function AdminPage() {
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [storms, setStorms] = useState<AdminStormRun[] | null>(null);
   const [pricing, setPricing] = useState<Pricing | null>(null);
+  const [inference, setInference] = useState<InferenceSettings | null>(null);
   const [error, setError] = useState<{ kind: AdminErrorKind; message: string } | null>(null);
 
   const [search, setSearch] = useState("");
@@ -96,6 +102,14 @@ export default function AdminPage() {
         setError({
           kind: "pricing",
           message: e instanceof Error ? e.message : "Failed to load pricing.",
+        }),
+      );
+    adminGetInferenceSettings()
+      .then(setInference)
+      .catch((e) =>
+        setError({
+          kind: "inference",
+          message: e instanceof Error ? e.message : "Failed to load inference settings.",
         }),
       );
   }, [isAdmin, loadUsers]);
@@ -348,6 +362,8 @@ export default function AdminPage() {
         )}
 
         {tab === "pricing" && <PricingEditor pricing={pricing} onSaved={setPricing} />}
+
+        {tab === "inference" && <InferenceEditor inference={inference} onSaved={setInference} />}
       </div>
 
       {/* adjust-wallet modal */}
@@ -493,6 +509,151 @@ function PricingEditor({ pricing, onSaved }: { pricing: Pricing | null; onSaved:
 
         <Button onClick={save} disabled={saving}>
           {saving ? "Saving…" : "Save pricing"}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function InferenceEditor({
+  inference,
+  onSaved,
+}: {
+  inference: InferenceSettings | null;
+  onSaved: (s: InferenceSettings) => void;
+}) {
+  const [form, setForm] = useState<InferenceSettings | null>(inference);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => setForm(inference), [inference]);
+
+  if (!form) return <Skeleton className="h-56 w-full" />;
+
+  async function save() {
+    if (!form) return;
+    setSaving(true);
+    setMsg(null);
+    setErr(null);
+    try {
+      const saved = await adminUpdateInferenceSettings({
+        inference_provider: form.inference_provider,
+        analyst_provider: form.analyst_provider,
+        nvidia_model: form.nvidia_model,
+        analyst_model: form.analyst_model,
+        nvidia_max_tokens: form.nvidia_max_tokens,
+        analyst_max_tokens: form.analyst_max_tokens,
+      });
+      onSaved(saved);
+      setMsg("Inference settings updated. New storms use them immediately.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function set<K extends keyof InferenceSettings>(key: K, value: InferenceSettings[K]) {
+    setForm({ ...form, [key]: value } as InferenceSettings);
+  }
+
+  return (
+    <Card className="max-w-xl">
+      <CardHeader title="Active inference settings" />
+      <div className="space-y-4 p-5">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="inference_provider">Inference provider</Label>
+            <Select
+              id="inference_provider"
+              value={form.inference_provider}
+              onChange={(e) =>
+                set("inference_provider", e.target.value as InferenceSettings["inference_provider"])
+              }
+            >
+              <option value="mock">mock</option>
+              <option value="nvidia">nvidia</option>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="analyst_provider">Analyst provider</Label>
+            <Select
+              id="analyst_provider"
+              value={form.analyst_provider}
+              onChange={(e) =>
+                set("analyst_provider", e.target.value as InferenceSettings["analyst_provider"])
+              }
+            >
+              <option value="mock">mock</option>
+              <option value="nvidia">nvidia</option>
+            </Select>
+          </div>
+        </div>
+
+        <div>
+          <Label htmlFor="nvidia_model">NVIDIA model</Label>
+          <Input
+            id="nvidia_model"
+            value={form.nvidia_model}
+            onChange={(e) => set("nvidia_model", e.target.value)}
+          />
+        </div>
+
+        <div>
+          <Label htmlFor="analyst_model">Analyst model</Label>
+          <Input
+            id="analyst_model"
+            value={form.analyst_model}
+            onChange={(e) => set("analyst_model", e.target.value)}
+            placeholder="Falls back to the NVIDIA model when empty"
+          />
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="nvidia_max_tokens">NVIDIA max tokens</Label>
+            <Input
+              id="nvidia_max_tokens"
+              type="number"
+              min={1}
+              value={form.nvidia_max_tokens}
+              onChange={(e) => set("nvidia_max_tokens", Math.max(1, Number(e.target.value)))}
+            />
+          </div>
+          <div>
+            <Label htmlFor="analyst_max_tokens">Analyst max tokens</Label>
+            <Input
+              id="analyst_max_tokens"
+              type="number"
+              min={1}
+              value={form.analyst_max_tokens}
+              onChange={(e) => set("analyst_max_tokens", Math.max(1, Number(e.target.value)))}
+            />
+          </div>
+        </div>
+
+        <div>
+          <Label>NVIDIA base URL</Label>
+          <p className="truncate rounded-lg border border-storm-800 bg-storm-900/60 px-3 py-2 text-xs text-storm-400">
+            {form.nvidia_base_url}
+          </p>
+        </div>
+
+        <div>
+          <Label>NVIDIA API key</Label>
+          <div>
+            <StatusBadge tone={form.nvidia_api_key_configured ? "green" : "yellow"}>
+              {form.nvidia_api_key_configured ? "API key: configured" : "API key: not set"}
+            </StatusBadge>
+          </div>
+        </div>
+
+        {msg && <p className="text-xs text-signal-green">{msg}</p>}
+        {err && <p className="text-xs text-signal-red">{err}</p>}
+
+        <Button onClick={save} disabled={saving}>
+          {saving ? "Saving…" : "Save inference settings"}
         </Button>
       </div>
     </Card>

@@ -102,3 +102,29 @@ export interface PersonaReaction {
   quote: string;
   positive_trigger: string;
 }
+
+// ---- verdict / top actions (derived report additions, Workstream 2) --------
+// Derived from existing report fields at build time (see ./verdict); never
+// re-inferred and never changes an engine number.
+
+export type VerdictLevel = "strong" | "conditional" | "weak";
+
+export interface Verdict {
+  level: VerdictLevel;
+  headline: string;
+  rationale: string;
+  caveated: boolean;
+}
+
+export interface TopActionEvidence {
+  stat: string;
+  quote?: string;
+}
+
+export interface TopAction {
+  rank: number;
+  imperative: string;
+  why: string;
+  evidence?: TopActionEvidence;
+  anchorId: string;
+}

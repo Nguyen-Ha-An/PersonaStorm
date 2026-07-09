@@ -1,9 +1,11 @@
-import { getCurrentUser } from "@/lib/server/auth";
+import { getOptionalUser } from "@/lib/server/auth";
 import { getConfig } from "@/lib/server/env";
 import { buildGateway } from "@/lib/server/gateway";
 import { HttpError } from "@/lib/server/errors";
 import { detailResponse } from "@/lib/server/http";
 import { getStreamData } from "@/lib/server/stormStore";
+import { DEMO_STORM_ID } from "@/lib/server/demo";
+import { ensureDemoStorm } from "@/lib/server/demoSeed";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +33,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
   // half-open stream.
   let data;
   try {
-    const user = await getCurrentUser(request, gateway);
+    // The public demo run seeds itself on first request (idempotent, no signup).
+    if (params.id === DEMO_STORM_ID) await ensureDemoStorm(gateway, cfg);
+    const user = await getOptionalUser(request, gateway);
     data = await getStreamData(gateway, params.id, user);
   } catch (err) {
     if (err instanceof HttpError) return detailResponse(err.message, err.status);

@@ -4,26 +4,9 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
-import { Button, Card, SectionRule, Skeleton } from "@/components/ui";
-import { InsightCard } from "@/components/ui/InsightCard";
+import { Button, Skeleton } from "@/components/ui";
 import { ErrorState } from "@/components/feedback";
-import { MarketFitHero } from "@/components/report/MarketFitHero";
-import { TrustPanel } from "@/components/report/TrustPanel";
-import { BlockerCards } from "@/components/report/BlockerCards";
-import { StrengthCards } from "@/components/report/StrengthCards";
-import { CriteriaRadar } from "@/components/report/CriteriaRadar";
-import { CriteriaBreakdown } from "@/components/report/CriteriaBreakdown";
-import { TrustProofPanel } from "@/components/report/TrustProofPanel";
-import { DifferentiationPanel } from "@/components/report/DifferentiationPanel";
-import { PricingFitPanel } from "@/components/report/PricingFitPanel";
-import { WorkflowFitPanel } from "@/components/report/WorkflowFitPanel";
-import { PriceCurve } from "@/components/report/PriceCurve";
-import { SegmentHeatmap } from "@/components/report/SegmentHeatmap";
-import { AgeCohortBreakdown } from "@/components/report/AgeCohortBreakdown";
-import { ObjectionsTable } from "@/components/report/ObjectionsTable";
-import { KillQuoteCard } from "@/components/report/KillQuoteCard";
-import { Recommendations } from "@/components/report/Recommendations";
-import { NextValidationPanel } from "@/components/report/NextValidationPanel";
+import { ReportView } from "@/components/report/ReportView";
 import { getReport } from "@/lib/api";
 import { formatNumberCompact } from "@/lib/format";
 import type { StormReport } from "@/lib/types";
@@ -154,62 +137,7 @@ export default function ReportPage() {
       actions={actions}
       width="wide"
     >
-      <div className="space-y-8">
-        {/* Tier 1 — hero + the narrative read + calibration, all read before anything else */}
-        <div className="space-y-4">
-          <MarketFitHero report={report} />
-          <InsightCard title="Executive summary" tone="insight">
-            {report.summary}
-          </InsightCard>
-          <TrustPanel report={report} />
-        </div>
-
-        {/* Tier 2 — what's driving (or blocking) adoption */}
-        <div className="space-y-4">
-          <SectionRule>What's driving adoption</SectionRule>
-          <BlockerCards report={report} />
-          <StrengthCards report={report} />
-        </div>
-
-        {/* Tier 3 — criteria diagnosis */}
-        <div className="space-y-4">
-          <SectionRule>Criteria diagnosis</SectionRule>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <CriteriaRadar report={report} />
-            <CriteriaBreakdown report={report} />
-          </div>
-        </div>
-
-        {/* Tier 4 — criterion deep-dives, merged into one denser grid */}
-        <div className="space-y-4">
-          <SectionRule>Criterion deep-dives</SectionRule>
-          <Card>
-            <div className="grid gap-5 p-5 sm:grid-cols-2 xl:grid-cols-4">
-              <TrustProofPanel report={report} />
-              <DifferentiationPanel report={report} />
-              <PricingFitPanel report={report} />
-              <WorkflowFitPanel report={report} />
-            </div>
-          </Card>
-        </div>
-
-        {/* Tier 5 — evidence */}
-        <div className="space-y-4">
-          <SectionRule>Evidence</SectionRule>
-          <PriceCurve report={report} />
-          <SegmentHeatmap report={report} />
-          <AgeCohortBreakdown report={report} />
-          <ObjectionsTable report={report} />
-          <KillQuoteCard report={report} />
-        </div>
-
-        {/* Tier 6 — next steps (the "next validation" hand-off to fieldwork) */}
-        <div className="space-y-4">
-          <SectionRule>Next steps</SectionRule>
-          <Recommendations report={report} />
-          <NextValidationPanel report={report} />
-        </div>
-      </div>
+      <ReportView report={report} />
     </DashboardShell>
   );
 }

@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 from ...config import Settings
+from ..criteria.assumptions import AssumptionLedger
 from .base import PersonaInferenceProvider
 from .mock_provider import MockPersonaProvider
 from .nvidia_provider import NvidiaProvider
 from .vllm_provider import VLLMProvider
 
 
-def get_provider(settings: Settings) -> PersonaInferenceProvider:
+def get_provider(
+    settings: Settings, ledger: AssumptionLedger | None = None
+) -> PersonaInferenceProvider:
     match settings.inference_provider:
         case "mock":
-            return MockPersonaProvider(seed=settings.persona_seed)
+            return MockPersonaProvider(seed=settings.persona_seed, ledger=ledger)
         case "vllm":
             return VLLMProvider(
                 base_url=settings.vllm_base_url,

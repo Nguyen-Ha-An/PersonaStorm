@@ -1,8 +1,12 @@
+import time
+
 import pytest
 
 from app.services.criteria.assumptions import ASSUMPTION_DEFS, AssumptionLedger
 from app.services.inference.mock_provider import MockPersonaProvider
 from app.services.persona.generator import PersonaGenerator
+
+from .conftest import create_payload
 
 
 def test_registry_and_ledger():
@@ -36,3 +40,34 @@ async def test_skeptic_without_proof_dealbreaker_can_raise_no_proof():
         "no evidence for the claims", "unclear value", "not obviously for me",
         "hidden pricing", "no reference customers",
     }
+
+
+def test_report_carries_calibration_evidence(client):
+    """Task 12: the reference-engine report carries a calibration_evidence
+    block (priors provenance + fired assumptions), mirroring apps/web's
+    buildCalibrationEvidence() — minus counterfactual_audit, which does not
+    exist in this engine (documented parity exception)."""
+    resp = client.post(
+        "/api/storm/create",
+        json=create_payload(target_market="budget", persona_count=200),
+    )
+    assert resp.status_code == 200, resp.text
+    storm_id = resp.json()["storm_id"]
+
+    deadline = time.time() + 30.0
+    report = None
+    while time.time() < deadline:
+        r = client.get(f"/api/storm/{storm_id}/report")
+        if r.status_code == 200:
+            report = r.json()
+            break
+        assert r.status_code == 202, r.text
+        time.sleep(0.1)
+    assert report is not None, "report never became ready"
+
+    ce = report["calibration_evidence"]
+    assert ce is not None
+    assert ce["priors_source"] in ("data_files", "embedded_unverified")
+    assert any(
+        a["id"] == "pricing_dealbreaker_injection" for a in ce["assumptions_fired"]
+    )

@@ -145,3 +145,9 @@ class StormReport(BaseModel):
     avg_max_price: float = 0.0
     generated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     disclaimer: str = DISCLAIMER
+
+    # Calibration provenance — mirrors apps/web buildCalibrationEvidence(), minus
+    # counterfactual_audit (that check does not exist in this reference engine;
+    # see docs for the documented parity exception). Additive + optional so
+    # legacy persisted reports without this field still validate.
+    calibration_evidence: dict | None = None

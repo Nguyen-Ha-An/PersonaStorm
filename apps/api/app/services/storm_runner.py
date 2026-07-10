@@ -28,6 +28,7 @@ from ..schemas.storm import StormCreateRequest, StormMeta, StormStatus
 from ..utils.text import normalize_objection
 from .aggregation import build_report
 from .analyst import AnalystProvider, get_analyst
+from .criteria.assumptions import AssumptionLedger
 from .criteria.classifier import classify_category
 from .inference import MockPersonaProvider, PersonaInferenceProvider, get_provider
 from .persona import PersonaGenerator
@@ -223,9 +224,12 @@ class StormManager:
     def get(self, storm_id: str) -> StormRun | None:
         return self.runs.get(storm_id)
 
-    def _provider_for(self, run: StormRun) -> PersonaInferenceProvider:
+    def _provider_for(self, run: StormRun, ledger: AssumptionLedger) -> PersonaInferenceProvider:
         if isinstance(self.provider, MockPersonaProvider):
-            return MockPersonaProvider(seed=run.seed)  # per-run reproducibility
+            # per-run reproducibility + a shared ledger so provider-side nudges
+            # (ai_skeptic_trust_penalty, ai_novelty_activation_boost, ...) land
+            # in the same calibration_evidence as the generator's.
+            return MockPersonaProvider(seed=run.seed, ledger=ledger)
         return self.provider
 
     # ----------------------------------------------------------------- pipeline
@@ -243,14 +247,16 @@ class StormManager:
             # 2) Persona Space Builder + 3) Diversity Validator
             run.status = StormStatus.generating_personas
             run.notify()
-            generator = PersonaGenerator(seed=run.seed)
+            # One ledger for the whole run: generator + (mock) provider both
+            # fire into it, so calibration_evidence.assumptions_fired reflects
+            # every nudge applied to this storm, not just persona generation.
+            ledger = AssumptionLedger()
+            generator = PersonaGenerator(seed=run.seed, ledger=ledger)
             personas, diversity, priors_meta = generator.generate(
                 run.request.target_market.value,
                 run.request.persona_count,
                 run.request.custom_segment_description,
             )
-            # priors_meta (data_files vs embedded_unverified honesty label) is
-            # kept in scope for Task 12 (surfacing calibration provenance).
             run.personas = personas
             run.diversity = diversity.to_dict()
             if diversity.warnings:
@@ -259,7 +265,7 @@ class StormManager:
             # 4) Persona Reaction Engine — batched swarm inference
             run.status = StormStatus.running
             run.notify()
-            provider = self._provider_for(run)
+            provider = self._provider_for(run, ledger)
             batch, interval = s.storm_batch_size, s.storm_batch_interval_ms / 1000.0
             for i in range(0, len(personas), batch):
                 chunk = personas[i:i + batch]
@@ -298,6 +304,22 @@ class StormManager:
             )
             if drop_note:
                 run.report.quality.notes.append(drop_note)
+
+            # Calibration provenance (Task 12) — mirrors apps/web's
+            # buildCalibrationEvidence(), minus counterfactual_audit (that check
+            # does not exist in this reference engine).
+            downgrades = list(priors_meta.notes)
+            if priors_meta.source == "embedded_unverified":
+                downgrades.append(
+                    "Persona trait priors are embedded developer estimates (no "
+                    "data files loaded) — population shape is unvalidated."
+                )
+            run.report.calibration_evidence = {
+                "priors_coverage": round(priors_meta.coverage, 3),
+                "priors_source": priors_meta.source,
+                "assumptions_fired": ledger.fired(),
+                "confidence_downgrades": downgrades,
+            }
             # enhance_report() is contractually safe (never raises), but we
             # guard it here too: a storm must NEVER fail because of the
             # analyst, whatever goes wrong.

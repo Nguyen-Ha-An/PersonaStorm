@@ -179,6 +179,14 @@ const YELLOW_TAILS = ["", "", " Convince me and I'm in.", " I'd wait for reviews
 
 const FAM_MAP: Record<string, number> = { low: 0.2, medium: 0.5, high: 0.85 };
 
+/** Persona-stable, stimulus-independent formula jitter (spec §6). Exported for direct testing. */
+export function computeJitterOffsets(seed: number, personaId: string): Record<string, number> {
+  const jrng = new RNG(`jitter:${seed}:${personaId}`);
+  const offsets: Record<string, number> = {};
+  for (const cid of CORE_IDS) offsets[cid] = jrng.gauss(0, 0.03);
+  return offsets;
+}
+
 export class MockPersonaProvider implements PersonaInferenceProvider {
   readonly name = "mock";
 
@@ -198,9 +206,7 @@ export class MockPersonaProvider implements PersonaInferenceProvider {
     const cat = category ?? classifyCategory(f)[0];
     const highRisk = isHighRisk(f);
 
-    const jrng = new RNG(`jitter:${this.seed}:${persona.persona_id}`);
-    const jitterOffsets: Record<string, number> = {};
-    for (const cid of CORE_IDS) jitterOffsets[cid] = jrng.gauss(0, 0.03);
+    const jitterOffsets = computeJitterOffsets(this.seed, persona.persona_id);
 
     const { core, overlay } = this.scoreCriteria(persona, f, cat, rng, jitterOffsets);
 

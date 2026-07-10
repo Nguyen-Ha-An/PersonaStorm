@@ -1,7 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { MockPersonaProvider } from "./mockProvider";
+import { computeJitterOffsets, MockPersonaProvider } from "./mockProvider";
 import { AssumptionLedger } from "../criteria/assumptions";
+import { CORE_IDS } from "../criteria/registry";
 import { PersonaGenerator } from "../persona/generator";
+import { RNG } from "../rng";
+import { parseStimulus, type StimulusFeatures } from "../stimulusParser";
+import type { Persona } from "../types";
 
 // Note: "AI-powered" (hyphenated) tokenizes as a single "ai-powered" token under
 // the shared WORD_RE (`[a-zA-Z][a-zA-Z0-9'-]+`, ported from stimulus_parser.py),
@@ -51,5 +55,43 @@ describe("de-nudged mock provider", () => {
     ]);
     // Identical traits, different persona_id → different jitter (and noise) → different scores.
     expect(r1.criteria_scores).not.toEqual(r2.criteria_scores);
+  });
+});
+
+/** White-box access to the private scoreCriteria (TS `private` is compile-time only). */
+type ScoreCriteriaAccess = {
+  scoreCriteria: (
+    p: Persona,
+    f: StimulusFeatures,
+    category: string,
+    rng: RNG,
+    jitterOffsets: Record<string, number>,
+  ) => { core: Record<string, number> };
+};
+
+describe("jitter mechanism", () => {
+  test("offsets are deterministic per (seed, persona) and cover all core criteria", () => {
+    const a = computeJitterOffsets(5, "P1");
+    const b = computeJitterOffsets(5, "P1");
+    expect(a).toEqual(b);
+    expect(Object.keys(a).sort()).toEqual([...CORE_IDS].sort());
+  });
+
+  test("offsets differ across personas (signature is stimulus-independent by construction)", () => {
+    const a = computeJitterOffsets(5, "P1");
+    const b = computeJitterOffsets(5, "P2");
+    expect(a).not.toEqual(b);
+  });
+
+  test("offsets are actually applied to criteria scores", async () => {
+    const { personas } = new PersonaGenerator(9).generate("us_smb", 1);
+    const p = personas[0];
+    const provider = new MockPersonaProvider(9) as unknown as ScoreCriteriaAccess;
+    const f = parseStimulus(PLAIN_STIMULUS, "", "product_concept");
+    const zeroOffsets = Object.fromEntries(CORE_IDS.map((c) => [c, 0]));
+    // Identical RNG key + identical inputs — only the jitter map differs.
+    const zero = provider.scoreCriteria(p, f, "b2b_saas", new RNG("t:1"), zeroOffsets);
+    const bumped = provider.scoreCriteria(p, f, "b2b_saas", new RNG("t:1"), { ...zeroOffsets, problem_awareness: 0.3 });
+    expect(bumped.core.problem_awareness).toBeGreaterThan(zero.core.problem_awareness + 0.2);
   });
 });

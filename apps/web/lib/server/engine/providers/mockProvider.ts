@@ -10,6 +10,7 @@
 
 import { RNG } from "../rng";
 import { clamp, round } from "../text";
+import { AssumptionLedger } from "../criteria/assumptions";
 import { overlayIdsFor } from "../criteria/ageOverlays";
 import { classifyCategory, isHighRisk } from "../criteria/classifier";
 import { resolvePreset } from "../criteria/presets";
@@ -181,7 +182,7 @@ const FAM_MAP: Record<string, number> = { low: 0.2, medium: 0.5, high: 0.85 };
 export class MockPersonaProvider implements PersonaInferenceProvider {
   readonly name = "mock";
 
-  constructor(private seed: number = 1337) {}
+  constructor(private seed: number = 1337, private ledger: AssumptionLedger = new AssumptionLedger()) {}
 
   async react(
     persona: Persona,
@@ -197,7 +198,11 @@ export class MockPersonaProvider implements PersonaInferenceProvider {
     const cat = category ?? classifyCategory(f)[0];
     const highRisk = isHighRisk(f);
 
-    const { core, overlay } = this.scoreCriteria(persona, f, cat, rng);
+    const jrng = new RNG(`jitter:${this.seed}:${persona.persona_id}`);
+    const jitterOffsets: Record<string, number> = {};
+    for (const cid of CORE_IDS) jitterOffsets[cid] = jrng.gauss(0, 0.03);
+
+    const { core, overlay } = this.scoreCriteria(persona, f, cat, rng, jitterOffsets);
 
     const breakdown = computeMarketFit(core, overlay, cat, persona.life_stage, {
       isHighRisk: highRisk,
@@ -255,6 +260,7 @@ export class MockPersonaProvider implements PersonaInferenceProvider {
     f: StimulusFeatures,
     _category: string,
     rng: RNG,
+    jitterOffsets: Record<string, number>,
   ): { core: Record<string, number>; overlay: Record<string, number> } {
     const j = (scale = 0.05) => rng.gauss(0.0, scale);
 
@@ -280,10 +286,13 @@ export class MockPersonaProvider implements PersonaInferenceProvider {
 
     core.solution_fit = 0.42 + 0.28 * clarity + 0.2 * proof - 0.1 * jargon + j();
     core.value_clarity = 0.3 + 0.55 * clarity - 0.25 * jargon + j();
-    core.differentiation = 0.55 - 0.3 * fam + 0.15 * (p.novelty_seeking - 0.5) + (f.mentionsAi ? 0.1 : 0.0) + j();
+    core.differentiation = 0.55 - 0.3 * fam + 0.15 * (p.novelty_seeking - 0.5) + j();
 
     core.trust = 0.55 - 0.3 * (p.skepticism - 0.5) + 0.18 * (p.brand_trust - 0.5) + 0.15 * proof - 0.08 * jargon + j();
-    if (f.mentionsAi && p.skepticism > 0.6 && !f.hasProof) core.trust -= 0.06;
+    if (f.mentionsAi && p.skepticism > 0.6 && !f.hasProof) {
+      this.ledger.fire("ai_skeptic_trust_penalty");
+      core.trust -= 0.06;
+    }
     core.proof_requirement = 0.35 + 0.35 * p.skepticism + 0.2 * (1.0 - p.brand_trust) - 0.18 * proof + j();
 
     let pa = 0.3 + 0.55 * affordability;
@@ -296,7 +305,10 @@ export class MockPersonaProvider implements PersonaInferenceProvider {
     core.workflow_fit = 0.42 + 0.25 * fam + 0.18 * clarity + j();
     core.switching_willingness = 0.38 + 0.3 * p.novelty_seeking - 0.15 * p.skepticism + 0.12 * trial + j();
     let act = 0.38 + 0.22 * clarity + 0.18 * trial + 0.12 * p.novelty_seeking;
-    if (f.mentionsAi && p.novelty_seeking > 0.55) act += 0.12 * p.novelty_seeking;
+    if (f.mentionsAi && p.novelty_seeking > 0.55) {
+      this.ledger.fire("ai_novelty_activation_boost");
+      act += 0.12 * p.novelty_seeking;
+    }
     core.activation_likelihood = act + j();
 
     core.repeat_usage_potential = 0.4 + 0.25 * core.solution_fit + 0.15 * core.workflow_fit + j();
@@ -304,7 +316,7 @@ export class MockPersonaProvider implements PersonaInferenceProvider {
     core.retention_potential = 0.38 + 0.25 * core.perceived_roi + 0.18 * core.repeat_usage_potential + j();
 
     const clamped: Record<string, number> = {};
-    for (const cid of CORE_IDS) clamped[cid] = round(clamp(core[cid]), 4);
+    for (const cid of CORE_IDS) clamped[cid] = round(clamp(core[cid] + (jitterOffsets[cid] ?? 0)), 4);
     const overlay = this.scoreOverlay(p, f, clamped, rng);
     return { core: clamped, overlay };
   }

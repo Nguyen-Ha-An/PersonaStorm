@@ -5,11 +5,12 @@
  */
 
 import type { ServerConfig } from "../../env";
+import type { AssumptionLedger } from "../criteria/assumptions";
 import { MockPersonaProvider } from "./mockProvider";
 import { NvidiaProvider } from "./nvidiaProvider";
 import type { PersonaInferenceProvider } from "./types";
 
-export function getProvider(cfg: ServerConfig): PersonaInferenceProvider {
+export function getProvider(cfg: ServerConfig, ledger?: AssumptionLedger): PersonaInferenceProvider {
   if (cfg.inferenceProvider === "nvidia") {
     return new NvidiaProvider({
       apiKey: cfg.nvidiaApiKey,
@@ -18,7 +19,7 @@ export function getProvider(cfg: ServerConfig): PersonaInferenceProvider {
       maxTokens: cfg.nvidiaMaxTokens,
     });
   }
-  return new MockPersonaProvider(cfg.personaSeed);
+  return new MockPersonaProvider(cfg.personaSeed, ledger);
 }
 
 export type { PersonaInferenceProvider } from "./types";

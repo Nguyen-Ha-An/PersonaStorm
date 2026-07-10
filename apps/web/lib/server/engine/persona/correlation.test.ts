@@ -31,6 +31,11 @@ describe("correlation", () => {
     expect(L[1][0]).toBeCloseTo(0.8, 6);
   });
 
+  test("derived pairs are not shrunk", () => {
+    const L = buildCholesky([["price_sensitivity", "skepticism", 0.6, "derived"]], "test");
+    expect(L[1][0]).toBeCloseTo(0.6, 6);
+  });
+
   test("non-positive-definite matrix throws with preset name", () => {
     const bad: [string, string, number, "sourced"][] = [
       ["price_sensitivity", "skepticism", 0.95, "sourced"],

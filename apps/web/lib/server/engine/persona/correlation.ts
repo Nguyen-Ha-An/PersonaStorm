@@ -35,7 +35,7 @@ export function buildCholesky(pairs: TraitCorrelation[], presetKey: string): num
     const j = idx.get(b);
     if (i === undefined) throw new Error(`correlation for preset '${presetKey}': unknown trait '${a}'`);
     if (j === undefined) throw new Error(`correlation for preset '${presetKey}': unknown trait '${b}'`);
-    const rr = status === "sourced" ? r : r * UNVERIFIED_SHRINK;
+    const rr = status === "unverified" ? r * UNVERIFIED_SHRINK : r;
     m[i][j] = rr;
     m[j][i] = rr;
   }

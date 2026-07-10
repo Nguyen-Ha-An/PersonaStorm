@@ -23,6 +23,7 @@ export interface DiversityReport {
   age_std: number;
   life_stage_counts: Record<string, number>;
   warnings: string[];
+  coherence: number;
 }
 
 export function diversityToDict(r: DiversityReport): Record<string, unknown> {
@@ -36,6 +37,7 @@ export function diversityToDict(r: DiversityReport): Record<string, unknown> {
     age_std: round(r.age_std, 2),
     life_stage_counts: r.life_stage_counts,
     warnings: r.warnings,
+    coherence: round(r.coherence, 3),
   };
 }
 
@@ -45,7 +47,7 @@ export function validateDiversity(personas: Persona[], expectedSubSegments: stri
   if (n === 0) {
     return {
       ok: false, trait_std: {}, sub_segment_counts: {}, dealbreaker_uniqueness: 0,
-      age_std: 0, life_stage_counts: {}, warnings: ["no personas generated"],
+      age_std: 0, life_stage_counts: {}, warnings: ["no personas generated"], coherence: 0,
     };
   }
 
@@ -87,6 +89,24 @@ export function validateDiversity(personas: Persona[], expectedSubSegments: stri
     warnings.push(`age-cohort spread low: population collapses to a single life stage ('${only}')`);
   }
 
+  // Coherence: personas with >=3 traits beyond |z| 2.8 of the population are
+  // flagged incoherent (Mahalanobis-style heuristic, spec §5).
+  const means: Record<string, number> = {};
+  for (const t of TRAITS) means[t] = personas.reduce((s, p) => s + (p[t] as number), 0) / n;
+  let incoherent = 0;
+  for (const p of personas) {
+    let extreme = 0;
+    for (const t of TRAITS) {
+      const sd = Math.max(traitStd[t], 1e-6);
+      if (Math.abs(((p[t] as number) - means[t]) / sd) > 2.8) extreme += 1;
+    }
+    if (extreme >= 3) incoherent += 1;
+  }
+  const coherence = 1 - incoherent / n;
+  if (n >= 100 && coherence < 0.98) {
+    warnings.push(`persona coherence low (${coherence.toFixed(3)} < 0.98): too many personas with several extreme traits at once`);
+  }
+
   return {
     ok: warnings.length === 0,
     trait_std: traitStd,
@@ -95,5 +115,6 @@ export function validateDiversity(personas: Persona[], expectedSubSegments: stri
     age_std: ageStd,
     life_stage_counts: lifeStageCounts,
     warnings,
+    coherence,
   };
 }

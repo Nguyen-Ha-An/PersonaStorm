@@ -10,11 +10,12 @@ import { lifeStageFor } from "../criteria/ageOverlays";
 import type { DecisionContext, Persona, Familiarity } from "../types";
 import {
   DB,
-  resolvePreset,
   type PresetSpec,
   type SubSegmentSpec,
 } from "./presets";
 import { validateDiversity, type DiversityReport } from "./diversity";
+import { loadPresetWithMeta, type LoadedPreset, type PriorsMeta } from "./priorsLoader";
+import { TRAIT_ORDER, DEFAULT_CORRELATIONS, buildCholesky, applyCholesky } from "./correlation";
 
 const PRICING_DEALBREAKERS = new Set(["unclear pricing", "hidden fees", "requires credit card upfront"]);
 const PRIVACY_DEALBREAKERS = new Set(["vague about what happens to my data", "compliance posture unknown (SOC2/GDPR)"]);
@@ -30,20 +31,24 @@ export class PersonaGenerator {
     count: number,
     customDescription?: string | null,
     maxRetries = 2,
-  ): { personas: Persona[]; report: DiversityReport } {
-    const preset = resolvePreset(presetKey, customDescription);
+    loaded?: LoadedPreset,
+  ): { personas: Persona[]; report: DiversityReport; priorsMeta: PriorsMeta } {
+    const lp = loaded ?? loadPresetWithMeta(presetKey, customDescription);
+    const preset = lp.preset;
+    const pairs = lp.correlations.length > 0 ? lp.correlations : DEFAULT_CORRELATIONS;
+    const chol = buildCholesky(pairs, preset.key);
     let attempt = 0;
     // eslint-disable-next-line no-constant-condition
     while (true) {
       const rng = new RNG(`${this.seed + attempt}:${preset.key}:${count}`);
-      const personas = this.sample(preset, count, rng);
+      const personas = this.sample(preset, count, rng, chol);
       const report = validateDiversity(personas, preset.sub_segments.map((s) => s.name));
-      if (report.ok || attempt >= maxRetries) return { personas, report };
+      if (report.ok || attempt >= maxRetries) return { personas, report, priorsMeta: lp.meta };
       attempt += 1;
     }
   }
 
-  private sample(preset: PresetSpec, count: number, rng: RNG): Persona[] {
+  private sample(preset: PresetSpec, count: number, rng: RNG, chol: number[][]): Persona[] {
     const allocations = allocate(count, preset.sub_segments.map((s) => s.weight));
     const personas: Persona[] = [];
     let idx = 0;
@@ -51,18 +56,23 @@ export class PersonaGenerator {
       const nn = allocations[i];
       for (let k = 0; k < nn; k++) {
         idx += 1;
-        personas.push(this.one(preset, sub, idx, rng));
+        personas.push(this.one(preset, sub, idx, rng, chol));
       }
     });
     rng.shuffle(personas);
     return personas;
   }
 
-  private one(preset: PresetSpec, sub: SubSegmentSpec, idx: number, rng: RNG): Persona {
+  private one(preset: PresetSpec, sub: SubSegmentSpec, idx: number, rng: RNG, chol: number[][]): Persona {
     const traits: Record<string, number> = {};
-    for (const [name, [mean, std]] of Object.entries(sub.traits)) {
-      traits[name] = clip(rng.gauss(mean, std));
-    }
+    const z = TRAIT_ORDER.map(() => rng.gauss(0, 1));
+    const y = applyCholesky(chol, z);
+    TRAIT_ORDER.forEach((name, i) => {
+      const spec = sub.traits[name];
+      if (!spec) throw new Error(`preset '${preset.key}' sub-segment '${sub.name}' missing trait '${name}'`);
+      const [mean, std] = spec;
+      traits[name] = clip(mean + std * y[i]);
+    });
     const [bandLabel, [lo, hi]] = rng.choice(sub.income_bands);
     const budget = round(rng.uniform(lo, hi), 2);
 

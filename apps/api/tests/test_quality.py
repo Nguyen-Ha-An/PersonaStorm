@@ -16,7 +16,7 @@ STIM = (
 
 
 def _healthy_run(n=200):
-    personas, _ = PersonaGenerator(seed=11).generate("us_smb", n)
+    personas, _, _ = PersonaGenerator(seed=11).generate("us_smb", n)
     features = parse_stimulus(STIM, "LedgerLift", "product_concept")
     provider = MockPersonaProvider(seed=11)
     reactions = asyncio.run(provider.react_batch(personas, STIM, "product_concept", features))

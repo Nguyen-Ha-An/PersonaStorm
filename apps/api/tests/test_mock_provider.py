@@ -33,14 +33,14 @@ def _react_all(personas, stimulus, seed=99):
 
 
 def test_reactions_are_deterministic():
-    personas, _ = PersonaGenerator(seed=5).generate("us_smb", 30)
+    personas, _, _ = PersonaGenerator(seed=5).generate("us_smb", 30)
     a = _react_all(personas, STIM_PRICED)
     b = _react_all(personas, STIM_PRICED)
     assert [r.model_dump() for r in a] == [r.model_dump() for r in b]
 
 
 def test_different_stimulus_changes_reactions():
-    personas, _ = PersonaGenerator(seed=5).generate("us_smb", 30)
+    personas, _, _ = PersonaGenerator(seed=5).generate("us_smb", 30)
     a = _react_all(personas, STIM_PRICED)
     b = _react_all(personas, STIM_VAGUE)
     changed = sum(1 for x, y in zip(a, b) if x.quote != y.quote or x.status != y.status)
@@ -48,7 +48,7 @@ def test_different_stimulus_changes_reactions():
 
 
 def test_output_variety_no_generic_clones():
-    personas, _ = PersonaGenerator(seed=5).generate("sea_genz", 150)
+    personas, _, _ = PersonaGenerator(seed=5).generate("sea_genz", 150)
     reactions = _react_all(personas, STIM_PRICED)
     quotes = {r.quote for r in reactions}
     objections = {r.first_objection for r in reactions}
@@ -81,7 +81,7 @@ def test_price_sensitivity_lowers_max_price():
 
 
 def test_reasoning_summary_is_short_public_rationale():
-    personas, _ = PersonaGenerator(seed=5).generate("parents", 40)
+    personas, _, _ = PersonaGenerator(seed=5).generate("parents", 40)
     for r in _react_all(personas, STIM_PRICED):
         assert len(r.reasoning_summary) <= 400
         # single sentence-ish, not multi-step deliberation
@@ -90,7 +90,7 @@ def test_reasoning_summary_is_short_public_rationale():
 
 # --------------------------------------------------------------- nested schema
 def test_all_17_core_criteria_present_and_in_range():
-    personas, _ = PersonaGenerator(seed=5).generate("us_smb", 30)
+    personas, _, _ = PersonaGenerator(seed=5).generate("us_smb", 30)
     for r in _react_all(personas, STIM_PRICED):
         scores = r.criteria_scores.as_dict()
         assert set(scores.keys()) == set(CORE_IDS), "must expose all 17 core criteria"
@@ -100,7 +100,7 @@ def test_all_17_core_criteria_present_and_in_range():
 
 def test_age_specific_scores_match_overlay_ids():
     # sea_genz spans teen/young-adult/early-career -> exercises multiple overlays
-    personas, _ = PersonaGenerator(seed=5).generate("sea_genz", 40)
+    personas, _, _ = PersonaGenerator(seed=5).generate("sea_genz", 40)
     for p, r in zip(personas, _react_all(personas, STIM_PRICED)):
         expected = set(overlay_ids_for(p.life_stage))
         assert set(r.age_specific_scores.keys()) == expected, (
@@ -126,7 +126,7 @@ def test_skepticism_lowers_trust_and_raises_proof_requirement():
 
 
 def test_market_fit_in_range():
-    personas, _ = PersonaGenerator(seed=5).generate("us_smb", 30)
+    personas, _, _ = PersonaGenerator(seed=5).generate("us_smb", 30)
     for r in _react_all(personas, STIM_PRICED):
         assert 0.0 <= r.decision.market_fit_score <= 1.0
 
@@ -135,7 +135,7 @@ def test_market_fit_is_recomputed_not_invented():
     """Prove market_fit is the authoritative scorer's output, not fabricated:
     recompute compute_market_fit() from the reaction's own core+overlay scores
     and assert it equals the stored decision.market_fit_score exactly."""
-    personas, _ = PersonaGenerator(seed=5).generate("us_smb", 30)
+    personas, _, _ = PersonaGenerator(seed=5).generate("us_smb", 30)
     features = parse_stimulus(STIM_PRICED, "Test", "product_concept")
     category, _ = classify_category(features)
     high_risk = is_high_risk(features)
@@ -155,7 +155,7 @@ def test_market_fit_is_recomputed_not_invented():
 
 
 def test_new_nested_reactions_are_deterministic():
-    personas, _ = PersonaGenerator(seed=5).generate("sea_genz", 40)
+    personas, _, _ = PersonaGenerator(seed=5).generate("sea_genz", 40)
     a = _react_all(personas, STIM_PRICED)
     b = _react_all(personas, STIM_PRICED)
     assert [r.model_dump() for r in a] == [r.model_dump() for r in b]

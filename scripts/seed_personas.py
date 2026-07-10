@@ -28,7 +28,7 @@ def main() -> None:
     gen = PersonaGenerator(seed=args.seed)
 
     for key in PRESETS:
-        personas, report = gen.generate(key, args.count)
+        personas, report, priors_meta = gen.generate(key, args.count)
         payload = {
             "preset": key,
             "seed": args.seed,

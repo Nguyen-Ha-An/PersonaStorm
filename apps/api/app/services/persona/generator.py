@@ -16,8 +16,10 @@ import random
 
 from ...schemas.persona import DecisionContext, Persona
 from ..criteria.age_overlays import life_stage_for
+from .correlation import DEFAULT_CORRELATIONS, TRAIT_ORDER, apply_cholesky, build_cholesky
 from .diversity import validate_diversity
-from .presets import DB, PresetSpec, SubSegmentSpec, resolve_preset
+from .presets import DB, PresetSpec, SubSegmentSpec
+from .priors_loader import LoadedPreset, PriorsMeta, load_preset_with_meta
 
 _PRICING_DEALBREAKERS = {"unclear pricing", "hidden fees", "requires credit card upfront"}
 _PRIVACY_DEALBREAKERS = {"vague about what happens to my data",
@@ -33,8 +35,9 @@ _GLOBAL_EXTRAS = list(DB.values())
 
 
 class PersonaGenerator:
-    def __init__(self, seed: int = 1337):
+    def __init__(self, seed: int = 1337, ledger=None):
         self.seed = seed
+        self.ledger = ledger  # unused until Task 11 (assumption ledger)
 
     def generate(
         self,
@@ -42,37 +45,48 @@ class PersonaGenerator:
         count: int,
         custom_description: str | None = None,
         max_retries: int = 2,
-    ) -> tuple[list[Persona], "DiversityReportLike"]:
-        """Generate personas + diversity report. Retries with a jittered seed if
-        the population fails diversity validation (rare with current presets)."""
-        preset = resolve_preset(preset_key, custom_description)
+        loaded: LoadedPreset | None = None,
+    ) -> tuple[list[Persona], "DiversityReportLike", PriorsMeta]:
+        """Generate personas + diversity report + priors honesty metadata.
+        Retries with a jittered seed if the population fails diversity
+        validation (rare with current presets)."""
+        lp = loaded or load_preset_with_meta(preset_key, custom_description)
+        preset = lp.preset
+        pairs = lp.correlations if lp.correlations else DEFAULT_CORRELATIONS
+        chol = build_cholesky(pairs, preset.key)
         attempt = 0
         while True:
             rng = random.Random(f"{self.seed + attempt}:{preset.key}:{count}")
-            personas = self._sample(preset, count, rng)
+            personas = self._sample(preset, count, rng, chol)
             report = validate_diversity(personas, [s.name for s in preset.sub_segments])
             if report.ok or attempt >= max_retries:
-                return personas, report
+                return personas, report, lp.meta
             attempt += 1  # jitter the seed and resample
 
     # ------------------------------------------------------------------ sampling
-    def _sample(self, preset: PresetSpec, count: int, rng: random.Random) -> list[Persona]:
+    def _sample(self, preset: PresetSpec, count: int, rng: random.Random,
+                chol: list[list[float]]) -> list[Persona]:
         allocations = _allocate(count, [s.weight for s in preset.sub_segments])
         personas: list[Persona] = []
         idx = 0
         for sub, n in zip(preset.sub_segments, allocations):
             for _ in range(n):
                 idx += 1
-                personas.append(self._one(preset, sub, idx, rng))
+                personas.append(self._one(preset, sub, idx, rng, chol))
         rng.shuffle(personas)  # interleave sub-segments so the live grid mixes colors
         return personas
 
     def _one(self, preset: PresetSpec, sub: SubSegmentSpec, idx: int,
-             rng: random.Random) -> Persona:
-        traits = {
-            name: _clip(rng.gauss(mean, std))
-            for name, (mean, std) in sub.traits.items()
-        }
+             rng: random.Random, chol: list[list[float]]) -> Persona:
+        z = [rng.gauss(0, 1) for _ in TRAIT_ORDER]
+        y = apply_cholesky(chol, z)
+        traits: dict[str, float] = {}
+        for i, name in enumerate(TRAIT_ORDER):
+            spec = sub.traits.get(name)
+            if spec is None:
+                raise ValueError(f"preset '{preset.key}' sub-segment '{sub.name}' missing trait '{name}'")
+            mean, std = spec
+            traits[name] = _clip(mean + std * y[i])
         band_label, (lo, hi) = rng.choice(sub.income_bands)
         budget = round(rng.uniform(lo, hi), 2)
 

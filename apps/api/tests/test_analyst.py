@@ -45,7 +45,7 @@ def _build_sample_report():
         target_market="us_smb",
         persona_count=80,
     )
-    personas, _ = PersonaGenerator(seed=11).generate("us_smb", 80)
+    personas, _, _ = PersonaGenerator(seed=11).generate("us_smb", 80)
     features = parse_stimulus(STIM, "LedgerLift", "product_concept")
     provider = MockPersonaProvider(seed=11)
     reactions = asyncio.run(

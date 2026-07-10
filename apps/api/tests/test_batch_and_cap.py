@@ -41,7 +41,7 @@ class _FlakyProvider(PersonaInferenceProvider):
 
 
 def test_react_batch_drops_failed_personas():
-    personas, _ = PersonaGenerator(seed=3).generate("us_smb", 20)
+    personas, _, _ = PersonaGenerator(seed=3).generate("us_smb", 20)
     features = parse_stimulus(STIM, "Copilot", "product_concept")
     provider = _FlakyProvider(n_fail=3)
     reactions = asyncio.run(
@@ -52,7 +52,7 @@ def test_react_batch_drops_failed_personas():
 
 
 def test_react_batch_all_success_returns_all():
-    personas, _ = PersonaGenerator(seed=3).generate("us_smb", 20)
+    personas, _, _ = PersonaGenerator(seed=3).generate("us_smb", 20)
     features = parse_stimulus(STIM, "Copilot", "product_concept")
     provider = _FlakyProvider(n_fail=0)
     reactions = asyncio.run(

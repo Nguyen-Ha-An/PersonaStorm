@@ -1,6 +1,7 @@
 """Persona Space Builder + Diversity Validator tests."""
 
 from app.services.persona import PersonaGenerator
+from app.services.persona.correlation import DEFAULT_CORRELATIONS, build_cholesky
 from app.services.persona.presets import PRESETS
 
 TRAITS = ["price_sensitivity", "skepticism", "novelty_seeking", "brand_trust",
@@ -10,7 +11,7 @@ TRAITS = ["price_sensitivity", "skepticism", "novelty_seeking", "brand_trust",
 def test_all_presets_generate_diverse_populations():
     gen = PersonaGenerator(seed=42)
     for key in PRESETS:
-        personas, report = gen.generate(key, 400)
+        personas, report, _ = gen.generate(key, 400)
         assert len(personas) == 400
         assert len({p.persona_id for p in personas}) == 400, f"duplicate ids in {key}"
         assert report.ok, f"{key} failed diversity: {report.warnings}"
@@ -22,17 +23,17 @@ def test_all_presets_generate_diverse_populations():
 
 
 def test_generation_is_deterministic():
-    a, _ = PersonaGenerator(seed=7).generate("sea_genz", 100)
-    b, _ = PersonaGenerator(seed=7).generate("sea_genz", 100)
+    a, _, _ = PersonaGenerator(seed=7).generate("sea_genz", 100)
+    b, _, _ = PersonaGenerator(seed=7).generate("sea_genz", 100)
     assert [p.model_dump() for p in a] == [p.model_dump() for p in b]
 
-    c, _ = PersonaGenerator(seed=8).generate("sea_genz", 100)
+    c, _, _ = PersonaGenerator(seed=8).generate("sea_genz", 100)
     assert [p.model_dump() for p in a] != [p.model_dump() for p in c]
 
 
 def test_custom_preset_from_description():
     gen = PersonaGenerator(seed=42)
-    personas, report = gen.generate(
+    personas, report, _ = gen.generate(
         "custom", 200, custom_description="privacy-conscious enterprise developers in Vietnam"
     )
     assert len(personas) == 200
@@ -44,7 +45,7 @@ def test_custom_preset_from_description():
 
 def test_trait_consistency_pass():
     """Highly price-sensitive personas must carry a pricing dealbreaker."""
-    personas, _ = PersonaGenerator(seed=1).generate("budget", 300)
+    personas, _, _ = PersonaGenerator(seed=1).generate("budget", 300)
     sensitive = [p for p in personas if p.price_sensitivity > 0.8]
     assert sensitive
     for p in sensitive:
@@ -56,7 +57,7 @@ def test_generated_personas_have_correct_life_stage():
     """life_stage must match age for every generated persona (auto-derived)."""
     from app.services.criteria.age_overlays import life_stage_for
 
-    personas, _ = PersonaGenerator(seed=42).generate("budget", 200)
+    personas, _, _ = PersonaGenerator(seed=42).generate("budget", 200)
     for p in personas:
         assert p.life_stage == life_stage_for(p.age)
 
@@ -65,11 +66,11 @@ def test_spanning_market_produces_multiple_life_stages():
     """'budget' and 'parents' presets span multiple age bands (verified
     empirically against age_overlays.life_stage_for): assert the population
     actually reflects that spread, not a single collapsed cohort."""
-    personas, _ = PersonaGenerator(seed=42).generate("budget", 400)
+    personas, _, _ = PersonaGenerator(seed=42).generate("budget", 400)
     stages = {p.life_stage for p in personas}
     assert len(stages) >= 2, stages
 
-    personas2, _ = PersonaGenerator(seed=42).generate("sea_genz", 400)
+    personas2, _, _ = PersonaGenerator(seed=42).generate("sea_genz", 400)
     stages2 = {p.life_stage for p in personas2}
     assert len(stages2) >= 1, stages2
 
@@ -88,7 +89,8 @@ def test_teen_decision_context_has_parent_approval_fields():
     sub = preset.sub_segments[0]
     rng = random.Random("teen-test")
     teen_sub = replace_age_range(sub, (14, 16))
-    persona = gen._one(preset, teen_sub, 1, rng)
+    chol = build_cholesky(DEFAULT_CORRELATIONS, preset.key)
+    persona = gen._one(preset, teen_sub, 1, rng, chol)
 
     assert persona.life_stage == "teen_student"
     dc = persona.decision_context
@@ -106,7 +108,7 @@ def replace_age_range(sub, age_range):
 
 
 def test_non_teen_decision_context_has_deterministic_fields():
-    personas, _ = PersonaGenerator(seed=42).generate("us_smb", 100)
+    personas, _, _ = PersonaGenerator(seed=42).generate("us_smb", 100)
     for p in personas:
         assert p.life_stage != "teen_student"
         assert p.decision_context.needs_parent_approval is not True

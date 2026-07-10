@@ -78,7 +78,7 @@ def _reaction_content():
 
 
 def _persona_and_features():
-    personas, _ = PersonaGenerator(seed=7).generate("us_smb", 50)
+    personas, _, _ = PersonaGenerator(seed=7).generate("us_smb", 50)
     features = parse_stimulus(_STIM, "Copilot", "product_concept")
     return personas[0], features
 

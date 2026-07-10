@@ -12,6 +12,9 @@ Checks:
 5. Age-cohort spread — population isn't a single life-stage cohort (warn only;
    e.g. a legitimately narrow market like "SEA Gen Z" may still collapse to
    one or two cohorts, so this never hard-fails the report).
+6. Coherence        — fraction of personas without >=3 traits beyond |z| 2.8
+   of the population (Mahalanobis-style heuristic, spec §5); warns below 0.98
+   for n >= 100.
 """
 
 from __future__ import annotations
@@ -24,6 +27,9 @@ from ...utils.text import stddev
 
 MIN_TRAIT_STD = 0.07
 MIN_DEALBREAKER_UNIQUENESS = 0.30
+MIN_COHERENCE = 0.98
+COHERENCE_Z_THRESHOLD = 2.8
+COHERENCE_EXTREME_TRAIT_COUNT = 3
 
 TRAITS = ["price_sensitivity", "skepticism", "novelty_seeking", "brand_trust",
           "social_influence", "risk_tolerance", "privacy_sensitivity"]
@@ -38,6 +44,7 @@ class DiversityReport:
     age_std: float = 0.0
     life_stage_counts: dict[str, int] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+    coherence: float | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -48,6 +55,7 @@ class DiversityReport:
             "age_std": round(self.age_std, 2),
             "life_stage_counts": self.life_stage_counts,
             "warnings": self.warnings,
+            "coherence": round(self.coherence, 3) if self.coherence is not None else None,
         }
 
 
@@ -56,7 +64,7 @@ def validate_diversity(personas: list[Persona],
     warnings: list[str] = []
     n = len(personas)
     if n == 0:
-        return DiversityReport(ok=False, warnings=["no personas generated"])
+        return DiversityReport(ok=False, warnings=["no personas generated"], coherence=0.0)
 
     trait_std = {t: stddev([getattr(p, t) for p in personas]) for t in TRAITS}
     for t, s in trait_std.items():
@@ -96,6 +104,24 @@ def validate_diversity(personas: list[Persona],
             f"age-cohort spread low: population collapses to a single life stage ('{only}')"
         )
 
+    # Coherence: personas with >=3 traits beyond |z| 2.8 of the population are
+    # flagged incoherent (Mahalanobis-style heuristic, spec §5).
+    means = {t: sum(getattr(p, t) for p in personas) / n for t in TRAITS}
+    incoherent = 0
+    for p in personas:
+        extreme = 0
+        for t in TRAITS:
+            sd = max(trait_std[t], 1e-6)
+            if abs((getattr(p, t) - means[t]) / sd) > COHERENCE_Z_THRESHOLD:
+                extreme += 1
+        if extreme >= COHERENCE_EXTREME_TRAIT_COUNT:
+            incoherent += 1
+    coherence = 1 - incoherent / n
+    if n >= 100 and coherence < MIN_COHERENCE:
+        warnings.append(
+            f"persona coherence low ({coherence:.3f} < {MIN_COHERENCE}): too many personas with several extreme traits at once"
+        )
+
     return DiversityReport(
         ok=len(warnings) == 0,
         trait_std=trait_std,
@@ -104,4 +130,5 @@ def validate_diversity(personas: list[Persona],
         age_std=age_std,
         life_stage_counts=dict(life_stage_counts),
         warnings=warnings,
+        coherence=coherence,
     )

@@ -244,11 +244,13 @@ class StormManager:
             run.status = StormStatus.generating_personas
             run.notify()
             generator = PersonaGenerator(seed=run.seed)
-            personas, diversity = generator.generate(
+            personas, diversity, priors_meta = generator.generate(
                 run.request.target_market.value,
                 run.request.persona_count,
                 run.request.custom_segment_description,
             )
+            # priors_meta (data_files vs embedded_unverified honesty label) is
+            # kept in scope for Task 12 (surfacing calibration provenance).
             run.personas = personas
             run.diversity = diversity.to_dict()
             if diversity.warnings:

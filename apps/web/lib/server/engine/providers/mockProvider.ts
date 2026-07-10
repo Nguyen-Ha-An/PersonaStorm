@@ -510,25 +510,33 @@ export class MockPersonaProvider implements PersonaInferenceProvider {
     rng: RNG,
   ): [string, string] {
     const db = new Set(p.dealbreakers);
-    const cands: [string, number][] = [];
     const hasDb = (...fragments: string[]): boolean =>
       fragments.some((fr) => Array.from(db).some((d) => d.includes(fr)));
 
-    if (!f.hasPricing && hasDb("pricing", "hidden fees")) cands.push(["pricing_unclear", 1.0 * p.price_sensitivity]);
+    const cands: [string, number][] = [];
+    // Evidence-justified objections are candidates for EVERY persona, weighted
+    // by the relevant trait; a matching dealbreaker BOOSTS weight ×1.5 instead
+    // of gating inclusion (spec §9 — pools no longer predetermine blockers).
+    const w = (base: number, ...fragments: string[]): number =>
+      fragments.length > 0 && hasDb(...fragments) ? base * 1.5 : base;
+
+    if (!f.hasPricing) cands.push(["pricing_unclear", w(0.7 * p.price_sensitivity, "pricing", "hidden fees")]);
     if (f.hasPricing && f.minPrice) {
       const wtp = p.monthly_budget_usd * (0.25 + 0.55 * (1 - p.price_sensitivity));
-      if (f.minPrice > wtp) cands.push(["price_too_high", 1.2 * p.price_sensitivity]);
+      if (f.minPrice > wtp) cands.push(["price_too_high", w(0.9 * p.price_sensitivity, "pricing", "hidden fees")]);
     }
     if (!f.hasProof) {
-      if (hasDb("proof")) cands.push(["no_proof", 1.0 * p.skepticism]);
-      if (hasDb("case studies")) cands.push(["no_case_studies", 0.9 * p.skepticism]);
+      cands.push(["no_proof", w(0.7 * p.skepticism, "proof")]);
+      cands.push(["no_case_studies", w(0.45 * p.skepticism, "case studies")]);
     }
-    if (f.mentionsAi && !f.hasProof && (hasDb("AI hype") || p.skepticism > 0.6)) cands.push(["ai_hype", 0.9 * p.skepticism]);
-    if (f.mentionsSubscription && hasDb("lock-in", "cancel")) cands.push(["subscription_lockin", 0.75 * (1.0 - p.risk_tolerance)]);
-    if (!f.mentionsSecurity && hasDb("SSO", "compliance")) cands.push(["no_security_docs", 1.1 * p.privacy_sensitivity]);
-    if (!f.mentionsSecurity && hasDb("data")) cands.push(["privacy_vague", 0.8 * p.privacy_sensitivity]);
-    if (!f.hasFreeTrial && hasDb("trial", "credit card")) cands.push(["no_trial", 0.8 * p.price_sensitivity]);
-    if (hasDb("onboarding", "time", "another tool")) cands.push(["onboarding_time", 0.55 * (1.0 - p.novelty_seeking)]);
+    if (f.mentionsAi && !f.hasProof) cands.push(["ai_hype", w(0.65 * p.skepticism, "AI hype")]);
+    if (f.mentionsSubscription) cands.push(["subscription_lockin", w(0.5 * (1.0 - p.risk_tolerance), "lock-in", "cancel")]);
+    if (!f.mentionsSecurity) {
+      cands.push(["no_security_docs", w(0.55 * p.privacy_sensitivity, "SSO", "compliance")]);
+      cands.push(["privacy_vague", w(0.5 * p.privacy_sensitivity, "data")]);
+    }
+    if (!f.hasFreeTrial) cands.push(["no_trial", w(0.5 * p.price_sensitivity, "trial", "credit card")]);
+    cands.push(["onboarding_time", w(0.3 * (1.0 - p.novelty_seeking), "onboarding", "time", "another tool")]);
     if (hasDb("tools we already use")) cands.push(["integration", 0.6]);
     if (hasDb("corporate") || (f.jargonScore > 0.4 && p.brand_trust < 0.45)) cands.push(["credibility", 0.5 * (1.0 - p.brand_trust)]);
     if (core.value_clarity < 0.4 || core.ease_of_understanding < 0.4) cands.push(["unclear_value", 0.7 * (1.0 - core.value_clarity)]);

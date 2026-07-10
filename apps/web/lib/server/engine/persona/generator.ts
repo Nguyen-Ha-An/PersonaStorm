@@ -7,6 +7,7 @@
 import { RNG } from "../rng";
 import { round } from "../text";
 import { lifeStageFor } from "../criteria/ageOverlays";
+import { ASSUMPTION_DEFS, AssumptionLedger } from "../criteria/assumptions";
 import type { DecisionContext, Persona, Familiarity } from "../types";
 import {
   DB,
@@ -24,7 +25,7 @@ const GLOBAL_EXTRA_RATE = 0.35;
 const GLOBAL_EXTRAS = Object.values(DB);
 
 export class PersonaGenerator {
-  constructor(private seed: number = 1337) {}
+  constructor(private seed: number = 1337, private ledger: AssumptionLedger = new AssumptionLedger()) {}
 
   generate(
     presetKey: string,
@@ -54,16 +55,24 @@ export class PersonaGenerator {
     let idx = 0;
     preset.sub_segments.forEach((sub, i) => {
       const nn = allocations[i];
+      const injectionBudget = { left: Math.ceil((ASSUMPTION_DEFS.pricing_dealbreaker_injection.max_rate ?? 0.4) * nn) };
       for (let k = 0; k < nn; k++) {
         idx += 1;
-        personas.push(this.one(preset, sub, idx, rng, chol));
+        personas.push(this.one(preset, sub, idx, rng, chol, injectionBudget));
       }
     });
     rng.shuffle(personas);
     return personas;
   }
 
-  private one(preset: PresetSpec, sub: SubSegmentSpec, idx: number, rng: RNG, chol: number[][]): Persona {
+  private one(
+    preset: PresetSpec,
+    sub: SubSegmentSpec,
+    idx: number,
+    rng: RNG,
+    chol: number[][],
+    injectionBudget: { left: number },
+  ): Persona {
     const traits: Record<string, number> = {};
     const z = TRAIT_ORDER.map(() => rng.gauss(0, 1));
     const y = applyCholesky(chol, z);
@@ -84,12 +93,19 @@ export class PersonaGenerator {
       const extra = rng.choice(GLOBAL_EXTRAS);
       if (!dealbreakers.includes(extra)) dealbreakers.push(extra);
     }
-    // Trait-consistency pass.
+    // Trait-consistency pass — rate-bounded, ledger-tracked (spec §6/§9).
     if (traits.price_sensitivity > 0.72 && !dealbreakers.some((d) => PRICING_DEALBREAKERS.has(d))) {
-      const poolPricing = sub.dealbreaker_pool.filter((d) => PRICING_DEALBREAKERS.has(d));
-      dealbreakers[dealbreakers.length - 1] = poolPricing.length > 0 ? poolPricing[0] : "unclear pricing";
+      if (injectionBudget.left > 0) {
+        injectionBudget.left -= 1;
+        this.ledger.fire("pricing_dealbreaker_injection");
+        const poolPricing = sub.dealbreaker_pool.filter((d) => PRICING_DEALBREAKERS.has(d));
+        dealbreakers[dealbreakers.length - 1] = poolPricing.length > 0 ? poolPricing[0] : "unclear pricing";
+      }
+      // Over budget: no overwrite — the objection weighting in pickObjection
+      // already lets high price sensitivity surface pricing objections.
     }
     if (traits.privacy_sensitivity > 0.75 && !dealbreakers.some((d) => PRIVACY_DEALBREAKERS.has(d))) {
+      this.ledger.fire("privacy_dealbreaker_injection");
       dealbreakers.push("vague about what happens to my data");
     }
 

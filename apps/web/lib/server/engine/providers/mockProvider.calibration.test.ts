@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { computeJitterOffsets, MockPersonaProvider } from "./mockProvider";
-import { AssumptionLedger } from "../criteria/assumptions";
+import { ASSUMPTION_DEFS, AssumptionLedger } from "../criteria/assumptions";
 import { CORE_IDS } from "../criteria/registry";
 import { PersonaGenerator } from "../persona/generator";
 import { RNG } from "../rng";
@@ -93,5 +93,35 @@ describe("jitter mechanism", () => {
     const zero = provider.scoreCriteria(p, f, "b2b_saas", new RNG("t:1"), zeroOffsets);
     const bumped = provider.scoreCriteria(p, f, "b2b_saas", new RNG("t:1"), { ...zeroOffsets, problem_awareness: 0.3 });
     expect(bumped.core.problem_awareness).toBeGreaterThan(zero.core.problem_awareness + 0.2);
+  });
+});
+
+describe("objection decoupling", () => {
+  test("a skeptical persona without a 'proof' dealbreaker can still raise no_proof", async () => {
+    const { personas } = new PersonaGenerator(21).generate("early_adopters", 1);
+    const skeptic: Persona = {
+      ...personas[0],
+      skepticism: 0.95,
+      dealbreakers: ["not mobile friendly"], // no proof/case-study dealbreaker
+    };
+    const provider = new MockPersonaProvider(21, new AssumptionLedger());
+    // No proof, no pricing, no trial in this stimulus → evidence-based candidates exist.
+    const r = await provider.react(skeptic, "Zenlytics — a dashboard that makes teams smarter.", "product_concept", null, null);
+    // Objection candidates now include no_proof regardless of dealbreakers; with
+    // skepticism 0.95 the proof/value family should win for this stimulus.
+    expect(["no evidence for the claims", "unclear value", "not obviously for me", "hidden pricing", "no reference customers"])
+      .toContain(r.qualitative.top_negative_trigger);
+  });
+});
+
+describe("bounded pricing injection", () => {
+  test("pricing dealbreaker injection stays within 40% of each sub-segment", () => {
+    const ledger = new AssumptionLedger();
+    const { personas } = new PersonaGenerator(13, ledger).generate("budget", 400);
+    const fired = ledger.fired().find((f) => f.id === "pricing_dealbreaker_injection");
+    const cap = Math.ceil(0.4 * 400);
+    expect((fired?.personas_affected ?? 0)).toBeLessThanOrEqual(cap);
+    // 'budget' preset has price_sensitivity means 0.82–0.92 → the cap must actually bind.
+    expect(fired).toBeDefined();
   });
 });

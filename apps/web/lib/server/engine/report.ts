@@ -5,6 +5,8 @@
  */
 
 import type { Verdict, TopAction } from "./types";
+import type { FiredAssumption } from "./criteria/assumptions";
+import type { CounterfactualAudit } from "./quality/biasAudit";
 
 export const DISCLAIMER =
   "PersonaStorm output is a synthetic signal produced by a calibrated persona " +
@@ -120,6 +122,14 @@ export interface NextValidation {
   rationale: string;
 }
 
+export interface CalibrationEvidence {
+  priors_coverage: number;
+  priors_source: "data_files" | "embedded_unverified";
+  assumptions_fired: FiredAssumption[];
+  counterfactual_audit: CounterfactualAudit;
+  confidence_downgrades: string[];
+}
+
 export interface StormReport {
   storm_id: string;
   title: string;
@@ -144,6 +154,9 @@ export interface StormReport {
   // so in-progress builds and legacy runs remain valid StormReports.
   verdict?: Verdict;
   top_actions?: TopAction[];
+  // Additive Phase A calibration block (spec §10); optional so legacy
+  // persisted runs remain valid StormReports.
+  calibration_evidence?: CalibrationEvidence;
   stimulus_type: string;
   target_market: string;
   avg_max_price: number;

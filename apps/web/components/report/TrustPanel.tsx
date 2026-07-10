@@ -96,6 +96,35 @@ export function TrustPanel({ report }: { report: StormReport }) {
           ))}
         </div>
       )}
+      {report.calibration_evidence && (
+        <div className="border-t border-storm-800 px-5 py-3">
+          <h4 className="text-sm font-semibold text-storm-100">Calibration evidence</h4>
+          <p className="mt-1.5 text-xs leading-relaxed text-storm-400">
+            Trait priors: {Math.round(report.calibration_evidence.priors_coverage * 100)}% sourced
+            {report.calibration_evidence.priors_source === "embedded_unverified" &&
+              " (embedded defaults — unvalidated)"}
+          </p>
+          {report.calibration_evidence.assumptions_fired.length > 0 && (
+            <ul className="mt-1.5">
+              {report.calibration_evidence.assumptions_fired.map((a) => (
+                <li key={a.id} className="text-xs leading-relaxed text-storm-400">
+                  · {a.id} ({a.evidence_status}) — {a.personas_affected} personas
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-1.5 text-xs leading-relaxed text-storm-400">
+            Counterfactual audit: {report.calibration_evidence.counterfactual_audit.status}
+            {report.calibration_evidence.counterfactual_audit.pairs_not_applicable > 0 &&
+              ` (${report.calibration_evidence.counterfactual_audit.pairs_not_applicable} pairs not applicable in this provider)`}
+          </p>
+          {report.calibration_evidence.confidence_downgrades.map((d) => (
+            <p key={d} className="mt-1.5 text-xs leading-relaxed text-signal-yellow">
+              ⚠ {d}
+            </p>
+          ))}
+        </div>
+      )}
       <div className="border-t border-storm-800 bg-storm-900/40 px-5 py-3">
         <p className="text-xs leading-relaxed text-storm-300">{report.disclaimer}</p>
       </div>

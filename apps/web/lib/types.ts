@@ -422,6 +422,58 @@ export interface NextValidation {
   rationale: string;
 }
 
+export type EvidenceStatus = "sourced" | "derived" | "unverified";
+
+export interface FiredAssumption {
+  id: string;
+  evidence_status: EvidenceStatus;
+  personas_affected: number;
+}
+
+export type CounterfactualField =
+  | "region"
+  | "income_band"
+  | "occupation"
+  | "life_stage"
+  | "decision_context.budget_control";
+
+export interface CounterfactualPairResult {
+  audit_id: string;
+  persona_id: string;
+  field: CounterfactualField;
+  baseline_value: string | null;
+  counterfactual_value: string | null;
+  baseline_buy_likelihood: number;
+  counterfactual_buy_likelihood: number;
+  delta_buy_likelihood: number;
+  baseline_market_fit_score: number;
+  counterfactual_market_fit_score: number;
+  delta_market_fit_score: number;
+  flagged: boolean;
+  applicable: boolean;
+}
+
+export interface CounterfactualAudit {
+  status: "not_run" | "pass" | "warn" | "fail";
+  pairs_tested: number;
+  pairs_not_applicable: number;
+  fields_tested: CounterfactualField[];
+  fields_not_applicable: CounterfactualField[];
+  max_abs_buy_likelihood_delta: number;
+  max_abs_market_fit_delta: number;
+  flagged_pairs: CounterfactualPairResult[];
+  summary: string;
+  notes: string[];
+}
+
+export interface CalibrationEvidence {
+  priors_coverage: number;
+  priors_source: "data_files" | "embedded_unverified";
+  assumptions_fired: FiredAssumption[];
+  counterfactual_audit: CounterfactualAudit;
+  confidence_downgrades: string[];
+}
+
 export interface StormReport {
   storm_id: string;
   title: string;
@@ -450,6 +502,9 @@ export interface StormReport {
   persona_count: number;
   verdict?: Verdict;
   top_actions?: TopAction[];
+  // Additive Phase A calibration block (spec §10); optional so legacy
+  // persisted runs remain valid StormReports.
+  calibration_evidence?: CalibrationEvidence;
   stimulus_type: string;
   target_market: string;
   avg_max_price: number;

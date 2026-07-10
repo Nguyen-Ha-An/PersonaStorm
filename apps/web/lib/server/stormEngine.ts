@@ -122,8 +122,6 @@ export async function runStorm(input: StormInput, cfg: ServerConfig = getConfig(
       `Counterfactual audit skipped for provider '${provider.name}' — counterfactual re-runs would cost live LLM calls.`,
     );
   }
-  // `audit`, `priorsMeta`, and `ledger` are consumed by Task 9; kept in scope
-  // here as they're wired into the report/response there.
 
   // 4) quality metrics.
   const quality = computeQuality(personas, reactions, features);
@@ -144,6 +142,26 @@ export async function runStorm(input: StormInput, cfg: ServerConfig = getConfig(
   // Derive the verdict + top actions from the FINAL report (post-analyst) so they
   // reflect the narrated recommendations, and persist them on the report JSON.
   report = attachVerdictAndActions(report);
+
+  // 5b) calibration evidence — parameters' provenance, fired assumptions,
+  // counterfactual audit. Attached post-analyst like the verdict so the
+  // analyst can never rewrite it.
+  const confidenceDowngrades: string[] = [...priorsMeta.notes];
+  if (priorsMeta.source === "embedded_unverified") {
+    confidenceDowngrades.push(
+      "Persona trait priors are embedded developer estimates (no data files loaded) — population shape is unvalidated.",
+    );
+  }
+  if (audit.status === "not_run") {
+    confidenceDowngrades.push(audit.summary);
+  }
+  report.calibration_evidence = {
+    priors_coverage: round(priorsMeta.coverage, 3),
+    priors_source: priorsMeta.source,
+    assumptions_fired: ledger.fired(),
+    counterfactual_audit: audit,
+    confidence_downgrades: confidenceDowngrades,
+  };
 
   // 6) stream events + final progress snapshot.
   const reactionEvents: ReactionEvent[] = reactions.map((r, i) => ({

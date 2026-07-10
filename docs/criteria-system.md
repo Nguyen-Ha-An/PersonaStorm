@@ -222,3 +222,138 @@ mutates scores. `app/services/quality/metrics.py` folds the checker's output
 into `criteria_consistency` (share of personas passing all rules) and adds
 `age_cohort_variance` (stddev of per-life-stage mean buy likelihood, same
 weak/moderate/strong banding as `segment_variance`).
+
+## 8. Persona priors & assumptions (Phase A calibration)
+
+Source: `apps/web/lib/server/engine/persona/{priorsLoader,correlation,presets,featureWiring}.ts`,
+`apps/web/lib/server/engine/criteria/assumptions.ts`,
+`apps/web/lib/server/engine/quality/biasAudit.ts`, `data/persona_priors/*.json`.
+
+This layer governs *how honestly* the engine claims to know things about
+persona psychology — trait means/variances, cross-trait correlations, and the
+directional nudges applied during scoring. Everything here is separate from
+the 17-criterion registry in §1–§7; it feeds the sampling and scoring inputs
+that criteria are then scored *against*.
+
+### Priors file format (`data/persona_priors/*.json`)
+
+Each file (`_base.json` plus one per named preset, e.g. `parents.json`,
+`enterprise.json`) is loaded by `priorsLoader.ts::loadPresetWithMeta`:
+
+- **`trait_definitions`** — a `Record<traitName, string>` giving the
+  operational definition of the 0..1 scale for that trait (e.g. what `0.9`
+  vs `0.5` vs `0.1` means behaviorally). Required for any trait that claims
+  `evidence.status: "sourced"` (see below).
+- **`sub_segments[].traits`** — a `Record<traitName, { mean, std, evidence }>`
+  per sub-segment (or `base_traits` in `_base.json`):
+  - `mean` — must be in `[0, 1]`.
+  - `std` — must be in `(0, 0.5]`.
+  - `evidence.status` — one of `sourced | derived | unverified` (see below).
+    `sourced` additionally requires `evidence.mapping_rule` (a string
+    explaining how the source number maps to the 0..1 trait scale).
+- **`trait_correlations`** — an optional top-level array of
+  `[traitA, traitB, r, evidenceStatus?]` tuples (`|r| <= 0.95`,
+  `evidenceStatus` defaults to `unverified`). If omitted, the loader falls
+  back to `correlation.ts::DEFAULT_CORRELATIONS` (5 pairs, all `unverified`).
+  These feed a Cholesky decomposition (`correlation.ts::buildCholesky`) used
+  to draw correlated trait samples instead of independent ones; a
+  non-positive-definite matrix throws at load time (configuration error, not
+  a runtime fallback).
+
+Malformed files (bad JSON, out-of-range values, missing fields) throw at
+load — priors are validated fail-fast, never silently coerced. A missing
+priors file for a given preset key falls back to the embedded code presets
+(`presets.ts`), with every trait's `std` still honesty-widened as described
+below and `meta.source` set to `"embedded_unverified"`.
+
+### Honesty rules
+
+Because most current trait values are estimates rather than measurements,
+the loader deliberately understates confidence for anything not backed by a
+cited source:
+
+- **Unverified trait std ×1.5, capped at 0.20** — `priorsLoader.ts`:
+  `std = min(std * 1.5, 0.20)` when `evidence.status === "unverified"`. This
+  widens the sampled distribution (more persona-to-persona variance) so an
+  unverified point estimate doesn't produce artificially tight, falsely
+  confident persona clustering. `sourced` and `derived` traits are used as
+  authored (no widening).
+- **Unverified correlations ×0.5** — `correlation.ts::UNVERIFIED_SHRINK`:
+  the correlation coefficient `r` is multiplied by 0.5 before entering the
+  Cholesky matrix when the pair's evidence status is `unverified`. This
+  claims less cross-trait structure where there is less evidence for it.
+  `DEFAULT_CORRELATIONS` (the global fallback) is 100% unverified, so it is
+  always shrunk unless a preset file supplies its own `trait_correlations`
+  with a better-evidenced status.
+
+Both rules only ever *reduce* claimed confidence (wider std, weaker
+correlation) — they never strengthen an estimate beyond what was authored.
+
+### Assumptions registry (`criteria/assumptions.ts`)
+
+Every directional modifier applied during scoring (as opposed to criteria
+math itself) must be registered in `ASSUMPTION_DEFS` with an `evidence_status`,
+or the engine throws in dev/test when it fires (production logs+skips
+instead of crashing a live run). A per-run `AssumptionLedger` counts how
+often each registered id fired so the report can surface it
+(`calibration_evidence` block). The six registered ids, as of Phase A:
+
+| id | evidence_status | what it does |
+|----|------------------|---------------|
+| `pricing_dealbreaker_injection` | `unverified` | Personas with `price_sensitivity > 0.72` get a pricing dealbreaker injected; rate-bounded (`max_rate: 0.4`, see below). |
+| `privacy_dealbreaker_injection` | `unverified` | Personas with `privacy_sensitivity > 0.75` get a privacy dealbreaker appended. |
+| `ai_skeptic_trust_penalty` | `derived` | AI mention without proof lowers trust (−0.06) for personas with `skepticism > 0.6`. |
+| `ai_novelty_activation_boost` | `derived` | AI mention raises activation for personas with `novelty_seeking > 0.55`. |
+| `trust_gap_high_proof_modifier` | `derived` | `scoring.ts`: `trust < 0.3` with `proof_requirement > 0.75` → −0.05. |
+| `strong_urgent_need_modifier` | `derived` | `scoring.ts`: need, fit, and urgency all high → +0.04. |
+
+`unverified` here means "the direction is a design guess, not backed by
+psychometric or market research"; `derived` means "computed deterministically
+from other already-scored criteria, not an independent claim about persona
+psychology."
+
+### Feature-wiring table (`persona/featureWiring.ts`)
+
+Declares, per persona field, whether it actually influences **mock-mode**
+scoring or is display-only flavor. In the LLM path the full persona JSON
+enters the prompt, so every field is `"prompt"` there — the distinction only
+matters for the deterministic mock provider. This table is also what the
+counterfactual audit (below) uses to classify a pair as `expected_inert`
+instead of reporting a false "pass" when a field can't possibly move the
+mock score.
+
+| persona field | mock role | note |
+|---|---|---|
+| `region` | flavor | — |
+| `occupation` | flavor | — |
+| `income_band` | flavor | label only; `monthly_budget_usd` is the value that actually scores |
+| `research_style` | flavor | — |
+| `buying_trigger` | flavor | — |
+| `life_stage` | **scoring** | drives age-overlay criteria + a lambda bump |
+| `decision_context.budget_control` | flavor | `needs_parent_approval` / `attention_span` score; `budget_control` itself does not |
+
+In mock mode, only `life_stage` of the five counterfactual-audited fields
+actually scores — the other four are expected to be inert, and the audit
+reports that as `not_applicable` rather than a misleading "no bias found".
+
+### Injection rate bound (40%)
+
+`pricing_dealbreaker_injection` carries `max_rate: 0.4` in its
+`AssumptionDef` — callers enforce that this nudge is applied to at most 40%
+of a sub-segment's personas, even if more personas technically cross the
+`price_sensitivity > 0.72` threshold. This keeps a single unverified
+assumption from dominating a sub-segment's dealbreaker profile.
+
+### Counterfactual audit — TS-only (parity exception)
+
+The counterfactual bias/sensitivity audit (`quality/biasAudit.ts`) clones a
+small, deterministic sample of personas, flips exactly one contextual field
+at a time (`region`, `income_band`, `occupation`, `life_stage`,
+`decision_context.budget_control`), and re-runs the same stimulus through
+the same reaction provider to flag context fields that move scores more than
+expected. **This audit exists only in the TS engine** (`apps/web`). The
+Python reference engine (`apps/api`) has no equivalent check —
+`storm_runner.py` and `schemas/report.py` both note explicitly that their
+`calibration_evidence` block omits `counterfactual_audit` because "that
+check does not exist in this reference engine." This is a known,
+intentional parity gap for Phase A, tracked for Phase B.

@@ -18,7 +18,7 @@ import "./only";
 import { getConfig, type ServerConfig } from "./env";
 import { getAnalyst } from "./engine/analyst";
 import { classifyCategory } from "./engine/criteria/classifier";
-import { AssumptionLedger } from "./engine/criteria/assumptions";
+import { AssumptionLedger, type FiredAssumption } from "./engine/criteria/assumptions";
 import { PersonaGenerator } from "./engine/persona/generator";
 import type { PriorsMeta } from "./engine/persona/priorsLoader";
 import { getProvider } from "./engine/providers";
@@ -107,6 +107,14 @@ export async function runStorm(input: StormInput, cfg: ServerConfig = getConfig(
     category,
   );
 
+  // Snapshot fired assumptions for the POPULATION only, before the
+  // counterfactual audit below re-runs personas through the same `provider`
+  // (and therefore the same shared `ledger`). Those audit probes re-fire AI
+  // nudges (ai_skeptic_trust_penalty, ai_novelty_activation_boost) — counting
+  // them here would inflate personas_affected in calibration_evidence and
+  // diverge from the Python engine's population-only semantics.
+  const populationAssumptions = ledger.fired();
+
   // 3b) counterfactual bias audit — cheap deterministic re-runs on the mock
   // provider; skipped (labeled) for live-LLM providers where each pair would
   // cost real API calls.
@@ -147,7 +155,7 @@ export async function runStorm(input: StormInput, cfg: ServerConfig = getConfig(
   // 5b) calibration evidence — parameters' provenance, fired assumptions,
   // counterfactual audit. Attached post-analyst like the verdict so the
   // analyst can never rewrite it.
-  report.calibration_evidence = buildCalibrationEvidence(priorsMeta, ledger, audit);
+  report.calibration_evidence = buildCalibrationEvidence(priorsMeta, populationAssumptions, audit);
 
   // 6) stream events + final progress snapshot.
   const reactionEvents: ReactionEvent[] = reactions.map((r, i) => ({
@@ -188,13 +196,17 @@ export async function runStorm(input: StormInput, cfg: ServerConfig = getConfig(
 /** Assembles the report's calibration_evidence block (spec §10). Exported for direct testing. */
 export function buildCalibrationEvidence(
   priorsMeta: PriorsMeta,
-  ledger: AssumptionLedger,
+  assumptionsFired: FiredAssumption[],
   audit: CounterfactualAudit,
 ): CalibrationEvidence {
   const confidenceDowngrades: string[] = [...priorsMeta.notes];
   if (priorsMeta.source === "embedded_unverified") {
     confidenceDowngrades.push(
       "Persona trait priors are embedded developer estimates (no data files loaded) — population shape is unvalidated.",
+    );
+  } else if (priorsMeta.coverage < 0.15) {
+    confidenceDowngrades.push(
+      "Persona trait priors are almost entirely unsourced (low evidence coverage) — treat population shape as unvalidated.",
     );
   }
   if (audit.status === "not_run") {
@@ -203,7 +215,7 @@ export function buildCalibrationEvidence(
   return {
     priors_coverage: round(priorsMeta.coverage, 3),
     priors_source: priorsMeta.source,
-    assumptions_fired: ledger.fired(),
+    assumptions_fired: assumptionsFired,
     counterfactual_audit: audit,
     confidence_downgrades: confidenceDowngrades,
   };

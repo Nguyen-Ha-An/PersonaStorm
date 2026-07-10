@@ -314,6 +314,11 @@ class StormManager:
                     "Persona trait priors are embedded developer estimates (no "
                     "data files loaded) — population shape is unvalidated."
                 )
+            elif priors_meta.coverage < 0.15:
+                downgrades.append(
+                    "Persona trait priors are almost entirely unsourced (low "
+                    "evidence coverage) — treat population shape as unvalidated."
+                )
             run.report.calibration_evidence = {
                 "priors_coverage": round(priors_meta.coverage, 3),
                 "priors_source": priors_meta.source,

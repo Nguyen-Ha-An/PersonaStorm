@@ -61,10 +61,10 @@ export function loadPresetWithMeta(
     if (!traitsIn || typeof traitsIn !== "object") throw new Error(`priors ${key}: sub_segments[${i}].traits missing`);
     const traits: Record<string, Trait> = {};
     for (const [name, t] of Object.entries(traitsIn)) {
-      if (typeof t.mean !== "number" || t.mean < 0 || t.mean > 1) {
+      if (typeof t.mean !== "number" || !Number.isFinite(t.mean) || t.mean < 0 || t.mean > 1) {
         throw new Error(`priors ${key}: trait '${name}' mean out of [0,1]`);
       }
-      if (typeof t.std !== "number" || t.std <= 0 || t.std > 0.5) {
+      if (typeof t.std !== "number" || !Number.isFinite(t.std) || t.std <= 0 || t.std > 0.5) {
         throw new Error(`priors ${key}: trait '${name}' std out of (0,0.5]`);
       }
       const status = (t.evidence?.status ?? "unverified") as EvidenceStatus;

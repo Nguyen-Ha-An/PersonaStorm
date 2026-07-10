@@ -71,3 +71,33 @@ def test_report_carries_calibration_evidence(client):
     assert any(
         a["id"] == "pricing_dealbreaker_injection" for a in ce["assumptions_fired"]
     )
+
+
+def test_low_coverage_data_files_priors_get_confidence_downgrade(client):
+    """All shipped priors/*.json files are 100% 'unverified' evidence status,
+    so a normal data_files run has priors_coverage == 0 — as unvalidated as
+    the embedded fallback, but previously not flagged. Mirrors the
+    stormEngine.ts buildCalibrationEvidence() low-coverage downgrade."""
+    resp = client.post(
+        "/api/storm/create",
+        json=create_payload(target_market="budget", persona_count=50),
+    )
+    assert resp.status_code == 200, resp.text
+    storm_id = resp.json()["storm_id"]
+
+    deadline = time.time() + 30.0
+    report = None
+    while time.time() < deadline:
+        r = client.get(f"/api/storm/{storm_id}/report")
+        if r.status_code == 200:
+            report = r.json()
+            break
+        assert r.status_code == 202, r.text
+        time.sleep(0.1)
+    assert report is not None, "report never became ready"
+
+    ce = report["calibration_evidence"]
+    assert ce is not None
+    assert ce["priors_source"] == "data_files"
+    assert ce["priors_coverage"] == 0
+    assert any("almost entirely unsourced" in d for d in ce["confidence_downgrades"])

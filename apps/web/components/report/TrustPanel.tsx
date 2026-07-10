@@ -113,11 +113,13 @@ export function TrustPanel({ report }: { report: StormReport }) {
               ))}
             </ul>
           )}
-          <p className="mt-1.5 text-xs leading-relaxed text-storm-400">
-            Counterfactual audit: {report.calibration_evidence.counterfactual_audit.status}
-            {report.calibration_evidence.counterfactual_audit.pairs_not_applicable > 0 &&
-              ` (${report.calibration_evidence.counterfactual_audit.pairs_not_applicable} pairs not applicable in this provider)`}
-          </p>
+          {report.calibration_evidence.counterfactual_audit && (
+            <p className="mt-1.5 text-xs leading-relaxed text-storm-400">
+              Counterfactual audit: {report.calibration_evidence.counterfactual_audit.status}
+              {(report.calibration_evidence.counterfactual_audit.pairs_not_applicable ?? 0) > 0 &&
+                ` (${report.calibration_evidence.counterfactual_audit.pairs_not_applicable} pairs not applicable in this provider)`}
+            </p>
+          )}
           {report.calibration_evidence.confidence_downgrades.map((d) => (
             <p key={d} className="mt-1.5 text-xs leading-relaxed text-signal-yellow">
               ⚠ {d}

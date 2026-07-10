@@ -75,6 +75,27 @@ def test_loader_widens_unverified_std(tmp_path: Path):
     assert math.isclose(loaded.meta.coverage, 1 / 7)
 
 
+def test_loader_rejects_non_finite_weight(tmp_path: Path):
+    # Python's json.loads accepts the bare Infinity token (JS JSON.parse does
+    # not) -> the loader must fail fast at load time, not crash later in
+    # _allocate. Written as raw JSON so the Infinity token survives.
+    raw = (
+        '{"preset": "sea_genz", "version": 1,'
+        ' "trait_definitions": {"price_sensitivity": "def"},'
+        ' "sub_segments": [{"name": "s1", "weight": Infinity, "age_range": [18, 25],'
+        ' "regions": ["r"], "income_bands": [["b", [5, 25]]], "occupations": ["o"],'
+        ' "familiarity": ["low"], "research_styles": ["rs"], "buying_triggers": ["bt"],'
+        ' "dealbreaker_pool": ["unclear pricing"],'
+        ' "traits": {' + ", ".join(
+            f'"{name}": {{"mean": 0.5, "std": 0.1, "evidence": {{"status": "unverified"}}}}'
+            for name in TRAIT_ORDER
+        ) + "}}]}"
+    )
+    (tmp_path / "sea_genz.json").write_text(raw)
+    with pytest.raises(ValueError, match="weight"):
+        load_preset_with_meta("sea_genz", dir=str(tmp_path))
+
+
 def test_loader_missing_dir_falls_back_labeled(tmp_path: Path):
     loaded = load_preset_with_meta("sea_genz", dir=str(tmp_path / "nope"))
     assert loaded.meta.source == "embedded_unverified"

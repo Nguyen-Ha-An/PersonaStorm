@@ -9,6 +9,7 @@ silent).
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -70,9 +71,19 @@ def load_preset_with_meta(key: str, custom_description: str | None = None, dir: 
         traits: dict[str, tuple[float, float]] = {}
         for name, t in traits_in.items():
             mean, std = t.get("mean"), t.get("std")
-            if not isinstance(mean, (int, float)) or isinstance(mean, bool) or not 0 <= mean <= 1:
+            if (
+                not isinstance(mean, (int, float))
+                or isinstance(mean, bool)
+                or not math.isfinite(mean)
+                or not 0 <= mean <= 1
+            ):
                 raise ValueError(f"priors {key}: trait '{name}' mean out of [0,1]")
-            if not isinstance(std, (int, float)) or isinstance(std, bool) or not 0 < std <= 0.5:
+            if (
+                not isinstance(std, (int, float))
+                or isinstance(std, bool)
+                or not math.isfinite(std)
+                or not 0 < std <= 0.5
+            ):
                 raise ValueError(f"priors {key}: trait '{name}' std out of (0,0.5]")
             status = (t.get("evidence") or {}).get("status", "unverified")
             if status not in _STATUSES:
@@ -80,7 +91,7 @@ def load_preset_with_meta(key: str, custom_description: str | None = None, dir: 
             if status == "sourced":
                 if not (t.get("evidence") or {}).get("mapping_rule"):
                     raise ValueError(f"priors {key}: trait '{name}' is sourced but has no mapping_rule")
-                if name not in (raw.get("trait_definitions") or {}):
+                if not (raw.get("trait_definitions") or {}).get(name):
                     raise ValueError(f"priors {key}: trait '{name}' is sourced but has no operational definition in trait_definitions")
                 sourced += 1
             total += 1
@@ -123,12 +134,19 @@ def _is_valid_income_bands(v: object) -> bool:
             return False
         if not isinstance(lo, (int, float)) or not isinstance(hi, (int, float)):
             return False
+        if not math.isfinite(lo) or not math.isfinite(hi):
+            return False
     return True
 
 
 def _validate_sub_segment_fields(key: str, s: dict, i: int) -> None:
     weight = s.get("weight")
-    if isinstance(weight, bool) or not isinstance(weight, (int, float)) or weight <= 0:
+    if (
+        isinstance(weight, bool)
+        or not isinstance(weight, (int, float))
+        or not math.isfinite(weight)
+        or weight <= 0
+    ):
         raise ValueError(f"priors {key}: sub_segments[{i}] weight must be a finite number > 0")
     name = s.get("name")
     if not isinstance(name, str) or len(name) == 0:
@@ -137,7 +155,10 @@ def _validate_sub_segment_fields(key: str, s: dict, i: int) -> None:
     if (
         not isinstance(age_range, list)
         or len(age_range) != 2
-        or any(isinstance(n, bool) or not isinstance(n, (int, float)) for n in age_range)
+        or any(
+            isinstance(n, bool) or not isinstance(n, (int, float)) or not math.isfinite(n)
+            for n in age_range
+        )
     ):
         raise ValueError(f"priors {key}: sub_segments[{i}] age_range must be an array of 2 numbers")
     for field_name in ("regions", "occupations", "familiarity", "research_styles",
@@ -155,8 +176,11 @@ def _validate_pairs(key: str, pairs: list) -> list[tuple[str, str, float, str]]:
     for i, p in enumerate(pairs):
         if not isinstance(p, list) or len(p) < 3:
             raise ValueError(f"priors {key}: trait_correlations[{i}] malformed")
-        r = float(p[2])
-        if abs(r) > 0.95:
+        try:
+            r = float(p[2])
+        except (TypeError, ValueError):
+            raise ValueError(f"priors {key}: trait_correlations[{i}] r must be a number") from None
+        if not math.isfinite(r) or abs(r) > 0.95:
             raise ValueError(f"priors {key}: trait_correlations[{i}] |r| must be <= 0.95")
         status = p[3] if len(p) > 3 else "unverified"
         if status not in _STATUSES:

@@ -18,9 +18,16 @@ import "./only";
 import { getConfig, type ServerConfig } from "./env";
 import { getAnalyst } from "./engine/analyst";
 import { classifyCategory } from "./engine/criteria/classifier";
+import { AssumptionLedger } from "./engine/criteria/assumptions";
 import { PersonaGenerator } from "./engine/persona/generator";
 import { getProvider } from "./engine/providers";
 import { buildReport, type ReportRequest } from "./engine/aggregation/reportBuilder";
+import {
+  buildCounterfactualPairs,
+  counterfactualAuditNotRun,
+  summarizeCounterfactualAudit,
+  type CounterfactualAudit,
+} from "./engine/quality/biasAudit";
 import { attachVerdictAndActions } from "./engine/verdict";
 import { computeQuality } from "./engine/quality/metrics";
 import { parseStimulus } from "./engine/stimulusParser";
@@ -83,12 +90,13 @@ export async function runStorm(input: StormInput, cfg: ServerConfig = getConfig(
   const features = parseStimulus(input.stimulus, input.title, input.stimulusType);
   const category = input.productCategory || classifyCategory(features)[0];
 
-  // 2) personas + diversity validation.
-  const generator = new PersonaGenerator(seed);
-  const { personas } = generator.generate(input.targetMarket, input.personaCount, input.customSegmentDescription);
+  // 2) personas + diversity validation (ledger records generator assumptions).
+  const ledger = new AssumptionLedger();
+  const generator = new PersonaGenerator(seed, ledger);
+  const { personas, priorsMeta } = generator.generate(input.targetMarket, input.personaCount, input.customSegmentDescription);
 
   // 3) swarm reactions.
-  const provider = getProvider(cfg);
+  const provider = getProvider(cfg, ledger);
   const reactions: PersonaReaction[] = await provider.reactBatch(
     personas,
     input.stimulus,
@@ -97,6 +105,25 @@ export async function runStorm(input: StormInput, cfg: ServerConfig = getConfig(
     MAX_CONCURRENCY,
     category,
   );
+
+  // 3b) counterfactual bias audit — cheap deterministic re-runs on the mock
+  // provider; skipped (labeled) for live-LLM providers where each pair would
+  // cost real API calls.
+  let audit: CounterfactualAudit;
+  if (provider.name === "mock") {
+    const { pairs, notes } = buildCounterfactualPairs(personas, 16, provider.name);
+    const cfReactions: PersonaReaction[] = [];
+    for (const pair of pairs) {
+      cfReactions.push(await provider.react(pair.counterfactual_persona, input.stimulus, input.stimulusType, features, category));
+    }
+    audit = summarizeCounterfactualAudit(pairs, reactions, cfReactions, notes);
+  } else {
+    audit = counterfactualAuditNotRun(
+      `Counterfactual audit skipped for provider '${provider.name}' — counterfactual re-runs would cost live LLM calls.`,
+    );
+  }
+  // `audit`, `priorsMeta`, and `ledger` are consumed by Task 9; kept in scope
+  // here as they're wired into the report/response there.
 
   // 4) quality metrics.
   const quality = computeQuality(personas, reactions, features);

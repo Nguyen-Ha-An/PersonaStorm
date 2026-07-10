@@ -13,6 +13,7 @@
 
 import { round } from "../text";
 import type { Persona, PersonaReaction } from "../types";
+import { PERSONA_FEATURE_WIRING } from "../persona/featureWiring";
 
 export type CounterfactualField =
   | "region"
@@ -28,6 +29,7 @@ export interface CounterfactualPairSpec {
   field: CounterfactualField;
   baseline_value: string | null;
   counterfactual_value: string | null;
+  expected_inert: boolean;
 }
 
 export interface CounterfactualPairResult {
@@ -43,12 +45,15 @@ export interface CounterfactualPairResult {
   counterfactual_market_fit_score: number;
   delta_market_fit_score: number;
   flagged: boolean;
+  applicable: boolean;
 }
 
 export interface CounterfactualAudit {
   status: "not_run" | "pass" | "warn" | "fail";
   pairs_tested: number;
+  pairs_not_applicable: number;
   fields_tested: CounterfactualField[];
+  fields_not_applicable: CounterfactualField[];
   max_abs_buy_likelihood_delta: number;
   max_abs_market_fit_delta: number;
   flagged_pairs: CounterfactualPairResult[];
@@ -86,6 +91,7 @@ const MAX_FLAGGED_PAIRS_TO_SURFACE = 8;
 export function buildCounterfactualPairs(
   personas: Persona[],
   maxPairs = MAX_COUNTERFACTUAL_PAIRS,
+  providerName = "mock",
 ): { pairs: CounterfactualPairSpec[]; notes: string[] } {
   if (personas.length === 0 || maxPairs <= 0) {
     return { pairs: [], notes: ["Counterfactual audit skipped: no personas available."] };
@@ -111,6 +117,7 @@ export function buildCounterfactualPairs(
         field,
         baseline_value: baseline,
         counterfactual_value: replacement,
+        expected_inert: providerName === "mock" && PERSONA_FEATURE_WIRING[field]?.mock === "flavor",
       });
     }
   }
@@ -148,7 +155,14 @@ export function summarizeCounterfactualAudit(
 
     const deltaBuy = round(counterfactual.buy_likelihood - baseline.buy_likelihood, 3);
     const deltaMarket = round(counterfactual.market_fit_score - baseline.market_fit_score, 3);
-    const flagged = Math.abs(deltaBuy) >= FLAG_DELTA || Math.abs(deltaMarket) >= FLAG_DELTA;
+    const applicable = !spec.expected_inert;
+    const flagged = applicable && (Math.abs(deltaBuy) >= FLAG_DELTA || Math.abs(deltaMarket) >= FLAG_DELTA);
+
+    if (spec.expected_inert && (deltaBuy !== 0 || deltaMarket !== 0)) {
+      notes.push(
+        `Wiring inconsistency: '${spec.field}' is declared flavor-only but moved the reaction — update PERSONA_FEATURE_WIRING.`,
+      );
+    }
 
     results.push({
       audit_id: spec.audit_id,
@@ -163,6 +177,7 @@ export function summarizeCounterfactualAudit(
       counterfactual_market_fit_score: counterfactual.market_fit_score,
       delta_market_fit_score: deltaMarket,
       flagged,
+      applicable,
     });
   }
 
@@ -170,10 +185,27 @@ export function summarizeCounterfactualAudit(
     return counterfactualAuditNotRun("Counterfactual audit produced no comparable reaction pairs.", notes);
   }
 
-  const maxAbsBuy = round(Math.max(...results.map((r) => Math.abs(r.delta_buy_likelihood))), 3);
-  const maxAbsMarket = round(Math.max(...results.map((r) => Math.abs(r.delta_market_fit_score))), 3);
-  const flagged = results.filter((r) => r.flagged);
-  const fields = Array.from(new Set(results.map((r) => r.field)));
+  const applicableResults = results.filter((r) => r.applicable);
+  const notApplicable = results.filter((r) => !r.applicable);
+  const fieldsNotApplicable = Array.from(new Set(notApplicable.map((r) => r.field)));
+
+  const naSuffix = notApplicable.length > 0
+    ? ` ${notApplicable.length} pair(s) not applicable: fields that cannot move reactions in this provider (${Array.from(new Set(notApplicable.map((r) => r.field))).join(", ")}).`
+    : "";
+
+  if (applicableResults.length === 0) {
+    return counterfactualAuditNotRun(
+      "All counterfactual pairs target fields that cannot move reactions in this provider — audit not meaningful in mock mode beyond life_stage.",
+      notes,
+      notApplicable.length,
+      fieldsNotApplicable,
+    );
+  }
+
+  const maxAbsBuy = round(Math.max(...applicableResults.map((r) => Math.abs(r.delta_buy_likelihood))), 3);
+  const maxAbsMarket = round(Math.max(...applicableResults.map((r) => Math.abs(r.delta_market_fit_score))), 3);
+  const flagged = applicableResults.filter((r) => r.flagged);
+  const fields = Array.from(new Set(applicableResults.map((r) => r.field)));
 
   const status: CounterfactualAudit["status"] = flagged.length > 0
     ? "fail"
@@ -181,16 +213,18 @@ export function summarizeCounterfactualAudit(
       ? "warn"
       : "pass";
 
-  const summary = status === "fail"
+  const summary = (status === "fail"
     ? `${flagged.length} counterfactual pair(s) exceeded the sensitivity threshold; inspect whether the changed context field is legitimately product-relevant.`
     : status === "warn"
       ? `Moderate counterfactual sensitivity detected, but no pair crossed the hard threshold.`
-      : `No large counterfactual sensitivity found across ${results.length} tested pair(s).`;
+      : `No large counterfactual sensitivity found across ${applicableResults.length} tested pair(s).`) + naSuffix;
 
   return {
     status,
-    pairs_tested: results.length,
+    pairs_tested: applicableResults.length,
+    pairs_not_applicable: notApplicable.length,
     fields_tested: fields,
+    fields_not_applicable: fieldsNotApplicable,
     max_abs_buy_likelihood_delta: maxAbsBuy,
     max_abs_market_fit_delta: maxAbsMarket,
     flagged_pairs: flagged.slice(0, MAX_FLAGGED_PAIRS_TO_SURFACE),
@@ -199,11 +233,18 @@ export function summarizeCounterfactualAudit(
   };
 }
 
-export function counterfactualAuditNotRun(reason: string, notes: string[] = []): CounterfactualAudit {
+export function counterfactualAuditNotRun(
+  reason: string,
+  notes: string[] = [],
+  pairsNotApplicable = 0,
+  fieldsNotApplicable: CounterfactualField[] = [],
+): CounterfactualAudit {
   return {
     status: "not_run",
     pairs_tested: 0,
+    pairs_not_applicable: pairsNotApplicable,
     fields_tested: [],
+    fields_not_applicable: fieldsNotApplicable,
     max_abs_buy_likelihood_delta: 0,
     max_abs_market_fit_delta: 0,
     flagged_pairs: [],

@@ -20,6 +20,7 @@ import { getAnalyst } from "./engine/analyst";
 import { classifyCategory } from "./engine/criteria/classifier";
 import { AssumptionLedger } from "./engine/criteria/assumptions";
 import { PersonaGenerator } from "./engine/persona/generator";
+import type { PriorsMeta } from "./engine/persona/priorsLoader";
 import { getProvider } from "./engine/providers";
 import { buildReport, type ReportRequest } from "./engine/aggregation/reportBuilder";
 import {
@@ -33,7 +34,7 @@ import { computeQuality } from "./engine/quality/metrics";
 import { parseStimulus } from "./engine/stimulusParser";
 import { mostCommon, normalizeObjection, round } from "./engine/text";
 import type { PersonaReaction } from "./engine/types";
-import type { StormReport } from "./engine/report";
+import type { CalibrationEvidence, StormReport } from "./engine/report";
 
 const MAX_CONCURRENCY = 8;
 
@@ -146,22 +147,7 @@ export async function runStorm(input: StormInput, cfg: ServerConfig = getConfig(
   // 5b) calibration evidence — parameters' provenance, fired assumptions,
   // counterfactual audit. Attached post-analyst like the verdict so the
   // analyst can never rewrite it.
-  const confidenceDowngrades: string[] = [...priorsMeta.notes];
-  if (priorsMeta.source === "embedded_unverified") {
-    confidenceDowngrades.push(
-      "Persona trait priors are embedded developer estimates (no data files loaded) — population shape is unvalidated.",
-    );
-  }
-  if (audit.status === "not_run") {
-    confidenceDowngrades.push(audit.summary);
-  }
-  report.calibration_evidence = {
-    priors_coverage: round(priorsMeta.coverage, 3),
-    priors_source: priorsMeta.source,
-    assumptions_fired: ledger.fired(),
-    counterfactual_audit: audit,
-    confidence_downgrades: confidenceDowngrades,
-  };
+  report.calibration_evidence = buildCalibrationEvidence(priorsMeta, ledger, audit);
 
   // 6) stream events + final progress snapshot.
   const reactionEvents: ReactionEvent[] = reactions.map((r, i) => ({
@@ -197,6 +183,30 @@ export async function runStorm(input: StormInput, cfg: ServerConfig = getConfig(
   };
 
   return { report, reactions: reactionEvents, progress };
+}
+
+/** Assembles the report's calibration_evidence block (spec §10). Exported for direct testing. */
+export function buildCalibrationEvidence(
+  priorsMeta: PriorsMeta,
+  ledger: AssumptionLedger,
+  audit: CounterfactualAudit,
+): CalibrationEvidence {
+  const confidenceDowngrades: string[] = [...priorsMeta.notes];
+  if (priorsMeta.source === "embedded_unverified") {
+    confidenceDowngrades.push(
+      "Persona trait priors are embedded developer estimates (no data files loaded) — population shape is unvalidated.",
+    );
+  }
+  if (audit.status === "not_run") {
+    confidenceDowngrades.push(audit.summary);
+  }
+  return {
+    priors_coverage: round(priorsMeta.coverage, 3),
+    priors_source: priorsMeta.source,
+    assumptions_fired: ledger.fired(),
+    counterfactual_audit: audit,
+    confidence_downgrades: confidenceDowngrades,
+  };
 }
 
 function topObjectionOf(reactions: PersonaReaction[]): string {

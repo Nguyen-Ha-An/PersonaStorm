@@ -90,7 +90,7 @@ def test_teen_decision_context_has_parent_approval_fields():
     rng = random.Random("teen-test")
     teen_sub = replace_age_range(sub, (14, 16))
     chol = build_cholesky(DEFAULT_CORRELATIONS, preset.key)
-    persona = gen._one(preset, teen_sub, 1, rng, chol)
+    persona = gen._one(preset, teen_sub, 1, rng, chol, {"left": 999})
 
     assert persona.life_stage == "teen_student"
     dc = persona.decision_context

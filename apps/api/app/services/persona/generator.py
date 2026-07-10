@@ -12,10 +12,12 @@ Design decisions:
 
 from __future__ import annotations
 
+import math
 import random
 
 from ...schemas.persona import DecisionContext, Persona
 from ..criteria.age_overlays import life_stage_for
+from ..criteria.assumptions import ASSUMPTION_DEFS, AssumptionLedger
 from .correlation import DEFAULT_CORRELATIONS, TRAIT_ORDER, apply_cholesky, build_cholesky
 from .diversity import validate_diversity
 from .presets import DB, PresetSpec, SubSegmentSpec
@@ -35,9 +37,9 @@ _GLOBAL_EXTRAS = list(DB.values())
 
 
 class PersonaGenerator:
-    def __init__(self, seed: int = 1337, ledger=None):
+    def __init__(self, seed: int = 1337, ledger: AssumptionLedger | None = None):
         self.seed = seed
-        self.ledger = ledger  # unused until Task 11 (assumption ledger)
+        self.ledger = ledger or AssumptionLedger()
 
     def generate(
         self,
@@ -69,15 +71,18 @@ class PersonaGenerator:
         allocations = _allocate(count, [s.weight for s in preset.sub_segments])
         personas: list[Persona] = []
         idx = 0
-        for sub, n in zip(preset.sub_segments, allocations):
-            for _ in range(n):
+        max_rate = ASSUMPTION_DEFS["pricing_dealbreaker_injection"].get("max_rate", 0.4)
+        for sub, nn in zip(preset.sub_segments, allocations):
+            injection_budget = {"left": math.ceil(max_rate * nn)}
+            for _ in range(nn):
                 idx += 1
-                personas.append(self._one(preset, sub, idx, rng, chol))
+                personas.append(self._one(preset, sub, idx, rng, chol, injection_budget))
         rng.shuffle(personas)  # interleave sub-segments so the live grid mixes colors
         return personas
 
     def _one(self, preset: PresetSpec, sub: SubSegmentSpec, idx: int,
-             rng: random.Random, chol: list[list[float]]) -> Persona:
+             rng: random.Random, chol: list[list[float]],
+             injection_budget: dict[str, int]) -> Persona:
         z = [rng.gauss(0, 1) for _ in TRAIT_ORDER]
         y = apply_cholesky(chol, z)
         traits: dict[str, float] = {}
@@ -96,11 +101,18 @@ class PersonaGenerator:
             extra = rng.choice(_GLOBAL_EXTRAS)
             if extra not in dealbreakers:
                 dealbreakers.append(extra)
-        # Trait-consistency pass (see module docstring)
+        # Trait-consistency pass — rate-bounded, ledger-tracked (spec §6/§9).
         if traits["price_sensitivity"] > 0.72 and not (set(dealbreakers) & _PRICING_DEALBREAKERS):
-            pool_pricing = [d for d in sub.dealbreaker_pool if d in _PRICING_DEALBREAKERS]
-            dealbreakers[-1] = pool_pricing[0] if pool_pricing else "unclear pricing"
+            if injection_budget["left"] > 0:
+                injection_budget["left"] -= 1
+                self.ledger.fire("pricing_dealbreaker_injection")
+                pool_pricing = [d for d in sub.dealbreaker_pool if d in _PRICING_DEALBREAKERS]
+                dealbreakers[-1] = pool_pricing[0] if pool_pricing else "unclear pricing"
+            # Over budget: no overwrite — the objection weighting in
+            # _pick_objection already lets high price sensitivity surface
+            # pricing objections.
         if traits["privacy_sensitivity"] > 0.75 and not (set(dealbreakers) & _PRIVACY_DEALBREAKERS):
+            self.ledger.fire("privacy_dealbreaker_injection")
             dealbreakers.append("vague about what happens to my data")
 
         age = rng.randint(*sub.age_range)

@@ -35,6 +35,7 @@ from ...schemas.reaction import (
 )
 from ...utils.text import clamp
 from ..criteria.age_overlays import overlay_ids_for
+from ..criteria.assumptions import AssumptionLedger
 from ..criteria.classifier import classify_category, is_high_risk
 from ..criteria.registry import CORE_IDS, effective
 from ..criteria.scoring import compute_market_fit
@@ -187,11 +188,18 @@ _TEST_FOR_WEAKNESS: dict[str, str] = {
 }
 
 
+def compute_jitter_offsets(seed: int, persona_id: str) -> dict[str, float]:
+    """Persona-stable, stimulus-independent formula jitter (spec §6)."""
+    jrng = random.Random(f"jitter:{seed}:{persona_id}")
+    return {cid: jrng.gauss(0.0, 0.03) for cid in CORE_IDS}
+
+
 class MockPersonaProvider(PersonaInferenceProvider):
     name = "mock"
 
-    def __init__(self, seed: int = 1337):
+    def __init__(self, seed: int = 1337, ledger: AssumptionLedger | None = None):
         self.seed = seed
+        self.ledger = ledger or AssumptionLedger()
 
     async def react(
         self,
@@ -211,7 +219,9 @@ class MockPersonaProvider(PersonaInferenceProvider):
         cat = category or classify_category(f)[0]
         high_risk = is_high_risk(f)
 
-        core, overlay = self._score_criteria(persona, f, cat, rng)
+        jitter = compute_jitter_offsets(self.seed, persona.persona_id)
+
+        core, overlay = self._score_criteria(persona, f, cat, rng, jitter)
 
         # market_fit is ALWAYS the authoritative scorer's output — never invented.
         breakdown = compute_market_fit(
@@ -256,6 +266,7 @@ class MockPersonaProvider(PersonaInferenceProvider):
     # ------------------------------------------------------------- criteria
     def _score_criteria(
         self, p: Persona, f: StimulusFeatures, category: str, rng: random.Random,
+        jitter: dict[str, float] | None = None,
     ) -> tuple[dict[str, float], dict[str, float]]:
         """Return (core scores for all 17 CORE_IDS, overlay scores for this
         persona's life stage). Every value is grounded in traits + features
@@ -293,8 +304,7 @@ class MockPersonaProvider(PersonaInferenceProvider):
         core["value_clarity"] = 0.30 + 0.55 * clarity - 0.25 * jargon + j()
         # high category_familiarity -> harder to seem different
         core["differentiation"] = (
-            0.55 - 0.30 * fam + 0.15 * (p.novelty_seeking - 0.5)
-            + (0.10 if f.mentions_ai else 0.0) + j()
+            0.55 - 0.30 * fam + 0.15 * (p.novelty_seeking - 0.5) + j()
         )
 
         # trust / risk block
@@ -304,6 +314,7 @@ class MockPersonaProvider(PersonaInferenceProvider):
             + 0.15 * proof - 0.08 * jargon + j()
         )
         if f.mentions_ai and p.skepticism > 0.6 and not f.has_proof:
+            self.ledger.fire("ai_skeptic_trust_penalty")
             core["trust"] -= 0.06
         # proof_requirement is a BARRIER (higher = more proof demanded)
         core["proof_requirement"] = (
@@ -333,6 +344,7 @@ class MockPersonaProvider(PersonaInferenceProvider):
         )
         act = 0.38 + 0.22 * clarity + 0.18 * trial + 0.12 * p.novelty_seeking
         if f.mentions_ai and p.novelty_seeking > 0.55:
+            self.ledger.fire("ai_novelty_activation_boost")
             act += 0.12 * p.novelty_seeking     # novelty + AI framing -> more likely to try
         core["activation_likelihood"] = act + j()
 
@@ -347,7 +359,8 @@ class MockPersonaProvider(PersonaInferenceProvider):
             0.38 + 0.25 * core["perceived_roi"] + 0.18 * core["repeat_usage_potential"] + j()
         )
 
-        core = {cid: round(clamp(core[cid]), 4) for cid in CORE_IDS}
+        jit = jitter or {}
+        core = {cid: round(clamp(core[cid] + jit.get(cid, 0.0)), 4) for cid in CORE_IDS}
         overlay = self._score_overlay(p, f, core, rng)
         return core, overlay
 
@@ -588,29 +601,32 @@ class MockPersonaProvider(PersonaInferenceProvider):
         def has_db(*fragments: str) -> bool:
             return any(any(fr in d for d in db) for fr in fragments)
 
-        if not f.has_pricing and has_db("pricing", "hidden fees"):
-            cands.append(("pricing_unclear", 1.0 * p.price_sensitivity))
+        # Evidence-justified objections are candidates for EVERY persona,
+        # weighted by the relevant trait; a matching dealbreaker BOOSTS weight
+        # x1.5 instead of gating inclusion (spec §9 — pools no longer
+        # predetermine blockers).
+        def w(base: float, *fragments: str) -> float:
+            return base * 1.5 if fragments and has_db(*fragments) else base
+
+        if not f.has_pricing:
+            cands.append(("pricing_unclear", w(0.7 * p.price_sensitivity, "pricing", "hidden fees")))
         if f.has_pricing and f.min_price:
             wtp = p.monthly_budget_usd * (0.25 + 0.55 * (1 - p.price_sensitivity))
             if f.min_price > wtp:
-                cands.append(("price_too_high", 1.2 * p.price_sensitivity))
+                cands.append(("price_too_high", w(0.9 * p.price_sensitivity, "pricing", "hidden fees")))
         if not f.has_proof:
-            if has_db("proof"):
-                cands.append(("no_proof", 1.0 * p.skepticism))
-            if has_db("case studies"):
-                cands.append(("no_case_studies", 0.9 * p.skepticism))
-        if f.mentions_ai and not f.has_proof and (has_db("AI hype") or p.skepticism > 0.6):
-            cands.append(("ai_hype", 0.9 * p.skepticism))
-        if f.mentions_subscription and has_db("lock-in", "cancel"):
-            cands.append(("subscription_lockin", 0.75 * (1.0 - p.risk_tolerance)))
-        if not f.mentions_security and has_db("SSO", "compliance"):
-            cands.append(("no_security_docs", 1.1 * p.privacy_sensitivity))
-        if not f.mentions_security and has_db("data"):
-            cands.append(("privacy_vague", 0.8 * p.privacy_sensitivity))
-        if not f.has_free_trial and has_db("trial", "credit card"):
-            cands.append(("no_trial", 0.8 * p.price_sensitivity))
-        if has_db("onboarding", "time", "another tool"):
-            cands.append(("onboarding_time", 0.55 * (1.0 - p.novelty_seeking)))
+            cands.append(("no_proof", w(0.7 * p.skepticism, "proof")))
+            cands.append(("no_case_studies", w(0.45 * p.skepticism, "case studies")))
+        if f.mentions_ai and not f.has_proof:
+            cands.append(("ai_hype", w(0.65 * p.skepticism, "AI hype")))
+        if f.mentions_subscription:
+            cands.append(("subscription_lockin", w(0.5 * (1.0 - p.risk_tolerance), "lock-in", "cancel")))
+        if not f.mentions_security:
+            cands.append(("no_security_docs", w(0.55 * p.privacy_sensitivity, "SSO", "compliance")))
+            cands.append(("privacy_vague", w(0.5 * p.privacy_sensitivity, "data")))
+        if not f.has_free_trial:
+            cands.append(("no_trial", w(0.5 * p.price_sensitivity, "trial", "credit card")))
+        cands.append(("onboarding_time", w(0.3 * (1.0 - p.novelty_seeking), "onboarding", "time", "another tool")))
         if has_db("tools we already use"):
             cands.append(("integration", 0.6))
         if has_db("corporate") or (f.jargon_score > 0.4 and p.brand_trust < 0.45):

@@ -6,7 +6,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { resolvePreset, type PresetSpec, type Trait } from "./presets";
+import { resolvePreset, type PresetSpec, type SubSegmentSpec, type Trait } from "./presets";
 
 export type EvidenceStatus = "sourced" | "derived" | "unverified";
 export type TraitCorrelation = [string, string, number, EvidenceStatus];
@@ -56,6 +56,7 @@ export function loadPresetWithMeta(
   let sourced = 0;
   let total = 0;
   const subs = subSegments.map((s: Record<string, unknown>, i: number) => {
+    validateSubSegmentFields(key, s, i);
     const traitsIn = s.traits as Record<string, { mean: number; std: number; evidence?: { status?: string; mapping_rule?: string } }>;
     if (!traitsIn || typeof traitsIn !== "object") throw new Error(`priors ${key}: sub_segments[${i}].traits missing`);
     const traits: Record<string, Trait> = {};
@@ -109,6 +110,65 @@ export function loadPresetWithMeta(
   };
 }
 
+function isNonEmptyStringArray(v: unknown): v is string[] {
+  return Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string" && x.length > 0);
+}
+
+function isValidIncomeBands(v: unknown): v is PresetSpec["sub_segments"][number]["income_bands"] {
+  return (
+    Array.isArray(v) &&
+    v.length > 0 &&
+    v.every(
+      (b) =>
+        Array.isArray(b) &&
+        b.length === 2 &&
+        typeof b[0] === "string" &&
+        b[0].length > 0 &&
+        Array.isArray(b[1]) &&
+        b[1].length === 2 &&
+        typeof b[1][0] === "number" &&
+        Number.isFinite(b[1][0]) &&
+        typeof b[1][1] === "number" &&
+        Number.isFinite(b[1][1]),
+    )
+  );
+}
+
+function validateSubSegmentFields(key: string, s: Record<string, unknown>, i: number): void {
+  if (typeof s.weight !== "number" || !Number.isFinite(s.weight) || s.weight <= 0) {
+    throw new Error(`priors ${key}: sub_segments[${i}] weight must be a finite number > 0`);
+  }
+  if (typeof s.name !== "string" || s.name.length === 0) {
+    throw new Error(`priors ${key}: sub_segments[${i}] name must be a non-empty string`);
+  }
+  const ageRange = s.age_range;
+  if (
+    !Array.isArray(ageRange) ||
+    ageRange.length !== 2 ||
+    !ageRange.every((n) => typeof n === "number" && Number.isFinite(n))
+  ) {
+    throw new Error(`priors ${key}: sub_segments[${i}] age_range must be an array of 2 numbers`);
+  }
+  const stringArrayFields = [
+    "regions",
+    "occupations",
+    "familiarity",
+    "research_styles",
+    "buying_triggers",
+    "dealbreaker_pool",
+  ] as const;
+  for (const field of stringArrayFields) {
+    if (!isNonEmptyStringArray(s[field])) {
+      throw new Error(`priors ${key}: sub_segments[${i}] ${field} must be a non-empty array of strings`);
+    }
+  }
+  if (!isValidIncomeBands(s.income_bands)) {
+    throw new Error(
+      `priors ${key}: sub_segments[${i}] income_bands must be a non-empty array of [string, [number, number]]`,
+    );
+  }
+}
+
 function validateCorrelationPairs(key: string, pairs: unknown[]): TraitCorrelation[] {
   return pairs.map((p, i) => {
     const arr = p as [string, string, number, string?];
@@ -121,8 +181,21 @@ function validateCorrelationPairs(key: string, pairs: unknown[]): TraitCorrelati
   });
 }
 
+// Embedded PRESETS are module-level shared state (see presets.ts) — never mutate
+// the trait records resolvePreset() returns. Build fresh sub-segment/trait
+// objects here so the ×1.5 honesty widening applied below can't leak back into
+// the shared preset table and corrupt subsequent loads.
+function widenSubSegmentTraits(s: SubSegmentSpec): SubSegmentSpec {
+  const traits: Record<string, Trait> = {};
+  for (const [name, [mean, std]] of Object.entries(s.traits)) {
+    traits[name] = [mean, Math.min(std * UNVERIFIED_STD_FACTOR, STD_CAP)];
+  }
+  return { ...s, traits };
+}
+
 function embeddedFallback(key: string, customDescription: string | null | undefined, why: string): LoadedPreset {
-  const preset = resolvePreset(key, customDescription);
+  const resolved = resolvePreset(key, customDescription);
+  const preset: PresetSpec = { ...resolved, sub_segments: resolved.sub_segments.map(widenSubSegmentTraits) };
   let total = 0;
   for (const s of preset.sub_segments) total += Object.keys(s.traits).length;
   return {

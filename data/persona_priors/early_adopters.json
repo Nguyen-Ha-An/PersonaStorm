@@ -1,0 +1,409 @@
+{
+  "preset": "early_adopters",
+  "version": 1,
+  "trait_definitions": {
+    "price_sensitivity": "0.9 ≈ abandons purchase at +10% price delta; 0.5 ≈ tolerates +30%; 0.1 ≈ price-indifferent within budget",
+    "skepticism": "0.9 ≈ demands independent evidence before believing any claim; 0.5 ≈ accepts credible-sounding claims; 0.1 ≈ takes marketing at face value",
+    "novelty_seeking": "0.9 ≈ tries new products in the category within a week of hearing about them; 0.5 ≈ waits for reviews; 0.1 ≈ adopts only when forced",
+    "brand_trust": "0.9 ≈ defaults to trusting established brands; 0.5 ≈ neutral; 0.1 ≈ distrusts brand claims by default",
+    "social_influence": "0.9 ≈ buying decisions driven mostly by peers/community; 0.5 ≈ considers recommendations; 0.1 ≈ decides alone",
+    "risk_tolerance": "0.9 ≈ comfortable being an early customer of an unproven vendor; 0.5 ≈ prefers references; 0.1 ≈ needs de-risked, established options",
+    "privacy_sensitivity": "0.9 ≈ walks away from unclear data handling; 0.5 ≈ prefers but doesn't require clarity; 0.1 ≈ indifferent to data practices"
+  },
+  "sub_segments": [
+    {
+      "name": "Indie hacker / developer early adopter",
+      "weight": 0.3,
+      "age_range": [
+        22,
+        40
+      ],
+      "regions": [
+        "US — remote",
+        "EU — Berlin",
+        "India — Bangalore",
+        "Vietnam — HCMC"
+      ],
+      "income_bands": [
+        [
+          "spends on tools that ship faster",
+          [
+            30,
+            200
+          ]
+        ]
+      ],
+      "occupations": [
+        "indie hacker",
+        "senior developer",
+        "devops engineer",
+        "ML engineer"
+      ],
+      "familiarity": [
+        "high",
+        "high",
+        "high"
+      ],
+      "research_styles": [
+        "reads the docs and HN comments before the landing page"
+      ],
+      "buying_triggers": [
+        "genuinely novel capability + transparent architecture",
+        "generous free tier and an API"
+      ],
+      "dealbreaker_pool": [
+        "AI hype without concrete specifics",
+        "no proof that it works",
+        "vendor lock-in / hard data export",
+        "unclear pricing",
+        "long or complicated onboarding",
+        "feels too corporate"
+      ],
+      "traits": {
+        "price_sensitivity": {
+          "mean": 0.52,
+          "std": 0.14,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "skepticism": {
+          "mean": 0.72,
+          "std": 0.1,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "novelty_seeking": {
+          "mean": 0.85,
+          "std": 0.08,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "brand_trust": {
+          "mean": 0.4,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "social_influence": {
+          "mean": 0.55,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "risk_tolerance": {
+          "mean": 0.7,
+          "std": 0.1,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "privacy_sensitivity": {
+          "mean": 0.55,
+          "std": 0.14,
+          "evidence": {
+            "status": "unverified"
+          }
+        }
+      }
+    },
+    {
+      "name": "Productivity system tinkerer",
+      "weight": 0.25,
+      "age_range": [
+        20,
+        42
+      ],
+      "regions": [
+        "US — coastal metro",
+        "UK — London",
+        "remote worldwide"
+      ],
+      "income_bands": [
+        [
+          "pays for 9 tools already",
+          [
+            25,
+            120
+          ]
+        ]
+      ],
+      "occupations": [
+        "product manager",
+        "consultant",
+        "PhD student",
+        "designer"
+      ],
+      "familiarity": [
+        "high",
+        "high",
+        "medium"
+      ],
+      "research_styles": [
+        "watches a 20-min YouTube deep-dive, imports their whole workflow to test"
+      ],
+      "buying_triggers": [
+        "a workflow their current stack can't replicate",
+        "beautiful craft — they pay for polish"
+      ],
+      "dealbreaker_pool": [
+        "takes too much time to see value",
+        "subscription lock-in",
+        "not mobile friendly",
+        "AI hype without concrete specifics",
+        "unclear pricing",
+        "yet another tool for the team to manage"
+      ],
+      "traits": {
+        "price_sensitivity": {
+          "mean": 0.55,
+          "std": 0.14,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "skepticism": {
+          "mean": 0.58,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "novelty_seeking": {
+          "mean": 0.8,
+          "std": 0.1,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "brand_trust": {
+          "mean": 0.48,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "social_influence": {
+          "mean": 0.68,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "risk_tolerance": {
+          "mean": 0.6,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "privacy_sensitivity": {
+          "mean": 0.5,
+          "std": 0.14,
+          "evidence": {
+            "status": "unverified"
+          }
+        }
+      }
+    },
+    {
+      "name": "AI power user / prompt tinkerer",
+      "weight": 0.25,
+      "age_range": [
+        19,
+        45
+      ],
+      "regions": [
+        "US — remote",
+        "SEA — Singapore",
+        "EU — Amsterdam"
+      ],
+      "income_bands": [
+        [
+          "already pays for 2-3 AI subs",
+          [
+            30,
+            150
+          ]
+        ]
+      ],
+      "occupations": [
+        "analyst",
+        "founder",
+        "marketer",
+        "researcher"
+      ],
+      "familiarity": [
+        "high",
+        "high",
+        "high"
+      ],
+      "research_styles": [
+        "stress-tests the demo with edge cases in the first 5 minutes"
+      ],
+      "buying_triggers": [
+        "beats their current AI workflow on a real task, measurably"
+      ],
+      "dealbreaker_pool": [
+        "AI hype without concrete specifics",
+        "no proof that it works",
+        "unclear pricing",
+        "vague about what happens to my data",
+        "overkill for my simple needs"
+      ],
+      "traits": {
+        "price_sensitivity": {
+          "mean": 0.5,
+          "std": 0.14,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "skepticism": {
+          "mean": 0.66,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "novelty_seeking": {
+          "mean": 0.88,
+          "std": 0.07,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "brand_trust": {
+          "mean": 0.42,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "social_influence": {
+          "mean": 0.62,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "risk_tolerance": {
+          "mean": 0.68,
+          "std": 0.1,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "privacy_sensitivity": {
+          "mean": 0.52,
+          "std": 0.14,
+          "evidence": {
+            "status": "unverified"
+          }
+        }
+      }
+    },
+    {
+      "name": "Gadget & beta enthusiast",
+      "weight": 0.2,
+      "age_range": [
+        18,
+        38
+      ],
+      "regions": [
+        "US — Sun Belt metro",
+        "Japan — Tokyo",
+        "Korea — Seoul",
+        "UK city"
+      ],
+      "income_bands": [
+        [
+          "discretionary gadget budget",
+          [
+            20,
+            100
+          ]
+        ]
+      ],
+      "occupations": [
+        "QA engineer",
+        "student",
+        "sales engineer",
+        "photographer"
+      ],
+      "familiarity": [
+        "medium",
+        "high",
+        "high"
+      ],
+      "research_styles": [
+        "joins the waitlist first, asks questions later"
+      ],
+      "buying_triggers": [
+        "being first among friends to try it"
+      ],
+      "dealbreaker_pool": [
+        "takes too much time to see value",
+        "poor or missing reviews",
+        "unclear pricing",
+        "not mobile friendly",
+        "can't cancel anytime"
+      ],
+      "traits": {
+        "price_sensitivity": {
+          "mean": 0.58,
+          "std": 0.14,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "skepticism": {
+          "mean": 0.45,
+          "std": 0.14,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "novelty_seeking": {
+          "mean": 0.9,
+          "std": 0.06,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "brand_trust": {
+          "mean": 0.5,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "social_influence": {
+          "mean": 0.72,
+          "std": 0.1,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "risk_tolerance": {
+          "mean": 0.72,
+          "std": 0.1,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "privacy_sensitivity": {
+          "mean": 0.38,
+          "std": 0.14,
+          "evidence": {
+            "status": "unverified"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,419 @@
+{
+  "preset": "us_smb",
+  "version": 1,
+  "trait_definitions": {
+    "price_sensitivity": "0.9 ≈ abandons purchase at +10% price delta; 0.5 ≈ tolerates +30%; 0.1 ≈ price-indifferent within budget",
+    "skepticism": "0.9 ≈ demands independent evidence before believing any claim; 0.5 ≈ accepts credible-sounding claims; 0.1 ≈ takes marketing at face value",
+    "novelty_seeking": "0.9 ≈ tries new products in the category within a week of hearing about them; 0.5 ≈ waits for reviews; 0.1 ≈ adopts only when forced",
+    "brand_trust": "0.9 ≈ defaults to trusting established brands; 0.5 ≈ neutral; 0.1 ≈ distrusts brand claims by default",
+    "social_influence": "0.9 ≈ buying decisions driven mostly by peers/community; 0.5 ≈ considers recommendations; 0.1 ≈ decides alone",
+    "risk_tolerance": "0.9 ≈ comfortable being an early customer of an unproven vendor; 0.5 ≈ prefers references; 0.1 ≈ needs de-risked, established options",
+    "privacy_sensitivity": "0.9 ≈ walks away from unclear data handling; 0.5 ≈ prefers but doesn't require clarity; 0.1 ≈ indifferent to data practices"
+  },
+  "sub_segments": [
+    {
+      "name": "US solo founder / owner-operator",
+      "weight": 0.3,
+      "age_range": [
+        27,
+        55
+      ],
+      "regions": [
+        "US — Sun Belt metro",
+        "US — Midwest city",
+        "US — remote/rural",
+        "US — coastal metro"
+      ],
+      "income_bands": [
+        [
+          "bootstrapped, tight tooling budget",
+          [
+            50,
+            250
+          ]
+        ],
+        [
+          "profitable owner-operator",
+          [
+            100,
+            400
+          ]
+        ]
+      ],
+      "occupations": [
+        "ecommerce store owner",
+        "agency of one",
+        "local services owner",
+        "indie SaaS founder"
+      ],
+      "familiarity": [
+        "medium",
+        "medium",
+        "high"
+      ],
+      "research_styles": [
+        "googles alternatives, reads G2 and one Reddit thread, decides same day",
+        "asks their founder Slack/Discord what's worked"
+      ],
+      "buying_triggers": [
+        "obvious ROI they can compute on a napkin",
+        "a 10-minute setup that replaces a manual chore"
+      ],
+      "dealbreaker_pool": [
+        "unclear pricing",
+        "subscription lock-in",
+        "no proof that it works",
+        "no free trial",
+        "hidden fees",
+        "yet another tool for the team to manage",
+        "no responsive human support",
+        "overkill for my simple needs"
+      ],
+      "traits": {
+        "price_sensitivity": {
+          "mean": 0.66,
+          "std": 0.14,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "skepticism": {
+          "mean": 0.7,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "novelty_seeking": {
+          "mean": 0.55,
+          "std": 0.14,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "brand_trust": {
+          "mean": 0.45,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "social_influence": {
+          "mean": 0.48,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "risk_tolerance": {
+          "mean": 0.58,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "privacy_sensitivity": {
+          "mean": 0.5,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        }
+      }
+    },
+    {
+      "name": "US SMB operations manager (10-50 employees)",
+      "weight": 0.3,
+      "age_range": [
+        28,
+        50
+      ],
+      "regions": [
+        "US — Midwest city",
+        "US — Texas metro",
+        "US — Southeast metro"
+      ],
+      "income_bands": [
+        [
+          "department budget holder",
+          [
+            100,
+            600
+          ]
+        ]
+      ],
+      "occupations": [
+        "operations manager",
+        "office manager",
+        "customer success lead"
+      ],
+      "familiarity": [
+        "medium",
+        "medium",
+        "high"
+      ],
+      "research_styles": [
+        "shortlists 3 vendors, books demos, checks references",
+        "reads case studies and asks 'who else our size uses this'"
+      ],
+      "buying_triggers": [
+        "a peer company they respect already uses it",
+        "clear migration path from the current spreadsheet mess"
+      ],
+      "dealbreaker_pool": [
+        "no case studies from companies like ours",
+        "long or complicated onboarding",
+        "yet another tool for the team to manage",
+        "doesn't fit tools we already use",
+        "unclear pricing",
+        "no responsive human support",
+        "vendor lock-in / hard data export"
+      ],
+      "traits": {
+        "price_sensitivity": {
+          "mean": 0.58,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "skepticism": {
+          "mean": 0.64,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "novelty_seeking": {
+          "mean": 0.45,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "brand_trust": {
+          "mean": 0.52,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "social_influence": {
+          "mean": 0.5,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "risk_tolerance": {
+          "mean": 0.42,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "privacy_sensitivity": {
+          "mean": 0.55,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        }
+      }
+    },
+    {
+      "name": "US agency marketing lead buying for clients",
+      "weight": 0.2,
+      "age_range": [
+        26,
+        45
+      ],
+      "regions": [
+        "US — coastal metro",
+        "US — remote"
+      ],
+      "income_bands": [
+        [
+          "agency tooling budget",
+          [
+            150,
+            800
+          ]
+        ]
+      ],
+      "occupations": [
+        "digital agency account lead",
+        "performance marketer",
+        "SEO lead"
+      ],
+      "familiarity": [
+        "high",
+        "high",
+        "medium"
+      ],
+      "research_styles": [
+        "runs a 2-week bake-off against the current stack on one client"
+      ],
+      "buying_triggers": [
+        "billable margin: can they charge clients more than it costs",
+        "white-label or multi-client support"
+      ],
+      "dealbreaker_pool": [
+        "unclear pricing",
+        "no proof that it works",
+        "AI hype without concrete specifics",
+        "doesn't fit tools we already use",
+        "subscription lock-in",
+        "poor or missing reviews"
+      ],
+      "traits": {
+        "price_sensitivity": {
+          "mean": 0.52,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "skepticism": {
+          "mean": 0.68,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "novelty_seeking": {
+          "mean": 0.66,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "brand_trust": {
+          "mean": 0.48,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "social_influence": {
+          "mean": 0.6,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "risk_tolerance": {
+          "mean": 0.55,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "privacy_sensitivity": {
+          "mean": 0.45,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        }
+      }
+    },
+    {
+      "name": "US SMB IT decision maker (security-minded)",
+      "weight": 0.2,
+      "age_range": [
+        30,
+        58
+      ],
+      "regions": [
+        "US — Midwest city",
+        "US — Northeast metro"
+      ],
+      "income_bands": [
+        [
+          "IT budget line",
+          [
+            200,
+            1000
+          ]
+        ]
+      ],
+      "occupations": [
+        "IT manager",
+        "sysadmin who owns purchasing",
+        "fractional CTO"
+      ],
+      "familiarity": [
+        "medium",
+        "high",
+        "high"
+      ],
+      "research_styles": [
+        "reads security docs first; no SOC2 page, no meeting"
+      ],
+      "buying_triggers": [
+        "passes security review without email ping-pong",
+        "SSO + admin controls out of the box"
+      ],
+      "dealbreaker_pool": [
+        "no SSO / security documentation",
+        "compliance posture unknown (SOC2/GDPR)",
+        "vague about what happens to my data",
+        "vendor lock-in / hard data export",
+        "no responsive human support",
+        "no case studies from companies like ours"
+      ],
+      "traits": {
+        "price_sensitivity": {
+          "mean": 0.48,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "skepticism": {
+          "mean": 0.78,
+          "std": 0.1,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "novelty_seeking": {
+          "mean": 0.4,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "brand_trust": {
+          "mean": 0.5,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "social_influence": {
+          "mean": 0.38,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "risk_tolerance": {
+          "mean": 0.3,
+          "std": 0.1,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "privacy_sensitivity": {
+          "mean": 0.78,
+          "std": 0.1,
+          "evidence": {
+            "status": "unverified"
+          }
+        }
+      }
+    }
+  ]
+}

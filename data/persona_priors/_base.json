@@ -1,0 +1,64 @@
+{
+  "preset": "_base",
+  "version": 1,
+  "trait_definitions": {
+    "price_sensitivity": "0.9 ≈ abandons purchase at +10% price delta; 0.5 ≈ tolerates +30%; 0.1 ≈ price-indifferent within budget",
+    "skepticism": "0.9 ≈ demands independent evidence before believing any claim; 0.5 ≈ accepts credible-sounding claims; 0.1 ≈ takes marketing at face value",
+    "novelty_seeking": "0.9 ≈ tries new products in the category within a week of hearing about them; 0.5 ≈ waits for reviews; 0.1 ≈ adopts only when forced",
+    "brand_trust": "0.9 ≈ defaults to trusting established brands; 0.5 ≈ neutral; 0.1 ≈ distrusts brand claims by default",
+    "social_influence": "0.9 ≈ buying decisions driven mostly by peers/community; 0.5 ≈ considers recommendations; 0.1 ≈ decides alone",
+    "risk_tolerance": "0.9 ≈ comfortable being an early customer of an unproven vendor; 0.5 ≈ prefers references; 0.1 ≈ needs de-risked, established options",
+    "privacy_sensitivity": "0.9 ≈ walks away from unclear data handling; 0.5 ≈ prefers but doesn't require clarity; 0.1 ≈ indifferent to data practices"
+  },
+  "base_traits": {
+    "price_sensitivity": {
+      "mean": 0.6,
+      "std": 0.15,
+      "evidence": {
+        "status": "unverified"
+      }
+    },
+    "skepticism": {
+      "mean": 0.6,
+      "std": 0.14,
+      "evidence": {
+        "status": "unverified"
+      }
+    },
+    "novelty_seeking": {
+      "mean": 0.55,
+      "std": 0.15,
+      "evidence": {
+        "status": "unverified"
+      }
+    },
+    "brand_trust": {
+      "mean": 0.48,
+      "std": 0.13,
+      "evidence": {
+        "status": "unverified"
+      }
+    },
+    "social_influence": {
+      "mean": 0.55,
+      "std": 0.14,
+      "evidence": {
+        "status": "unverified"
+      }
+    },
+    "risk_tolerance": {
+      "mean": 0.45,
+      "std": 0.14,
+      "evidence": {
+        "status": "unverified"
+      }
+    },
+    "privacy_sensitivity": {
+      "mean": 0.55,
+      "std": 0.14,
+      "evidence": {
+        "status": "unverified"
+      }
+    }
+  }
+}

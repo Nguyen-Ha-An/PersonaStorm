@@ -1,0 +1,405 @@
+{
+  "preset": "enterprise",
+  "version": 1,
+  "trait_definitions": {
+    "price_sensitivity": "0.9 ≈ abandons purchase at +10% price delta; 0.5 ≈ tolerates +30%; 0.1 ≈ price-indifferent within budget",
+    "skepticism": "0.9 ≈ demands independent evidence before believing any claim; 0.5 ≈ accepts credible-sounding claims; 0.1 ≈ takes marketing at face value",
+    "novelty_seeking": "0.9 ≈ tries new products in the category within a week of hearing about them; 0.5 ≈ waits for reviews; 0.1 ≈ adopts only when forced",
+    "brand_trust": "0.9 ≈ defaults to trusting established brands; 0.5 ≈ neutral; 0.1 ≈ distrusts brand claims by default",
+    "social_influence": "0.9 ≈ buying decisions driven mostly by peers/community; 0.5 ≈ considers recommendations; 0.1 ≈ decides alone",
+    "risk_tolerance": "0.9 ≈ comfortable being an early customer of an unproven vendor; 0.5 ≈ prefers references; 0.1 ≈ needs de-risked, established options",
+    "privacy_sensitivity": "0.9 ≈ walks away from unclear data handling; 0.5 ≈ prefers but doesn't require clarity; 0.1 ≈ indifferent to data practices"
+  },
+  "sub_segments": [
+    {
+      "name": "Enterprise procurement / finance gatekeeper",
+      "weight": 0.25,
+      "age_range": [
+        32,
+        58
+      ],
+      "regions": [
+        "US — Northeast metro",
+        "UK — London",
+        "Germany — Frankfurt",
+        "Singapore"
+      ],
+      "income_bands": [
+        [
+          "controls six-figure budgets",
+          [
+            500,
+            5000
+          ]
+        ]
+      ],
+      "occupations": [
+        "procurement manager",
+        "finance controller",
+        "vendor manager"
+      ],
+      "familiarity": [
+        "medium",
+        "medium",
+        "high"
+      ],
+      "research_styles": [
+        "RFP, references from 2 comparable enterprises, legal review"
+      ],
+      "buying_triggers": [
+        "passes vendor risk assessment and shows TCO advantage",
+        "an exec sponsor pushing + references check out"
+      ],
+      "dealbreaker_pool": [
+        "compliance posture unknown (SOC2/GDPR)",
+        "no SSO / security documentation",
+        "no case studies from companies like ours",
+        "vendor lock-in / hard data export",
+        "unclear pricing",
+        "no responsive human support"
+      ],
+      "traits": {
+        "price_sensitivity": {
+          "mean": 0.62,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "skepticism": {
+          "mean": 0.8,
+          "std": 0.08,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "novelty_seeking": {
+          "mean": 0.28,
+          "std": 0.1,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "brand_trust": {
+          "mean": 0.55,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "social_influence": {
+          "mean": 0.35,
+          "std": 0.1,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "risk_tolerance": {
+          "mean": 0.22,
+          "std": 0.08,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "privacy_sensitivity": {
+          "mean": 0.7,
+          "std": 0.1,
+          "evidence": {
+            "status": "unverified"
+          }
+        }
+      }
+    },
+    {
+      "name": "Enterprise security & compliance officer",
+      "weight": 0.25,
+      "age_range": [
+        34,
+        58
+      ],
+      "regions": [
+        "US — Northeast metro",
+        "US — Texas metro",
+        "EU — Netherlands"
+      ],
+      "income_bands": [
+        [
+          "veto power, no budget",
+          [
+            300,
+            3000
+          ]
+        ]
+      ],
+      "occupations": [
+        "CISO office lead",
+        "GRC manager",
+        "data protection officer"
+      ],
+      "familiarity": [
+        "medium",
+        "high",
+        "high"
+      ],
+      "research_styles": [
+        "reads the DPA, pen-test summary and data-flow diagram before anything else"
+      ],
+      "buying_triggers": [
+        "clean security architecture + evidence, not marketing claims"
+      ],
+      "dealbreaker_pool": [
+        "no SSO / security documentation",
+        "compliance posture unknown (SOC2/GDPR)",
+        "vague about what happens to my data",
+        "AI hype without concrete specifics",
+        "vendor lock-in / hard data export"
+      ],
+      "traits": {
+        "price_sensitivity": {
+          "mean": 0.4,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "skepticism": {
+          "mean": 0.88,
+          "std": 0.06,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "novelty_seeking": {
+          "mean": 0.25,
+          "std": 0.1,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "brand_trust": {
+          "mean": 0.45,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "social_influence": {
+          "mean": 0.3,
+          "std": 0.1,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "risk_tolerance": {
+          "mean": 0.15,
+          "std": 0.07,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "privacy_sensitivity": {
+          "mean": 0.9,
+          "std": 0.06,
+          "evidence": {
+            "status": "unverified"
+          }
+        }
+      }
+    },
+    {
+      "name": "Enterprise line-of-business VP under KPI pressure",
+      "weight": 0.3,
+      "age_range": [
+        35,
+        55
+      ],
+      "regions": [
+        "US — coastal metro",
+        "US — Midwest HQ",
+        "UK — London"
+      ],
+      "income_bands": [
+        [
+          "owns P&L",
+          [
+            1000,
+            8000
+          ]
+        ]
+      ],
+      "occupations": [
+        "VP of sales ops",
+        "VP of customer experience",
+        "supply chain director"
+      ],
+      "familiarity": [
+        "medium",
+        "medium",
+        "high"
+      ],
+      "research_styles": [
+        "asks 'which of my peers deployed this and what moved'"
+      ],
+      "buying_triggers": [
+        "credible impact on their KPI this fiscal year",
+        "pilot that IT and security won't block"
+      ],
+      "dealbreaker_pool": [
+        "no case studies from companies like ours",
+        "no proof that it works",
+        "long or complicated onboarding",
+        "doesn't fit tools we already use",
+        "yet another tool for the team to manage",
+        "AI hype without concrete specifics"
+      ],
+      "traits": {
+        "price_sensitivity": {
+          "mean": 0.38,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "skepticism": {
+          "mean": 0.62,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "novelty_seeking": {
+          "mean": 0.5,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "brand_trust": {
+          "mean": 0.58,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "social_influence": {
+          "mean": 0.48,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "risk_tolerance": {
+          "mean": 0.42,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "privacy_sensitivity": {
+          "mean": 0.55,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        }
+      }
+    },
+    {
+      "name": "Enterprise innovation team lead (budgeted experimenter)",
+      "weight": 0.2,
+      "age_range": [
+        28,
+        45
+      ],
+      "regions": [
+        "US — coastal metro",
+        "Singapore",
+        "UAE — Dubai"
+      ],
+      "income_bands": [
+        [
+          "innovation budget",
+          [
+            500,
+            4000
+          ]
+        ]
+      ],
+      "occupations": [
+        "innovation lead",
+        "digital transformation manager",
+        "enterprise architect"
+      ],
+      "familiarity": [
+        "high",
+        "high",
+        "medium"
+      ],
+      "research_styles": [
+        "runs structured pilots; needs a measurable before/after"
+      ],
+      "buying_triggers": [
+        "novel capability they can demo to leadership",
+        "vendor collaborative enough to co-build a pilot"
+      ],
+      "dealbreaker_pool": [
+        "AI hype without concrete specifics",
+        "no proof that it works",
+        "no SSO / security documentation",
+        "vendor lock-in / hard data export",
+        "long or complicated onboarding"
+      ],
+      "traits": {
+        "price_sensitivity": {
+          "mean": 0.35,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "skepticism": {
+          "mean": 0.55,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "novelty_seeking": {
+          "mean": 0.78,
+          "std": 0.1,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "brand_trust": {
+          "mean": 0.5,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "social_influence": {
+          "mean": 0.55,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "risk_tolerance": {
+          "mean": 0.6,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "privacy_sensitivity": {
+          "mean": 0.58,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        }
+      }
+    }
+  ]
+}

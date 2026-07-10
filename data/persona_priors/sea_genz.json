@@ -1,0 +1,431 @@
+{
+  "preset": "sea_genz",
+  "version": 1,
+  "trait_definitions": {
+    "price_sensitivity": "0.9 ≈ abandons purchase at +10% price delta; 0.5 ≈ tolerates +30%; 0.1 ≈ price-indifferent within budget",
+    "skepticism": "0.9 ≈ demands independent evidence before believing any claim; 0.5 ≈ accepts credible-sounding claims; 0.1 ≈ takes marketing at face value",
+    "novelty_seeking": "0.9 ≈ tries new products in the category within a week of hearing about them; 0.5 ≈ waits for reviews; 0.1 ≈ adopts only when forced",
+    "brand_trust": "0.9 ≈ defaults to trusting established brands; 0.5 ≈ neutral; 0.1 ≈ distrusts brand claims by default",
+    "social_influence": "0.9 ≈ buying decisions driven mostly by peers/community; 0.5 ≈ considers recommendations; 0.1 ≈ decides alone",
+    "risk_tolerance": "0.9 ≈ comfortable being an early customer of an unproven vendor; 0.5 ≈ prefers references; 0.1 ≈ needs de-risked, established options",
+    "privacy_sensitivity": "0.9 ≈ walks away from unclear data handling; 0.5 ≈ prefers but doesn't require clarity; 0.1 ≈ indifferent to data practices"
+  },
+  "sub_segments": [
+    {
+      "name": "SEA Gen Z budget-conscious student (high-school & college)",
+      "weight": 0.35,
+      "age_range": [
+        16,
+        23
+      ],
+      "regions": [
+        "Vietnam urban",
+        "Philippines urban",
+        "Indonesia urban",
+        "Thailand urban"
+      ],
+      "income_bands": [
+        [
+          "student / family supported",
+          [
+            5,
+            25
+          ]
+        ],
+        [
+          "part-time income",
+          [
+            10,
+            40
+          ]
+        ]
+      ],
+      "occupations": [
+        "university student",
+        "student + part-time barista",
+        "student + online seller"
+      ],
+      "familiarity": [
+        "low",
+        "medium",
+        "medium"
+      ],
+      "research_styles": [
+        "checks TikTok, friends, and reviews before buying",
+        "searches Facebook groups and asks classmates first",
+        "watches a YouTube review, then looks for a promo code"
+      ],
+      "buying_triggers": [
+        "recommended by friends or seen repeatedly on social media",
+        "a student discount or a real free tier",
+        "a creator they follow shows an actual result"
+      ],
+      "dealbreaker_pool": [
+        "unclear pricing",
+        "subscription lock-in",
+        "feels too corporate",
+        "no proof that it works",
+        "requires credit card upfront",
+        "no local payment options (momo/gcash/bank transfer)",
+        "not mobile friendly",
+        "hidden fees"
+      ],
+      "traits": {
+        "price_sensitivity": {
+          "mean": 0.86,
+          "std": 0.08,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "skepticism": {
+          "mean": 0.66,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "novelty_seeking": {
+          "mean": 0.62,
+          "std": 0.14,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "brand_trust": {
+          "mean": 0.38,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "social_influence": {
+          "mean": 0.78,
+          "std": 0.1,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "risk_tolerance": {
+          "mean": 0.45,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "privacy_sensitivity": {
+          "mean": 0.55,
+          "std": 0.14,
+          "evidence": {
+            "status": "unverified"
+          }
+        }
+      }
+    },
+    {
+      "name": "SEA Gen Z gig worker / online seller",
+      "weight": 0.25,
+      "age_range": [
+        19,
+        26
+      ],
+      "regions": [
+        "Vietnam urban",
+        "Indonesia urban",
+        "Philippines provincial",
+        "Malaysia urban"
+      ],
+      "income_bands": [
+        [
+          "gig income, variable",
+          [
+            10,
+            45
+          ]
+        ]
+      ],
+      "occupations": [
+        "ride-hailing driver + reseller",
+        "freelance designer",
+        "TikTok shop seller",
+        "delivery rider"
+      ],
+      "familiarity": [
+        "low",
+        "medium",
+        "medium",
+        "high"
+      ],
+      "research_styles": [
+        "asks seller communities on Zalo/WhatsApp what they actually use",
+        "tries the free version for a week during real orders"
+      ],
+      "buying_triggers": [
+        "clear proof it increases orders or saves an hour a day",
+        "other sellers in their group chat swear by it"
+      ],
+      "dealbreaker_pool": [
+        "unclear pricing",
+        "no local payment options (momo/gcash/bank transfer)",
+        "no proof that it works",
+        "takes too much time to see value",
+        "not mobile friendly",
+        "can't cancel anytime",
+        "hidden fees",
+        "no responsive human support"
+      ],
+      "traits": {
+        "price_sensitivity": {
+          "mean": 0.8,
+          "std": 0.1,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "skepticism": {
+          "mean": 0.62,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "novelty_seeking": {
+          "mean": 0.58,
+          "std": 0.14,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "brand_trust": {
+          "mean": 0.42,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "social_influence": {
+          "mean": 0.7,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "risk_tolerance": {
+          "mean": 0.55,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "privacy_sensitivity": {
+          "mean": 0.48,
+          "std": 0.14,
+          "evidence": {
+            "status": "unverified"
+          }
+        }
+      }
+    },
+    {
+      "name": "SEA Gen Z first-jobber in tech-adjacent role",
+      "weight": 0.25,
+      "age_range": [
+        21,
+        27
+      ],
+      "regions": [
+        "Ho Chi Minh City",
+        "Jakarta",
+        "Manila",
+        "Bangkok",
+        "Singapore"
+      ],
+      "income_bands": [
+        [
+          "junior salary",
+          [
+            20,
+            80
+          ]
+        ]
+      ],
+      "occupations": [
+        "junior marketer",
+        "ops assistant",
+        "junior developer",
+        "customer support agent"
+      ],
+      "familiarity": [
+        "medium",
+        "medium",
+        "high"
+      ],
+      "research_styles": [
+        "reads a comparison blog post, then asks a senior colleague",
+        "lurks Reddit and local dev/marketing communities"
+      ],
+      "buying_triggers": [
+        "makes them look good at work within the first week",
+        "free tier good enough to show the boss a result"
+      ],
+      "dealbreaker_pool": [
+        "unclear pricing",
+        "no free trial",
+        "AI hype without concrete specifics",
+        "no proof that it works",
+        "long or complicated onboarding",
+        "requires credit card upfront",
+        "poor or missing reviews"
+      ],
+      "traits": {
+        "price_sensitivity": {
+          "mean": 0.68,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "skepticism": {
+          "mean": 0.58,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "novelty_seeking": {
+          "mean": 0.7,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "brand_trust": {
+          "mean": 0.48,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "social_influence": {
+          "mean": 0.66,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "risk_tolerance": {
+          "mean": 0.55,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "privacy_sensitivity": {
+          "mean": 0.52,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        }
+      }
+    },
+    {
+      "name": "SEA Gen Z campus creator / side-hustler",
+      "weight": 0.15,
+      "age_range": [
+        18,
+        24
+      ],
+      "regions": [
+        "Vietnam urban",
+        "Philippines urban",
+        "Indonesia urban"
+      ],
+      "income_bands": [
+        [
+          "creator income, spiky",
+          [
+            15,
+            60
+          ]
+        ]
+      ],
+      "occupations": [
+        "student content creator",
+        "micro-influencer",
+        "esports streamer"
+      ],
+      "familiarity": [
+        "medium",
+        "high",
+        "high"
+      ],
+      "research_styles": [
+        "tries whatever creators they admire are using this month"
+      ],
+      "buying_triggers": [
+        "could visibly level up their content this week",
+        "early-adopter clout in their niche"
+      ],
+      "dealbreaker_pool": [
+        "unclear pricing",
+        "not mobile friendly",
+        "takes too much time to see value",
+        "AI hype without concrete specifics",
+        "can't cancel anytime",
+        "no local payment options (momo/gcash/bank transfer)"
+      ],
+      "traits": {
+        "price_sensitivity": {
+          "mean": 0.72,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "skepticism": {
+          "mean": 0.52,
+          "std": 0.14,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "novelty_seeking": {
+          "mean": 0.82,
+          "std": 0.1,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "brand_trust": {
+          "mean": 0.45,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "social_influence": {
+          "mean": 0.85,
+          "std": 0.08,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "risk_tolerance": {
+          "mean": 0.65,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "privacy_sensitivity": {
+          "mean": 0.42,
+          "std": 0.14,
+          "evidence": {
+            "status": "unverified"
+          }
+        }
+      }
+    }
+  ]
+}

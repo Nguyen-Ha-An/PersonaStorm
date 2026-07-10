@@ -442,7 +442,7 @@ const REGION_HINTS: [Set<string>, string[]][] = [
   [new Set(["us", "usa", "american", "america"]), ["US — coastal metro", "US — Midwest city", "US — Sun Belt metro"]],
 ];
 
-const BASE_TRAITS: Record<string, Trait> = {
+export const BASE_TRAITS: Record<string, Trait> = {
   price_sensitivity: T(0.6, 0.15), skepticism: T(0.6, 0.14), novelty_seeking: T(0.55, 0.15),
   brand_trust: T(0.48, 0.13), social_influence: T(0.55, 0.14), risk_tolerance: T(0.45, 0.14),
   privacy_sensitivity: T(0.55, 0.14),

@@ -1,0 +1,419 @@
+{
+  "preset": "parents",
+  "version": 1,
+  "trait_definitions": {
+    "price_sensitivity": "0.9 ≈ abandons purchase at +10% price delta; 0.5 ≈ tolerates +30%; 0.1 ≈ price-indifferent within budget",
+    "skepticism": "0.9 ≈ demands independent evidence before believing any claim; 0.5 ≈ accepts credible-sounding claims; 0.1 ≈ takes marketing at face value",
+    "novelty_seeking": "0.9 ≈ tries new products in the category within a week of hearing about them; 0.5 ≈ waits for reviews; 0.1 ≈ adopts only when forced",
+    "brand_trust": "0.9 ≈ defaults to trusting established brands; 0.5 ≈ neutral; 0.1 ≈ distrusts brand claims by default",
+    "social_influence": "0.9 ≈ buying decisions driven mostly by peers/community; 0.5 ≈ considers recommendations; 0.1 ≈ decides alone",
+    "risk_tolerance": "0.9 ≈ comfortable being an early customer of an unproven vendor; 0.5 ≈ prefers references; 0.1 ≈ needs de-risked, established options",
+    "privacy_sensitivity": "0.9 ≈ walks away from unclear data handling; 0.5 ≈ prefers but doesn't require clarity; 0.1 ≈ indifferent to data practices"
+  },
+  "sub_segments": [
+    {
+      "name": "New parent (kids 0-3), sleep-deprived pragmatist",
+      "weight": 0.3,
+      "age_range": [
+        26,
+        40
+      ],
+      "regions": [
+        "US suburb",
+        "UK suburb",
+        "Australia metro",
+        "Canada suburb"
+      ],
+      "income_bands": [
+        [
+          "single income while on leave",
+          [
+            20,
+            100
+          ]
+        ],
+        [
+          "dual income, new expenses",
+          [
+            40,
+            150
+          ]
+        ]
+      ],
+      "occupations": [
+        "parent on leave",
+        "nurse",
+        "teacher",
+        "accountant"
+      ],
+      "familiarity": [
+        "low",
+        "low",
+        "medium"
+      ],
+      "research_styles": [
+        "asks the parents' group chat, reads 3 reviews at 2am"
+      ],
+      "buying_triggers": [
+        "another parent says it actually saved them time or sleep",
+        "easy returns / cancel anytime"
+      ],
+      "dealbreaker_pool": [
+        "not clearly safe for kids",
+        "vague about what happens to my data",
+        "can't cancel anytime",
+        "takes too much time to see value",
+        "hidden fees",
+        "no proof that it works",
+        "long or complicated onboarding"
+      ],
+      "traits": {
+        "price_sensitivity": {
+          "mean": 0.62,
+          "std": 0.14,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "skepticism": {
+          "mean": 0.6,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "novelty_seeking": {
+          "mean": 0.38,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "brand_trust": {
+          "mean": 0.55,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "social_influence": {
+          "mean": 0.68,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "risk_tolerance": {
+          "mean": 0.3,
+          "std": 0.1,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "privacy_sensitivity": {
+          "mean": 0.72,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        }
+      }
+    },
+    {
+      "name": "School-age parent juggling schedules",
+      "weight": 0.3,
+      "age_range": [
+        32,
+        48
+      ],
+      "regions": [
+        "US suburb",
+        "US — Texas metro",
+        "UK suburb"
+      ],
+      "income_bands": [
+        [
+          "household budgeter",
+          [
+            30,
+            150
+          ]
+        ]
+      ],
+      "occupations": [
+        "project manager",
+        "retail manager",
+        "small business owner",
+        "teacher"
+      ],
+      "familiarity": [
+        "low",
+        "medium",
+        "medium"
+      ],
+      "research_styles": [
+        "compares 2-3 options on the weekend, asks spouse before buying"
+      ],
+      "buying_triggers": [
+        "visibly removes a weekly friction (carpool, homework, meals)",
+        "school or other parents already use it"
+      ],
+      "dealbreaker_pool": [
+        "takes too much time to see value",
+        "not clearly safe for kids",
+        "subscription lock-in",
+        "unclear pricing",
+        "yet another tool for the team to manage",
+        "not mobile friendly"
+      ],
+      "traits": {
+        "price_sensitivity": {
+          "mean": 0.58,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "skepticism": {
+          "mean": 0.56,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "novelty_seeking": {
+          "mean": 0.42,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "brand_trust": {
+          "mean": 0.58,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "social_influence": {
+          "mean": 0.62,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "risk_tolerance": {
+          "mean": 0.38,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "privacy_sensitivity": {
+          "mean": 0.66,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        }
+      }
+    },
+    {
+      "name": "Budget-focused single parent",
+      "weight": 0.2,
+      "age_range": [
+        24,
+        45
+      ],
+      "regions": [
+        "US — Midwest city",
+        "US — Southeast metro",
+        "UK city"
+      ],
+      "income_bands": [
+        [
+          "every dollar counted",
+          [
+            10,
+            60
+          ]
+        ]
+      ],
+      "occupations": [
+        "healthcare aide",
+        "administrative assistant",
+        "gig worker"
+      ],
+      "familiarity": [
+        "low",
+        "low",
+        "medium"
+      ],
+      "research_styles": [
+        "hunts for the free alternative first, always"
+      ],
+      "buying_triggers": [
+        "a real free tier that stays free",
+        "pays for itself within the month, provably"
+      ],
+      "dealbreaker_pool": [
+        "unclear pricing",
+        "requires credit card upfront",
+        "hidden fees",
+        "can't cancel anytime",
+        "subscription lock-in",
+        "no proof that it works"
+      ],
+      "traits": {
+        "price_sensitivity": {
+          "mean": 0.88,
+          "std": 0.08,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "skepticism": {
+          "mean": 0.68,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "novelty_seeking": {
+          "mean": 0.35,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "brand_trust": {
+          "mean": 0.45,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "social_influence": {
+          "mean": 0.58,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "risk_tolerance": {
+          "mean": 0.25,
+          "std": 0.1,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "privacy_sensitivity": {
+          "mean": 0.62,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        }
+      }
+    },
+    {
+      "name": "Dual-income convenience-seeking parent",
+      "weight": 0.2,
+      "age_range": [
+        30,
+        46
+      ],
+      "regions": [
+        "US — coastal metro",
+        "Singapore",
+        "Australia metro"
+      ],
+      "income_bands": [
+        [
+          "time-poor, cash-flexible",
+          [
+            60,
+            250
+          ]
+        ]
+      ],
+      "occupations": [
+        "consultant",
+        "software engineer",
+        "physician",
+        "lawyer"
+      ],
+      "familiarity": [
+        "medium",
+        "medium",
+        "high"
+      ],
+      "research_styles": [
+        "skims premium reviews; buys fast if it looks polished and safe"
+      ],
+      "buying_triggers": [
+        "saves an hour a week with zero setup drama",
+        "premium feel + strong privacy stance"
+      ],
+      "dealbreaker_pool": [
+        "takes too much time to see value",
+        "vague about what happens to my data",
+        "not clearly safe for kids",
+        "no responsive human support",
+        "long or complicated onboarding",
+        "poor or missing reviews"
+      ],
+      "traits": {
+        "price_sensitivity": {
+          "mean": 0.35,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "skepticism": {
+          "mean": 0.55,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "novelty_seeking": {
+          "mean": 0.55,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "brand_trust": {
+          "mean": 0.6,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "social_influence": {
+          "mean": 0.52,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "risk_tolerance": {
+          "mean": 0.48,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        },
+        "privacy_sensitivity": {
+          "mean": 0.68,
+          "std": 0.12,
+          "evidence": {
+            "status": "unverified"
+          }
+        }
+      }
+    }
+  ]
+}

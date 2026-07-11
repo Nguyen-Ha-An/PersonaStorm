@@ -7,7 +7,7 @@
  */
 import { RNG } from "../rng";
 import { round } from "../text";
-import { chatCompletion, extractJsonObject, isTransientChatError } from "../providers/chatClient";
+import { chatCompletion, extractJsonObject } from "../providers/chatClient";
 import { buildSemanticSystemPrompt, buildSemanticUserPrompt, SEMANTIC_JSON_SCHEMA, type SegmentBrief } from "./prompt";
 import { GROUNDED_CRITERIA, sanitizeSemantic, type SemanticMatrix, type SemanticSource } from "./types";
 import type { ServerConfig } from "../../env";
@@ -81,6 +81,8 @@ export class LlmSemanticAssessor implements SemanticAssessor {
   }
 
   private call(messages: { role: "system" | "user" | "assistant"; content: string }[]): Promise<string> {
+    // All throws (transient or terminal) are handled identically by the outer
+    // try/catch in assess(), which degrades to a fallback_formulas matrix.
     return chatCompletion({
       baseUrl: this.baseUrl,
       apiKey: this.apiKey,
@@ -90,10 +92,6 @@ export class LlmSemanticAssessor implements SemanticAssessor {
       temperature: 0,
       jsonObject: true,
       timeoutMs: 60_000,
-    }).catch((e) => {
-      // surface transient vs terminal identically to the caller (both → fallback)
-      if (isTransientChatError(e)) throw e;
-      throw e;
     });
   }
 }

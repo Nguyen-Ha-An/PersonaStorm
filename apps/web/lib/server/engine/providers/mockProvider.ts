@@ -16,9 +16,13 @@ import { classifyCategory, isHighRisk } from "../criteria/classifier";
 import { resolvePreset } from "../criteria/presets";
 import { CORE_IDS, effective } from "../criteria/registry";
 import { computeMarketFit, type MarketFitBreakdown } from "../criteria/scoring";
+import { GROUNDED_CRITERIA, type SemanticMatrix } from "../semantic/types";
 import { parseStimulus, anchorSet, type StimulusFeatures } from "../stimulusParser";
 import { statusFor, type Persona, type PersonaReaction, type Qualitative, type ReactionStatus } from "../types";
 import { reactBatchDefault, type PersonaInferenceProvider } from "./types";
+
+/** Grounded-criteria semantic blend weight (spec §7): core = w·semantic + (1-w)·formula. */
+export const SEMANTIC_BLEND_WEIGHT = 0.7;
 
 const OBJECTION_TEMPLATES: Record<string, string[]> = {
   pricing_unclear: [
@@ -198,6 +202,7 @@ export class MockPersonaProvider implements PersonaInferenceProvider {
     stimulusType: string,
     features: StimulusFeatures | null,
     category: string | null,
+    semantic: SemanticMatrix | null = null,
   ): Promise<PersonaReaction> {
     const f = features ?? parseStimulus(stimulus, "", stimulusType);
     const stimHash = fnvHex(stimulus);
@@ -208,7 +213,7 @@ export class MockPersonaProvider implements PersonaInferenceProvider {
 
     const jitterOffsets = computeJitterOffsets(this.seed, persona.persona_id);
 
-    const { core, overlay } = this.scoreCriteria(persona, f, cat, rng, jitterOffsets);
+    const { core, overlay } = this.scoreCriteria(persona, f, cat, rng, jitterOffsets, semantic);
 
     const breakdown = computeMarketFit(core, overlay, cat, persona.life_stage, {
       isHighRisk: highRisk,
@@ -256,8 +261,9 @@ export class MockPersonaProvider implements PersonaInferenceProvider {
     features: StimulusFeatures | null,
     concurrency: number,
     category: string | null,
+    semantic: SemanticMatrix | null = null,
   ): Promise<PersonaReaction[]> {
-    return reactBatchDefault(this, personas, stimulus, stimulusType, features, concurrency, category);
+    return reactBatchDefault(this, personas, stimulus, stimulusType, features, concurrency, category, semantic);
   }
 
   // ------------------------------------------------------------- criteria
@@ -267,6 +273,7 @@ export class MockPersonaProvider implements PersonaInferenceProvider {
     _category: string,
     rng: RNG,
     jitterOffsets: Record<string, number>,
+    semantic: SemanticMatrix | null = null,
   ): { core: Record<string, number>; overlay: Record<string, number> } {
     const j = (scale = 0.05) => rng.gauss(0.0, scale);
 
@@ -320,6 +327,17 @@ export class MockPersonaProvider implements PersonaInferenceProvider {
     core.repeat_usage_potential = 0.4 + 0.25 * core.solution_fit + 0.15 * core.workflow_fit + j();
     core.shareability = 0.3 + 0.35 * p.social_influence + 0.2 * core.value_clarity + j();
     core.retention_potential = 0.38 + 0.25 * core.perceived_roi + 0.18 * core.repeat_usage_potential + j();
+
+    const seg = semantic?.segments[p.segment];
+    if (seg) {
+      for (const cid of GROUNDED_CRITERIA) {
+        const sv = seg.scores[cid];
+        if (typeof sv === "number") {
+          core[cid] = SEMANTIC_BLEND_WEIGHT * sv + (1 - SEMANTIC_BLEND_WEIGHT) * core[cid];
+          this.ledger.fire("semantic_blend_weight");
+        }
+      }
+    }
 
     const clamped: Record<string, number> = {};
     for (const cid of CORE_IDS) clamped[cid] = round(clamp(core[cid] + (jitterOffsets[cid] ?? 0)), 4);

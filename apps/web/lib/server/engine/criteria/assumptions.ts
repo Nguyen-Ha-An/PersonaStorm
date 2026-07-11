@@ -56,6 +56,11 @@ export const ASSUMPTION_DEFS: Record<string, AssumptionDef> = {
     description: "scoring.ts: need, fit and urgency all high → +0.04.",
     evidence_status: "derived",
   },
+  semantic_blend_weight: {
+    id: "semantic_blend_weight",
+    description: "Grounded criteria = 0.7·semantic + 0.3·formula when a semantic matrix is present.",
+    evidence_status: "derived",
+  },
 };
 
 export class AssumptionLedger {

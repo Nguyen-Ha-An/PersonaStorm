@@ -28,4 +28,20 @@ describe("benchmark metrics", () => {
     ];
     expect(withinCategoryInversions(rows)).toBe(1);
   });
+  test("spearman averages tied ranks (correlation over a tied dimension)", () => {
+    // b has a tie at the top two positions; correlation should be well-defined and < 1
+    const r = spearman([1, 2, 3, 4], [0.1, 0.5, 0.5, 0.9]);
+    expect(r).toBeCloseTo(0.9486833, 5); // rankdata([.1,.5,.5,.9]) = [1,2.5,2.5,4]
+  });
+  test("spearman returns 0 for length mismatch and n<2", () => {
+    expect(spearman([1, 2, 3], [1, 2])).toBe(0);
+    expect(spearman([1], [1])).toBe(0);
+  });
+  test("spearman returns 0 when one side is all ties (zero variance)", () => {
+    expect(spearman([1, 2, 3], [5, 5, 5])).toBe(0);
+  });
+  test("withinCategoryInversions and failureModeHitRate handle empty input", () => {
+    expect(withinCategoryInversions([])).toBe(0);
+    expect(failureModeHitRate([])).toBe(1); // vacuous truth
+  });
 });

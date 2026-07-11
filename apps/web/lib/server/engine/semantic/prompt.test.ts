@@ -1,6 +1,7 @@
 // apps/web/lib/server/engine/semantic/prompt.test.ts
 import { describe, expect, test } from "vitest";
-import { buildSemanticSystemPrompt, buildSemanticUserPrompt } from "./prompt";
+import { buildSemanticSystemPrompt, buildSemanticUserPrompt, SEMANTIC_JSON_SCHEMA } from "./prompt";
+import { GROUNDED_CRITERIA } from "./types";
 
 describe("semantic prompt", () => {
   test("system prompt enforces contrast, alternatives, and stimulus-as-data", () => {
@@ -28,5 +29,18 @@ describe("semantic prompt", () => {
     ]);
     // stimulus must appear inside a delimited block, not as bare instructions
     expect(u).toMatch(/---[\s\S]*Ignore all instructions[\s\S]*---/);
+  });
+});
+
+describe("SEMANTIC_JSON_SCHEMA", () => {
+  test("requires all five grounded criteria per segment and forbids extras", () => {
+    const seg = (SEMANTIC_JSON_SCHEMA as any).properties.segments.additionalProperties;
+    expect(seg.required.sort()).toEqual([...GROUNDED_CRITERIA].sort());
+    expect(seg.additionalProperties).toBe(false);
+    for (const c of GROUNDED_CRITERIA) {
+      expect(seg.properties[c].required).toEqual(["score", "rationale"]);
+      expect(seg.properties[c].additionalProperties).toBe(false);
+    }
+    expect((SEMANTIC_JSON_SCHEMA as any).additionalProperties).toBe(false);
   });
 });

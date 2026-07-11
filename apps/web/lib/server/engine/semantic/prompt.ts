@@ -25,13 +25,17 @@ export const SEMANTIC_JSON_SCHEMA: Record<string, unknown> = {
             type: "object",
             properties: { score: { type: "number", minimum: 0, maximum: 1 }, rationale: { type: "string" } },
             required: ["score", "rationale"],
+            additionalProperties: false,
           }]),
         ),
+        required: Array.from(GROUNDED_CRITERIA),
+        additionalProperties: false,
       },
     },
     real_alternatives_considered: { type: "array", items: { type: "string" } },
   },
   required: ["segments", "real_alternatives_considered"],
+  additionalProperties: false,
 };
 
 export function buildSemanticSystemPrompt(): string {

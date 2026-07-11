@@ -49,6 +49,9 @@ export interface ServerConfig {
   analystModel: string;
   nvidiaMaxTokens: number;
   analystMaxTokens: number;
+  semanticProvider: "mock" | "nvidia";
+  semanticModel: string;
+  semanticMaxTokens: number;
   personaSeed: number;
   // Live-replay pacing for the SSE stream (data is precomputed at create time).
   streamBatchSize: number;
@@ -101,6 +104,9 @@ export function getConfig(): ServerConfig {
     analystModel: trimmed(process.env.ANALYST_MODEL),
     nvidiaMaxTokens: intEnv("NVIDIA_MAX_TOKENS", 2048),
     analystMaxTokens: intEnv("ANALYST_MAX_TOKENS", 4096),
+    semanticProvider: (trimmed(process.env.SEMANTIC_PROVIDER).toLowerCase() || (analyst === "nvidia" ? "nvidia" : "mock")) === "nvidia" ? "nvidia" : "mock",
+    semanticModel: trimmed(process.env.SEMANTIC_MODEL) || trimmed(process.env.ANALYST_MODEL) || trimmed(process.env.NVIDIA_MODEL) || "z-ai/glm-5.2",
+    semanticMaxTokens: intEnv("SEMANTIC_MAX_TOKENS", 2048),
     personaSeed: intEnv("PERSONA_SEED", 1337),
     streamBatchSize: intEnv("STREAM_BATCH_SIZE", 25),
     streamBatchIntervalMs: intEnv("STREAM_BATCH_INTERVAL_MS", 45),

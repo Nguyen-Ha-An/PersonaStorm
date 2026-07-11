@@ -328,7 +328,13 @@ export class MockPersonaProvider implements PersonaInferenceProvider {
     core.shareability = 0.3 + 0.35 * p.social_influence + 0.2 * core.value_clarity + j();
     core.retention_potential = 0.38 + 0.25 * core.perceived_roi + 0.18 * core.repeat_usage_potential + j();
 
-    const seg = semantic?.segments[p.segment];
+    // Only blend when the matrix came from a REAL assessment. A
+    // "fallback_formulas" source (mock assessor, or a failed/absent LLM call)
+    // means we have no genuine semantic signal — blending its placeholder
+    // scores would inject noise into the 5 grounded criteria AND make the
+    // "keyword formulas used" downgrade a lie. So we leave the formulas to
+    // stand, and the honest label matches the behavior.
+    const seg = semantic && semantic.source !== "fallback_formulas" ? semantic.segments[p.segment] : undefined;
     if (seg) {
       // Fire at most once per persona (not once per criterion) so
       // personas_affected in calibration_evidence stays population-scoped,
@@ -336,7 +342,10 @@ export class MockPersonaProvider implements PersonaInferenceProvider {
       let blended = false;
       for (const cid of GROUNDED_CRITERIA) {
         const sv = seg.scores[cid];
-        if (typeof sv === "number") {
+        // Defense in depth: a hand-authored fixture with NaN/out-of-range must
+        // not propagate through clamp; sanitizeSemantic already enforces this
+        // for LLM output, but injected fixtures bypass it.
+        if (typeof sv === "number" && Number.isFinite(sv) && sv >= 0 && sv <= 1) {
           core[cid] = SEMANTIC_BLEND_WEIGHT * sv + (1 - SEMANTIC_BLEND_WEIGHT) * core[cid];
           blended = true;
         }

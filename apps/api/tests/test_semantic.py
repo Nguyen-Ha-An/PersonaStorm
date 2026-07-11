@@ -377,6 +377,34 @@ class TestSemanticBlend:
         )
         assert partial.criteria_scores.differentiation == base.criteria_scores.differentiation
 
+    def test_fallback_formulas_source_does_not_blend(self):
+        # A "fallback_formulas" source (mock assessor / failed LLM) means no
+        # genuine semantic signal — the blend must be skipped so the
+        # "keyword formulas used" downgrade stays honest.
+        personas, _, _ = PersonaGenerator(5).generate("us_smb", 1)
+        p = personas[0]
+        provider = MockPersonaProvider(5)
+        base = asyncio.run(provider.react(p, _BLEND_STIMULUS, "product_concept", None, "b2b_saas", None))
+        mock_matrix = {**_matrix_for(p.segment, 0.95), "source": "fallback_formulas"}
+        not_blended = asyncio.run(
+            provider.react(p, _BLEND_STIMULUS, "product_concept", None, "b2b_saas", mock_matrix)
+        )
+        assert not_blended.criteria_scores.solution_fit == base.criteria_scores.solution_fit
+
+    def test_out_of_range_or_nan_semantic_score_is_ignored(self):
+        personas, _, _ = PersonaGenerator(5).generate("us_smb", 1)
+        p = personas[0]
+        provider = MockPersonaProvider(5)
+        base = asyncio.run(provider.react(p, _BLEND_STIMULUS, "product_concept", None, "b2b_saas", None))
+        bad = {
+            "segments": {p.segment: {"scores": {"solution_fit": 1.9, "need_intensity": float("nan")}, "rationales": {}}},
+            "real_alternatives_considered": [],
+            "source": "nvidia",
+        }
+        r = asyncio.run(provider.react(p, _BLEND_STIMULUS, "product_concept", None, "b2b_saas", bad))
+        assert r.criteria_scores.solution_fit == base.criteria_scores.solution_fit
+        assert r.criteria_scores.need_intensity == base.criteria_scores.need_intensity
+
     def test_determinism_same_seed_and_matrix_gives_identical_reaction(self):
         personas, _, _ = PersonaGenerator(5).generate("us_smb", 1)
         p = personas[0]

@@ -42,6 +42,33 @@ describe("semantic blend", () => {
     expect(partial.criteria_scores.differentiation).toBe(base.criteria_scores.differentiation);
   });
 
+  test("a fallback_formulas source does NOT blend — the label stays honest", async () => {
+    const { personas } = new PersonaGenerator(5).generate("us_smb", 1);
+    const p = personas[0];
+    const provider = new MockPersonaProvider(5);
+    const base = await provider.react(p, STIMULUS, "product_concept", null, "b2b_saas", null);
+    // Same populated matrix but source "fallback_formulas" (mock assessor / failed LLM):
+    // the blend must be skipped so the "keyword formulas used" downgrade is accurate.
+    const mockMatrix: SemanticMatrix = { ...matrixFor(p.segment, 0.95), source: "fallback_formulas" };
+    const notBlended = await provider.react(p, STIMULUS, "product_concept", null, "b2b_saas", mockMatrix);
+    expect(notBlended.criteria_scores.solution_fit).toBe(base.criteria_scores.solution_fit);
+  });
+
+  test("an out-of-range/NaN semantic score is ignored at the blend site", async () => {
+    const { personas } = new PersonaGenerator(5).generate("us_smb", 1);
+    const p = personas[0];
+    const provider = new MockPersonaProvider(5);
+    const base = await provider.react(p, STIMULUS, "product_concept", null, "b2b_saas", null);
+    const bad: SemanticMatrix = {
+      segments: { [p.segment]: { scores: { solution_fit: 1.9, need_intensity: NaN }, rationales: {} } },
+      real_alternatives_considered: [],
+      source: "nvidia",
+    };
+    const r = await provider.react(p, STIMULUS, "product_concept", null, "b2b_saas", bad);
+    expect(r.criteria_scores.solution_fit).toBe(base.criteria_scores.solution_fit);
+    expect(r.criteria_scores.need_intensity).toBe(base.criteria_scores.need_intensity);
+  });
+
   test("determinism: same seed + same matrix → identical reaction", async () => {
     const { personas } = new PersonaGenerator(5).generate("us_smb", 1);
     const p = personas[0];

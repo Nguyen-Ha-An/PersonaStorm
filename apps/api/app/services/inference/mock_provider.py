@@ -377,14 +377,31 @@ class MockPersonaProvider(PersonaInferenceProvider):
         # "semantic_blend_weight" assumption AT MOST ONCE PER PERSONA (not
         # once per criterion) so personas_affected in calibration_evidence
         # stays population-scoped, matching every other assumption.
-        seg = semantic["segments"].get(p.segment) if semantic else None
+        # Only blend when the matrix came from a REAL assessment. A
+        # "fallback_formulas" source (mock assessor, or a failed/absent LLM
+        # call) means no genuine semantic signal — blending its placeholder
+        # scores would inject noise into the 5 grounded criteria AND make the
+        # "keyword formulas used" downgrade a lie. Leave the formulas to stand.
+        seg = (
+            semantic["segments"].get(p.segment)
+            if semantic and semantic.get("source") != "fallback_formulas"
+            else None
+        )
         if seg:
+            import math
             from ..semantic.types import GROUNDED_CRITERIA  # local import to avoid cycles
 
             blended = False
             for cid in GROUNDED_CRITERIA:
                 sv = seg["scores"].get(cid)
-                if isinstance(sv, (int, float)) and not isinstance(sv, bool):
+                # Defense in depth: an injected fixture bypasses sanitize_semantic,
+                # so a NaN/out-of-range value must not propagate through clamp.
+                if (
+                    isinstance(sv, (int, float))
+                    and not isinstance(sv, bool)
+                    and math.isfinite(sv)
+                    and 0 <= sv <= 1
+                ):
                     core[cid] = SEMANTIC_BLEND_WEIGHT * sv + (1 - SEMANTIC_BLEND_WEIGHT) * core[cid]
                     blended = True
             if blended:

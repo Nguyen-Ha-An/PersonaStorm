@@ -64,7 +64,13 @@ describe("benchmark backtest (recorded fixtures, offline)", () => {
 
     for (const f of files) {
       const e = JSON.parse(fs.readFileSync(path.join(DIR, f), "utf-8"));
-      const fixture: SemanticMatrix = JSON.parse(fs.readFileSync(path.join(FIXTURES_DIR, `${e.id}.json`), "utf-8"));
+      // Seed fixtures were recorded from the deterministic mock assessor
+      // (source "fallback_formulas"). The blend now only engages on a REAL
+      // source, so the gate stamps the injected fixture as a real-assessor
+      // source to exercise the blend path. Real curated fixtures (recorded
+      // from a live LLM) will carry a real source natively and need no stamp.
+      const raw = JSON.parse(fs.readFileSync(path.join(FIXTURES_DIR, `${e.id}.json`), "utf-8"));
+      const fixture: SemanticMatrix = { ...raw, source: "nvidia" };
 
       const r = await runStorm(
         {

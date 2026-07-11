@@ -85,7 +85,12 @@ MAX_WITHIN_CATEGORY_INVERSIONS = 1
 
 async def _run_one(entry_path: Path) -> tuple[dict, float, list[str]]:
     e = json.loads(entry_path.read_text(encoding="utf-8"))
-    fixture = json.loads((FIXTURES_DIR / f"{e['id']}.json").read_text(encoding="utf-8"))
+    # Seed fixtures were recorded from the deterministic mock assessor
+    # (source "fallback_formulas"). The blend now only engages on a REAL
+    # source, so the gate stamps the injected fixture as a real-assessor
+    # source to exercise the blend path. Real curated fixtures (recorded from
+    # a live LLM) will carry a real source natively and need no stamp.
+    fixture = {**json.loads((FIXTURES_DIR / f"{e['id']}.json").read_text(encoding="utf-8")), "source": "nvidia"}
 
     request = StormCreateRequest(
         title=e["id"],

@@ -48,7 +48,7 @@ One JSON file per entry, `data/benchmark_outcomes/<id>.json`:
 {
   // Must match the filename (`<id>.json`) — the fixture recorder uses this
   // to name the recorded semantic fixture (`fixtures/<id>.json`).
-  "id": "quibi_2020",
+  "id": "example_disguised_entry",
 
   // true for seed/illustrative entries; omit (or false) once an entry is a
   // properly curated, sourced, disguised real-world entry.
@@ -88,7 +88,7 @@ One JSON file per entry, `data/benchmark_outcomes/<id>.json`:
   },
 
   "provenance": {
-    // For real curated entries: the actual product name, e.g. "Quibi".
+    // For real curated entries: the actual product name (a real brand).
     // For illustrative seed entries: the literal string
     // "(disguised composite)" — these are not modeled on one specific
     // company, only on a publicly-known pattern.

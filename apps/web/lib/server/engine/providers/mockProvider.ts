@@ -330,13 +330,18 @@ export class MockPersonaProvider implements PersonaInferenceProvider {
 
     const seg = semantic?.segments[p.segment];
     if (seg) {
+      // Fire at most once per persona (not once per criterion) so
+      // personas_affected in calibration_evidence stays population-scoped,
+      // matching every other assumption's semantics.
+      let blended = false;
       for (const cid of GROUNDED_CRITERIA) {
         const sv = seg.scores[cid];
         if (typeof sv === "number") {
           core[cid] = SEMANTIC_BLEND_WEIGHT * sv + (1 - SEMANTIC_BLEND_WEIGHT) * core[cid];
-          this.ledger.fire("semantic_blend_weight");
+          blended = true;
         }
       }
+      if (blended) this.ledger.fire("semantic_blend_weight");
     }
 
     const clamped: Record<string, number> = {};

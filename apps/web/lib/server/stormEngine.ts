@@ -22,6 +22,9 @@ import { AssumptionLedger, type FiredAssumption } from "./engine/criteria/assump
 import { PersonaGenerator } from "./engine/persona/generator";
 import type { PriorsMeta } from "./engine/persona/priorsLoader";
 import { getProvider } from "./engine/providers";
+import { getSemanticAssessor } from "./engine/semantic/assessor";
+import type { SegmentBrief } from "./engine/semantic/prompt";
+import type { SemanticMatrix } from "./engine/semantic/types";
 import { buildReport, type ReportRequest } from "./engine/aggregation/reportBuilder";
 import {
   buildCounterfactualPairs,
@@ -96,6 +99,14 @@ export async function runStorm(input: StormInput, cfg: ServerConfig = getConfig(
   const generator = new PersonaGenerator(seed, ledger);
   const { personas, priorsMeta } = generator.generate(input.targetMarket, input.personaCount, input.customSegmentDescription);
 
+  // 2b) semantic grounding: one assessment per storm, cached and fed to every reaction.
+  const segNames = Array.from(new Set(personas.map((p) => p.segment)));
+  const briefs: SegmentBrief[] = segNames.map((name) => {
+    const sample = personas.find((p) => p.segment === name)!;
+    return { name, occupations: [sample.occupation], income_bands: [sample.income_band], sub_segment_hint: sample.sub_segment };
+  });
+  const semantic = await getSemanticAssessor(cfg).assess(input.stimulus, category, briefs);
+
   // 3) swarm reactions.
   const provider = getProvider(cfg, ledger);
   const reactions: PersonaReaction[] = await provider.reactBatch(
@@ -105,6 +116,7 @@ export async function runStorm(input: StormInput, cfg: ServerConfig = getConfig(
     features,
     MAX_CONCURRENCY,
     category,
+    semantic,
   );
 
   // Snapshot fired assumptions for the POPULATION only, before the
@@ -155,7 +167,7 @@ export async function runStorm(input: StormInput, cfg: ServerConfig = getConfig(
   // 5b) calibration evidence — parameters' provenance, fired assumptions,
   // counterfactual audit. Attached post-analyst like the verdict so the
   // analyst can never rewrite it.
-  report.calibration_evidence = buildCalibrationEvidence(priorsMeta, populationAssumptions, audit);
+  report.calibration_evidence = buildCalibrationEvidence(priorsMeta, populationAssumptions, audit, semantic.source);
 
   // 6) stream events + final progress snapshot.
   const reactionEvents: ReactionEvent[] = reactions.map((r, i) => ({
@@ -198,6 +210,7 @@ export function buildCalibrationEvidence(
   priorsMeta: PriorsMeta,
   assumptionsFired: FiredAssumption[],
   audit: CounterfactualAudit,
+  semanticSource: SemanticMatrix["source"],
 ): CalibrationEvidence {
   const confidenceDowngrades: string[] = [...priorsMeta.notes];
   if (priorsMeta.source === "embedded_unverified") {
@@ -212,12 +225,18 @@ export function buildCalibrationEvidence(
   if (audit.status === "not_run") {
     confidenceDowngrades.push(audit.summary);
   }
+  if (semanticSource === "fallback_formulas") {
+    confidenceDowngrades.push(
+      "Semantic grounding unavailable — keyword formulas used; treat product-fit criteria as directional only.",
+    );
+  }
   return {
     priors_coverage: round(priorsMeta.coverage, 3),
     priors_source: priorsMeta.source,
     assumptions_fired: assumptionsFired,
     counterfactual_audit: audit,
     confidence_downgrades: confidenceDowngrades,
+    semantic_source: semanticSource,
   };
 }
 

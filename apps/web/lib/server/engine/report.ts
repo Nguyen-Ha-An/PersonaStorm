@@ -128,6 +128,7 @@ export interface CalibrationEvidence {
   assumptions_fired: FiredAssumption[];
   counterfactual_audit: CounterfactualAudit;
   confidence_downgrades: string[];
+  semantic_source: "nvidia" | "fireworks" | "fallback_formulas";
 }
 
 export interface StormReport {

@@ -120,6 +120,11 @@ export function TrustPanel({ report }: { report: StormReport }) {
                 ` (${report.calibration_evidence.counterfactual_audit.pairs_not_applicable} pairs not applicable in this provider)`}
             </p>
           )}
+          <p className="mt-1.5 text-xs text-storm-400">
+            Semantic grounding: {report.calibration_evidence.semantic_source === "fallback_formulas"
+              ? "formula fallback (not LLM-grounded)"
+              : report.calibration_evidence.semantic_source}
+          </p>
           {report.calibration_evidence.confidence_downgrades.map((d) => (
             <p key={d} className="mt-1.5 text-xs leading-relaxed text-signal-yellow">
               ⚠ {d}

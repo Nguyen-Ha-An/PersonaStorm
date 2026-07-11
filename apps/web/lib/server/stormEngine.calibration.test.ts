@@ -67,6 +67,7 @@ describe("buildCalibrationEvidence downgrade branches", () => {
       { source: "embedded_unverified", coverage: 0, sourced_traits: 0, total_traits: 7, notes: ["fallback note"] },
       noAssumptions,
       passAudit,
+      "fallback_formulas",
     );
     expect(ce.confidence_downgrades[0]).toBe("fallback note");
     expect(ce.confidence_downgrades.some((d) => d.includes("embedded developer estimates"))).toBe(true);
@@ -80,6 +81,7 @@ describe("buildCalibrationEvidence downgrade branches", () => {
       { source: "data_files", coverage: 0.43, sourced_traits: 3, total_traits: 7, notes: [] },
       noAssumptions,
       audit,
+      "fallback_formulas",
     );
     expect(ce.confidence_downgrades).toContain(audit.summary);
     expect(ce.priors_coverage).toBe(0.43);
@@ -90,6 +92,7 @@ describe("buildCalibrationEvidence downgrade branches", () => {
       { source: "data_files", coverage: 1, sourced_traits: 7, total_traits: 7, notes: [] },
       noAssumptions,
       passAudit,
+      "nvidia",
     );
     expect(ce.confidence_downgrades).toEqual([]);
   });
@@ -99,6 +102,7 @@ describe("buildCalibrationEvidence downgrade branches", () => {
       { source: "data_files", coverage: 0, sourced_traits: 0, total_traits: 7, notes: [] },
       noAssumptions,
       passAudit,
+      "fallback_formulas",
     );
     expect(ce.confidence_downgrades.some((d) => d.includes("almost entirely unsourced"))).toBe(true);
   });
@@ -111,7 +115,19 @@ describe("buildCalibrationEvidence downgrade branches", () => {
       { source: "data_files", coverage: 1, sourced_traits: 7, total_traits: 7, notes: [] },
       fired,
       passAudit,
+      "fallback_formulas",
     );
     expect(ce.assumptions_fired).toEqual(fired);
+  });
+
+  test("nvidia semantic source sets semantic_source and emits no semantic downgrade", () => {
+    const ce = buildCalibrationEvidence(
+      { source: "data_files", coverage: 1, sourced_traits: 7, total_traits: 7, notes: [] },
+      noAssumptions,
+      passAudit,
+      "nvidia",
+    );
+    expect(ce.semantic_source).toBe("nvidia");
+    expect(ce.confidence_downgrades.some((d) => d.includes("Semantic grounding unavailable"))).toBe(false);
   });
 });

@@ -1,0 +1,54 @@
+{
+  "segments": {
+    "US/EU startup and SMB knowledge workers who run frequent vid — mainstream": {
+      "scores": {
+        "solution_fit": 0.6516,
+        "need_intensity": 0.4153,
+        "differentiation": 0.5517,
+        "workflow_fit": 0.512,
+        "problem_awareness": 0.3672
+      },
+      "rationales": {
+        "solution_fit": "deterministic offline assessment",
+        "need_intensity": "deterministic offline assessment",
+        "differentiation": "deterministic offline assessment",
+        "workflow_fit": "deterministic offline assessment",
+        "problem_awareness": "deterministic offline assessment"
+      }
+    },
+    "US/EU startup and SMB knowledge workers who run frequent vid — skeptical holdout": {
+      "scores": {
+        "solution_fit": 0.4823,
+        "need_intensity": 0.3448,
+        "differentiation": 0.4031,
+        "workflow_fit": 0.3972,
+        "problem_awareness": 0.3041
+      },
+      "rationales": {
+        "solution_fit": "deterministic offline assessment",
+        "need_intensity": "deterministic offline assessment",
+        "differentiation": "deterministic offline assessment",
+        "workflow_fit": "deterministic offline assessment",
+        "problem_awareness": "deterministic offline assessment"
+      }
+    },
+    "US/EU startup and SMB knowledge workers who run frequent vid — enthusiast": {
+      "scores": {
+        "solution_fit": 0.5891,
+        "need_intensity": 0.5961,
+        "differentiation": 0.4789,
+        "workflow_fit": 0.6082,
+        "problem_awareness": 0.6109
+      },
+      "rationales": {
+        "solution_fit": "deterministic offline assessment",
+        "need_intensity": "deterministic offline assessment",
+        "differentiation": "deterministic offline assessment",
+        "workflow_fit": "deterministic offline assessment",
+        "problem_awareness": "deterministic offline assessment"
+      }
+    }
+  },
+  "real_alternatives_considered": [],
+  "source": "fallback_formulas"
+}

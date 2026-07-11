@@ -1,0 +1,18 @@
+{
+  "id": "seed_gamified_language_app",
+  "illustrative": true,
+  "stimulus": "LinguaLeap — a free gamified language-learning app. Bite-sized daily lessons, streaks, XP, and friend leaderboards make practicing a new language feel like a game. Free forever with ads; an optional ad-free subscription removes ads and unlocks offline lessons.",
+  "stimulus_type": "product_concept",
+  "product_category": "education_product",
+  "target_market": "custom",
+  "custom_segment_description": "Global self-directed language learners 16-34 studying via mobile",
+  "outcome": {
+    "label": "hit",
+    "evidence": "publicly-known pattern of gamified free-to-play language-learning apps achieving large-scale organic growth and high daily engagement through streaks, XP, and leaderboards, with a durable free-to-paid conversion funnel.",
+    "known_failure_modes": []
+  },
+  "provenance": {
+    "original": "(disguised composite)",
+    "disguise_notes": "no specific brand or company named; value prop (free gamified bite-sized language lessons with streaks/leaderboards and an optional ad-free tier) and audience preserved from the publicly-known pattern"
+  }
+}

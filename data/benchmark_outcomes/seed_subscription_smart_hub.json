@@ -1,0 +1,18 @@
+{
+  "id": "seed_subscription_smart_hub",
+  "illustrative": true,
+  "stimulus": "HearthLink — a proprietary smart-home hub, sold at a subsidized upfront price, that controls your lights, locks, and thermostat from one app. After two years on the market, continued use of your existing automations starts requiring a mandatory $10/month subscription.",
+  "stimulus_type": "product_concept",
+  "product_category": "hardware_product",
+  "target_market": "custom",
+  "custom_segment_description": "US suburban homeowners 30-55 who adopted early smart-home devices",
+  "outcome": {
+    "label": "flop",
+    "evidence": "publicly-known pattern of smart-home hub makers retroactively imposing a mandatory subscription on already-purchased hardware to keep existing automations working, triggering public backlash, mass customer abandonment, and in some documented cases a full shutdown of the hub's cloud service.",
+    "known_failure_modes": ["trust", "pricing_acceptance"]
+  },
+  "provenance": {
+    "original": "(disguised composite)",
+    "disguise_notes": "no specific brand or company named; value prop (subsidized proprietary hub, later gated behind a retroactive mandatory subscription) and audience preserved from the publicly-known pattern"
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "segments": {
+    "US mobile-first entertainment consumers 18-35 — mainstream": {
+      "scores": {
+        "solution_fit": 0.6973,
+        "need_intensity": 0.4657,
+        "differentiation": 0.689,
+        "workflow_fit": 0.3066,
+        "problem_awareness": 0.5916
+      },
+      "rationales": {
+        "solution_fit": "deterministic offline assessment",
+        "need_intensity": "deterministic offline assessment",
+        "differentiation": "deterministic offline assessment",
+        "workflow_fit": "deterministic offline assessment",
+        "problem_awareness": "deterministic offline assessment"
+      }
+    },
+    "US mobile-first entertainment consumers 18-35 — skeptical holdout": {
+      "scores": {
+        "solution_fit": 0.5136,
+        "need_intensity": 0.6741,
+        "differentiation": 0.6354,
+        "workflow_fit": 0.3841,
+        "problem_awareness": 0.4399
+      },
+      "rationales": {
+        "solution_fit": "deterministic offline assessment",
+        "need_intensity": "deterministic offline assessment",
+        "differentiation": "deterministic offline assessment",
+        "workflow_fit": "deterministic offline assessment",
+        "problem_awareness": "deterministic offline assessment"
+      }
+    },
+    "US mobile-first entertainment consumers 18-35 — enthusiast": {
+      "scores": {
+        "solution_fit": 0.6962,
+        "need_intensity": 0.4006,
+        "differentiation": 0.5018,
+        "workflow_fit": 0.6805,
+        "problem_awareness": 0.4955
+      },
+      "rationales": {
+        "solution_fit": "deterministic offline assessment",
+        "need_intensity": "deterministic offline assessment",
+        "differentiation": "deterministic offline assessment",
+        "workflow_fit": "deterministic offline assessment",
+        "problem_awareness": "deterministic offline assessment"
+      }
+    }
+  },
+  "real_alternatives_considered": [],
+  "source": "fallback_formulas"
+}

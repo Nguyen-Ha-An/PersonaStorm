@@ -1,0 +1,18 @@
+{
+  "id": "seed_premium_shortform_video",
+  "illustrative": true,
+  "stimulus": "QuickReel — premium short mobile-only shows, $5/mo, studio-produced, no user uploads. Watch 10-minute episodes from name-brand creators, phone-only, no casting to TV at launch.",
+  "stimulus_type": "product_concept",
+  "product_category": "consumer_app",
+  "target_market": "custom",
+  "custom_segment_description": "US mobile-first entertainment consumers 18-35",
+  "outcome": {
+    "label": "flop",
+    "evidence": "publicly-known short-form premium mobile video failure pattern: a heavily-funded, studio-backed subscription service for short mobile-only episodes launched with a big content budget, mediocre downloads, and steep churn, then shut down within roughly a year of launch.",
+    "known_failure_modes": ["differentiation", "pricing_acceptance", "value_clarity"]
+  },
+  "provenance": {
+    "original": "(disguised composite)",
+    "disguise_notes": "no specific brand, founder, or funding figures named; value prop (premium short mobile-only shows, subscription, no user uploads, no TV casting at launch) and audience preserved from the publicly-known pattern"
+  }
+}

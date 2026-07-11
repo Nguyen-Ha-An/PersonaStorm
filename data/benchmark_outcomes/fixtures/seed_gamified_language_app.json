@@ -1,0 +1,54 @@
+{
+  "segments": {
+    "Global self-directed language learners 16-34 studying via mo — mainstream": {
+      "scores": {
+        "solution_fit": 0.5833,
+        "need_intensity": 0.6547,
+        "differentiation": 0.6077,
+        "workflow_fit": 0.6633,
+        "problem_awareness": 0.3273
+      },
+      "rationales": {
+        "solution_fit": "deterministic offline assessment",
+        "need_intensity": "deterministic offline assessment",
+        "differentiation": "deterministic offline assessment",
+        "workflow_fit": "deterministic offline assessment",
+        "problem_awareness": "deterministic offline assessment"
+      }
+    },
+    "Global self-directed language learners 16-34 studying via mo — skeptical holdout": {
+      "scores": {
+        "solution_fit": 0.4565,
+        "need_intensity": 0.4698,
+        "differentiation": 0.6504,
+        "workflow_fit": 0.5992,
+        "problem_awareness": 0.3109
+      },
+      "rationales": {
+        "solution_fit": "deterministic offline assessment",
+        "need_intensity": "deterministic offline assessment",
+        "differentiation": "deterministic offline assessment",
+        "workflow_fit": "deterministic offline assessment",
+        "problem_awareness": "deterministic offline assessment"
+      }
+    },
+    "Global self-directed language learners 16-34 studying via mo — enthusiast": {
+      "scores": {
+        "solution_fit": 0.5965,
+        "need_intensity": 0.3405,
+        "differentiation": 0.4838,
+        "workflow_fit": 0.5156,
+        "problem_awareness": 0.4562
+      },
+      "rationales": {
+        "solution_fit": "deterministic offline assessment",
+        "need_intensity": "deterministic offline assessment",
+        "differentiation": "deterministic offline assessment",
+        "workflow_fit": "deterministic offline assessment",
+        "problem_awareness": "deterministic offline assessment"
+      }
+    }
+  },
+  "real_alternatives_considered": [],
+  "source": "fallback_formulas"
+}

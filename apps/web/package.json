@@ -10,7 +10,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "e2e": "playwright test",
-    "export:priors": "tsx scripts/exportPersonaPriors.ts"
+    "export:priors": "tsx scripts/exportPersonaPriors.ts",
+    "record:fixtures": "tsx scripts/recordBenchmarkFixtures.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

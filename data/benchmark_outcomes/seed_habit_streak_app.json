@@ -1,0 +1,18 @@
+{
+  "id": "seed_habit_streak_app",
+  "illustrative": true,
+  "stimulus": "DailyStep — a free mobile habit-building app. Pick a habit, get a two-minute daily check-in, build a visible streak, and see friends' streaks in a shared leaderboard. Free with ads; an optional ad-free tier unlocks detailed stats and custom reminders.",
+  "stimulus_type": "product_concept",
+  "product_category": "consumer_app",
+  "target_market": "custom",
+  "custom_segment_description": "US/EU health-conscious young professionals 22-40 building daily habits",
+  "outcome": {
+    "label": "hit",
+    "evidence": "publicly-known freemium habit-streak app growth pattern: a low-friction daily check-in loop with visible streaks and light social accountability drove strong organic word-of-mouth growth and high day-over-day retention, with the free tier converting a meaningful minority to paid.",
+    "known_failure_modes": []
+  },
+  "provenance": {
+    "original": "(disguised composite)",
+    "disguise_notes": "no specific brand or company named; value prop (free daily streak habit tracker with light social accountability and an optional paid stats tier) and audience preserved from the publicly-known pattern"
+  }
+}

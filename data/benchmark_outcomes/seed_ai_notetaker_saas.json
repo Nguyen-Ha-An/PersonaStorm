@@ -1,0 +1,18 @@
+{
+  "id": "seed_ai_notetaker_saas",
+  "illustrative": true,
+  "stimulus": "NoteFlow — AI-generated meeting summaries and action items for Slack and Zoom. $15/user/month, joins your calls automatically, no manual transcript review needed. 14-day free trial, no credit card required to start.",
+  "stimulus_type": "landing_page",
+  "product_category": "b2b_saas",
+  "target_market": "custom",
+  "custom_segment_description": "US/EU startup and SMB knowledge workers who run frequent video meetings",
+  "outcome": {
+    "label": "moderate",
+    "evidence": "publicly-known pattern for standalone AI meeting-notes SaaS tools: solid early adoption via free trials and word-of-mouth, but tapering retention and pricing pressure as the video-conferencing and productivity-suite incumbents shipped equivalent AI note-taking features natively into their existing bundles.",
+    "known_failure_modes": ["differentiation", "retention_potential", "switching_willingness"]
+  },
+  "provenance": {
+    "original": "(disguised composite)",
+    "disguise_notes": "no specific brand or company named; value prop (per-seat AI meeting summarizer with a no-card free trial) and evidence structure (early traction eroded by incumbent bundling) preserved from the publicly-known pattern"
+  }
+}

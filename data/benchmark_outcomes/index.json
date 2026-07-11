@@ -1,0 +1,11 @@
+{
+  "_comment": "Illustrative seed set (Phase B Task 7). Every entry below carries illustrative: true and is a disguised composite drawn from publicly-known product-outcome patterns — not a curated, sourced, provenance-tracked benchmark. Excluded from any published validation claim. A human must expand/replace this with a real 15-25 entry set (see README.md) before benchmark numbers are treated as validation.",
+  "illustrative_only": true,
+  "entries": [
+    "seed_premium_shortform_video",
+    "seed_habit_streak_app",
+    "seed_ai_notetaker_saas",
+    "seed_subscription_smart_hub",
+    "seed_gamified_language_app"
+  ]
+}

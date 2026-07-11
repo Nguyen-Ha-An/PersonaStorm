@@ -1,0 +1,54 @@
+{
+  "segments": {
+    "US/EU health-conscious young professionals 22-40 building da — mainstream": {
+      "scores": {
+        "solution_fit": 0.318,
+        "need_intensity": 0.3952,
+        "differentiation": 0.474,
+        "workflow_fit": 0.4409,
+        "problem_awareness": 0.3901
+      },
+      "rationales": {
+        "solution_fit": "deterministic offline assessment",
+        "need_intensity": "deterministic offline assessment",
+        "differentiation": "deterministic offline assessment",
+        "workflow_fit": "deterministic offline assessment",
+        "problem_awareness": "deterministic offline assessment"
+      }
+    },
+    "US/EU health-conscious young professionals 22-40 building da — skeptical holdout": {
+      "scores": {
+        "solution_fit": 0.6861,
+        "need_intensity": 0.6421,
+        "differentiation": 0.5201,
+        "workflow_fit": 0.3026,
+        "problem_awareness": 0.6631
+      },
+      "rationales": {
+        "solution_fit": "deterministic offline assessment",
+        "need_intensity": "deterministic offline assessment",
+        "differentiation": "deterministic offline assessment",
+        "workflow_fit": "deterministic offline assessment",
+        "problem_awareness": "deterministic offline assessment"
+      }
+    },
+    "US/EU health-conscious young professionals 22-40 building da — enthusiast": {
+      "scores": {
+        "solution_fit": 0.4384,
+        "need_intensity": 0.3999,
+        "differentiation": 0.4598,
+        "workflow_fit": 0.482,
+        "problem_awareness": 0.6811
+      },
+      "rationales": {
+        "solution_fit": "deterministic offline assessment",
+        "need_intensity": "deterministic offline assessment",
+        "differentiation": "deterministic offline assessment",
+        "workflow_fit": "deterministic offline assessment",
+        "problem_awareness": "deterministic offline assessment"
+      }
+    }
+  },
+  "real_alternatives_considered": [],
+  "source": "fallback_formulas"
+}

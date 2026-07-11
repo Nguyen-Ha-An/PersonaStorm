@@ -33,6 +33,8 @@ from .criteria.classifier import classify_category
 from .inference import MockPersonaProvider, PersonaInferenceProvider, get_provider
 from .persona import PersonaGenerator
 from .quality import RunningCollapseMonitor, compute_quality
+from .semantic.assessor import get_semantic_assessor
+from .semantic.prompt import SegmentBrief
 from .stimulus_parser import StimulusFeatures, parse_stimulus
 from .storage import JSONFileStorage
 from .supabase_gateway import SupabaseGateway
@@ -262,6 +264,27 @@ class StormManager:
             if diversity.warnings:
                 logger.warning("diversity warnings for %s: %s", run.id, diversity.warnings)
 
+            # 2b) semantic grounding: one assessment per storm, cached and fed
+            # to every reaction (spec §7; mirrors apps/web stormEngine.ts).
+            seg_names: list[str] = []
+            seg_samples: dict[str, Persona] = {}
+            for p in personas:
+                if p.segment not in seg_samples:
+                    seg_names.append(p.segment)
+                    seg_samples[p.segment] = p
+            briefs = [
+                SegmentBrief(
+                    name=name,
+                    occupations=[seg_samples[name].occupation],
+                    income_bands=[seg_samples[name].income_band],
+                    sub_segment_hint=seg_samples[name].sub_segment,
+                )
+                for name in seg_names
+            ]
+            semantic = await get_semantic_assessor(s).assess(
+                run.request.stimulus, run.category, briefs
+            )
+
             # 4) Persona Reaction Engine — batched swarm inference
             run.status = StormStatus.running
             run.notify()
@@ -272,7 +295,7 @@ class StormManager:
                 reactions = await provider.react_batch(
                     chunk, run.request.stimulus, run.request.stimulus_type.value,
                     run.features, concurrency=s.storm_max_concurrency,
-                    category=run.category,
+                    category=run.category, semantic=semantic,
                 )
                 for r in reactions:
                     run.add_reaction(r)
@@ -319,11 +342,17 @@ class StormManager:
                     "Persona trait priors are almost entirely unsourced (low "
                     "evidence coverage) — treat population shape as unvalidated."
                 )
+            if semantic["source"] == "fallback_formulas":
+                downgrades.append(
+                    "Semantic grounding unavailable — keyword formulas used; "
+                    "treat product-fit criteria as directional only."
+                )
             run.report.calibration_evidence = {
                 "priors_coverage": round(priors_meta.coverage, 3),
                 "priors_source": priors_meta.source,
                 "assumptions_fired": ledger.fired(),
                 "confidence_downgrades": downgrades,
+                "semantic_source": semantic["source"],
             }
             # enhance_report() is contractually safe (never raises), but we
             # guard it here too: a storm must NEVER fail because of the

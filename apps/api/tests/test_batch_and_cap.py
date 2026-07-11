@@ -31,13 +31,13 @@ class _FlakyProvider(PersonaInferenceProvider):
         self._seen = 0
         self._lock = asyncio.Lock()
 
-    async def react(self, persona, stimulus, stimulus_type, features=None, category=None):
+    async def react(self, persona, stimulus, stimulus_type, features=None, category=None, semantic=None):
         async with self._lock:
             self._seen += 1
             fail = self._seen <= self._n_fail
         if fail:
             raise RuntimeError("simulated inference failure")
-        return await self._mock.react(persona, stimulus, stimulus_type, features, category)
+        return await self._mock.react(persona, stimulus, stimulus_type, features, category, semantic)
 
 
 def test_react_batch_drops_failed_personas():

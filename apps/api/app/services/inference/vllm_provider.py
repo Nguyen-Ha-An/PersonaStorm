@@ -29,6 +29,7 @@ then just VLLM_MODEL=persona-v1. See docs/training-roadmap.md.
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 import httpx
 
@@ -38,6 +39,9 @@ from ..stimulus_parser import StimulusFeatures
 from .base import PersonaInferenceProvider, ProviderNotConfiguredError
 from .llm_common import parse_llm_reaction
 from .prompts import REACTION_JSON_SCHEMA, build_system_prompt, build_user_prompt
+
+if TYPE_CHECKING:
+    from ..semantic.types import SemanticMatrix
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +68,10 @@ class VLLMProvider(PersonaInferenceProvider):
         stimulus_type: str,
         features: StimulusFeatures | None = None,
         category: str | None = None,
+        semantic: "SemanticMatrix | None" = None,
     ) -> PersonaReaction:
+        # semantic grounding (spec §7) is not consumed here — the live LLM
+        # prompt already reasons about fit against the raw stimulus text.
         payload = {
             "model": self.model,
             "messages": [
@@ -96,12 +103,13 @@ class VLLMProvider(PersonaInferenceProvider):
         features: StimulusFeatures | None = None,
         concurrency: int = 64,
         category: str | None = None,
+        semantic: "SemanticMatrix | None" = None,
     ) -> list[PersonaReaction]:
         # Higher default concurrency than base: vLLM's continuous batching is
         # most efficient when its queue is kept full.
         return await super().react_batch(personas, stimulus, stimulus_type,
                                          features, concurrency=concurrency,
-                                         category=category)
+                                         category=category, semantic=semantic)
 
     async def health_check(self) -> bool:
         try:

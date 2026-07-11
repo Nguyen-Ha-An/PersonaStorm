@@ -38,6 +38,11 @@ ASSUMPTION_DEFS: dict[str, dict] = {
         "description": "scoring.py: need, fit and urgency all high → +0.04.",
         "evidence_status": "derived",
     },
+    "semantic_blend_weight": {
+        "id": "semantic_blend_weight",
+        "description": "Grounded criteria = 0.7·semantic + 0.3·formula when a semantic matrix is present.",
+        "evidence_status": "derived",
+    },
 }
 
 

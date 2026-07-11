@@ -35,6 +35,9 @@ from app.services.semantic.prompt import (
 )
 from app.services.semantic.types import GROUNDED_CRITERIA, sanitize_semantic
 from app.config import Settings
+from app.services.criteria.assumptions import AssumptionLedger
+from app.services.inference.mock_provider import MockPersonaProvider
+from app.services.persona.generator import PersonaGenerator
 
 SEGS_NAMES = ["Seg A", "Seg B"]
 
@@ -327,3 +330,73 @@ class TestSemanticJsonSchema:
             assert seg["properties"][c]["required"] == ["score", "rationale"]
             assert seg["properties"][c]["additionalProperties"] is False
         assert SEMANTIC_JSON_SCHEMA["additionalProperties"] is False
+
+
+# --------------------------------------------------------------------------- semantic blend (Task 10, mirrors mockProvider.semantic.test.ts)
+
+_BLEND_STIMULUS = "A planning tool for teams. $12/mo. Free trial."
+
+
+def _matrix_for(segment: str, solution_fit: float) -> dict:
+    return {
+        "segments": {segment: {"scores": {"solution_fit": solution_fit}, "rationales": {}}},
+        "real_alternatives_considered": [],
+        "source": "nvidia",
+    }
+
+
+class TestSemanticBlend:
+    def test_high_semantic_solution_fit_raises_it_vs_no_matrix(self):
+        personas, _, _ = PersonaGenerator(5).generate("us_smb", 1)
+        p = personas[0]
+        provider = MockPersonaProvider(5)
+        base = asyncio.run(provider.react(p, _BLEND_STIMULUS, "product_concept", None, "b2b_saas", None))
+        boosted = asyncio.run(
+            provider.react(p, _BLEND_STIMULUS, "product_concept", None, "b2b_saas", _matrix_for(p.segment, 0.95))
+        )
+        assert boosted.criteria_scores.solution_fit > base.criteria_scores.solution_fit
+
+    def test_low_semantic_solution_fit_lowers_it(self):
+        personas, _, _ = PersonaGenerator(5).generate("us_smb", 1)
+        p = personas[0]
+        provider = MockPersonaProvider(5)
+        base = asyncio.run(provider.react(p, _BLEND_STIMULUS, "product_concept", None, "b2b_saas", None))
+        lowered = asyncio.run(
+            provider.react(p, _BLEND_STIMULUS, "product_concept", None, "b2b_saas", _matrix_for(p.segment, 0.05))
+        )
+        assert lowered.criteria_scores.solution_fit < base.criteria_scores.solution_fit
+
+    def test_missing_grounded_field_leaves_that_criterion_at_formula_value(self):
+        personas, _, _ = PersonaGenerator(5).generate("us_smb", 1)
+        p = personas[0]
+        provider = MockPersonaProvider(5)
+        base = asyncio.run(provider.react(p, _BLEND_STIMULUS, "product_concept", None, "b2b_saas", None))
+        # matrix has solution_fit only -> differentiation unchanged
+        partial = asyncio.run(
+            provider.react(p, _BLEND_STIMULUS, "product_concept", None, "b2b_saas", _matrix_for(p.segment, 0.5))
+        )
+        assert partial.criteria_scores.differentiation == base.criteria_scores.differentiation
+
+    def test_determinism_same_seed_and_matrix_gives_identical_reaction(self):
+        personas, _, _ = PersonaGenerator(5).generate("us_smb", 1)
+        p = personas[0]
+        m = _matrix_for(p.segment, 0.7)
+        r1 = asyncio.run(MockPersonaProvider(5).react(p, _BLEND_STIMULUS, "product_concept", None, "b2b_saas", m))
+        r2 = asyncio.run(MockPersonaProvider(5).react(p, _BLEND_STIMULUS, "product_concept", None, "b2b_saas", m))
+        assert r1.criteria_scores == r2.criteria_scores
+
+    def test_blend_fires_ledger_once_per_persona_not_per_field(self):
+        personas, _, _ = PersonaGenerator(5).generate("us_smb", 2)
+        p = personas[0]
+        ledger = AssumptionLedger()
+        provider = MockPersonaProvider(5, ledger=ledger)
+        # matrix supplies ALL five grounded criteria for this persona's segment
+        matrix = {
+            "segments": {p.segment: {"scores": {cid: 0.6 for cid in GROUNDED_CRITERIA}, "rationales": {}}},
+            "real_alternatives_considered": [],
+            "source": "nvidia",
+        }
+        asyncio.run(provider.react(p, _BLEND_STIMULUS, "product_concept", None, "b2b_saas", matrix))
+        fired = [a for a in ledger.fired() if a["id"] == "semantic_blend_weight"]
+        assert len(fired) == 1
+        assert fired[0]["personas_affected"] == 1

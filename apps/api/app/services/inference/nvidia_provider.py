@@ -49,6 +49,7 @@ Requests retry on 429/5xx/transport errors via post_with_retry().
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 import httpx
 
@@ -58,6 +59,9 @@ from ..stimulus_parser import StimulusFeatures
 from .base import PersonaInferenceProvider, ProviderNotConfiguredError
 from .llm_common import apply_reasoning_params, parse_llm_reaction, post_with_retry
 from .prompts import REACTION_JSON_SCHEMA, build_system_prompt, build_user_prompt
+
+if TYPE_CHECKING:
+    from ..semantic.types import SemanticMatrix
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +124,10 @@ class NvidiaProvider(PersonaInferenceProvider):
         stimulus_type: str,
         features: StimulusFeatures | None = None,
         category: str | None = None,
+        semantic: "SemanticMatrix | None" = None,
     ) -> PersonaReaction:
+        # semantic grounding (spec §7) is not consumed here — the live LLM
+        # prompt already reasons about fit against the raw stimulus text.
         payload: dict = {
             "model": self.model,
             "messages": [

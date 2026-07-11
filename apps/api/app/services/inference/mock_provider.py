@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import random
+from typing import TYPE_CHECKING
 
 from ...schemas.persona import Persona
 from ...schemas.reaction import (
@@ -41,6 +42,14 @@ from ..criteria.registry import CORE_IDS, effective
 from ..criteria.scoring import compute_market_fit
 from ..stimulus_parser import StimulusFeatures, parse_stimulus
 from .base import PersonaInferenceProvider
+
+if TYPE_CHECKING:
+    from ..semantic.types import SemanticMatrix
+
+# Grounded-criteria semantic blend weight (spec §7):
+# core = w·semantic + (1-w)·formula. Registry-tracked via the
+# "semantic_blend_weight" assumption (see ../criteria/assumptions.py).
+SEMANTIC_BLEND_WEIGHT = 0.7
 
 # ---------------------------------------------------------------- objection text
 # Multiple phrasings per objection key -> low duplicate rate, human texture.
@@ -208,6 +217,7 @@ class MockPersonaProvider(PersonaInferenceProvider):
         stimulus_type: str,
         features: StimulusFeatures | None = None,
         category: str | None = None,
+        semantic: "SemanticMatrix | None" = None,
     ) -> PersonaReaction:
         f = features or parse_stimulus(stimulus, title="", stimulus_type=stimulus_type)
         stim_hash = hashlib.sha1(stimulus.encode(), usedforsecurity=False).hexdigest()[:10]
@@ -221,7 +231,7 @@ class MockPersonaProvider(PersonaInferenceProvider):
 
         jitter = compute_jitter_offsets(self.seed, persona.persona_id)
 
-        core, overlay = self._score_criteria(persona, f, cat, rng, jitter)
+        core, overlay = self._score_criteria(persona, f, cat, rng, jitter, semantic)
 
         # market_fit is ALWAYS the authoritative scorer's output — never invented.
         breakdown = compute_market_fit(
@@ -267,6 +277,7 @@ class MockPersonaProvider(PersonaInferenceProvider):
     def _score_criteria(
         self, p: Persona, f: StimulusFeatures, category: str, rng: random.Random,
         jitter: dict[str, float] | None = None,
+        semantic: "SemanticMatrix | None" = None,
     ) -> tuple[dict[str, float], dict[str, float]]:
         """Return (core scores for all 17 CORE_IDS, overlay scores for this
         persona's life stage). Every value is grounded in traits + features
@@ -358,6 +369,26 @@ class MockPersonaProvider(PersonaInferenceProvider):
         core["retention_potential"] = (
             0.38 + 0.25 * core["perceived_roi"] + 0.18 * core["repeat_usage_potential"] + j()
         )
+
+        # --- semantic grounding blend (spec §7) ---------------------------
+        # For the 5 grounded criteria, blend the (unclamped, pre-jitter) raw
+        # formula value with the semantic assessor's score for THIS persona's
+        # segment: core[cid] = 0.7*semantic + 0.3*formula. Fires the
+        # "semantic_blend_weight" assumption AT MOST ONCE PER PERSONA (not
+        # once per criterion) so personas_affected in calibration_evidence
+        # stays population-scoped, matching every other assumption.
+        seg = semantic["segments"].get(p.segment) if semantic else None
+        if seg:
+            from ..semantic.types import GROUNDED_CRITERIA  # local import to avoid cycles
+
+            blended = False
+            for cid in GROUNDED_CRITERIA:
+                sv = seg["scores"].get(cid)
+                if isinstance(sv, (int, float)) and not isinstance(sv, bool):
+                    core[cid] = SEMANTIC_BLEND_WEIGHT * sv + (1 - SEMANTIC_BLEND_WEIGHT) * core[cid]
+                    blended = True
+            if blended:
+                self.ledger.fire("semantic_blend_weight")
 
         jit = jitter or {}
         core = {cid: round(clamp(core[cid] + jit.get(cid, 0.0)), 4) for cid in CORE_IDS}

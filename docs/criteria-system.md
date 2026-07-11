@@ -357,3 +357,137 @@ Python reference engine (`apps/api`) has no equivalent check —
 `calibration_evidence` block omits `counterfactual_audit` because "that
 check does not exist in this reference engine." This is a known,
 intentional parity gap for Phase A, tracked for Phase B.
+
+## 9. Semantic grounding & benchmark (Phase B)
+
+Phase A's formulas score every criterion from persona traits + parsed
+stimulus features alone — there is no signal that actually reads *what the
+product is* and judges whether it fits a given segment. Phase B adds a
+second, independent signal for the 5 criteria where that judgment matters
+most, and a small offline benchmark that checks the combined pipeline
+against known real-world outcomes.
+
+### The 5 grounded criteria
+
+`solution_fit`, `need_intensity`, `differentiation`, `workflow_fit`,
+`problem_awareness` — the criteria whose "correct" score depends on reading
+the actual product description against a segment's real situation, not just
+demographic/psychographic traits. Defined once as `GROUNDED_CRITERIA` in
+`semantic/types.ts` (TS) and `services/semantic/types.py` (Python) and
+imported everywhere else, so the two engines can never drift on which
+criteria are grounded.
+
+### The semantic assessor (one call per storm)
+
+`SemanticAssessor.assess(stimulus, category, segments)` returns a
+`SemanticMatrix`: for every distinct persona segment in the run, a score
+0..1 + one-sentence rationale for each of the 5 grounded criteria, plus
+`real_alternatives_considered`. It is called **exactly once per storm** —
+`stormEngine.ts::runStorm()` (TS) and `storm_runner.py::StormManager._execute()`
+(Python) both build the segment briefs right after persona generation and
+cache the single resulting matrix for every reaction in the run, so the
+signal is shared across the whole swarm and the run stays fast and
+deterministic.
+
+Two implementations behind the `SemanticAssessor` interface:
+
+- **`MockSemanticAssessor`** — fully offline and deterministic: every score
+  is `round(0.3 + 0.4 * rng.random(), 4)` from
+  `random(f"sem:{seed}:{category}:{segment}:{criterion}:{stimulus}")`. Same
+  inputs always produce the same matrix; different stimuli produce different
+  matrices. This is what CI and local dev run against by default.
+- **`LlmSemanticAssessor`** — a real LLM call (temperature 0, JSON-schema
+  constrained) with an anti-optimism prompt: the model must *rank* segments
+  against each other (identical scores across segments are disallowed by
+  instruction), justify `differentiation` against **named** real
+  alternatives, and treat the stimulus as fenced, untrusted data — never as
+  instructions to follow. It never throws: any transport failure,
+  unparseable JSON (even after one repair attempt), or a sanitizer rejection
+  degrades to an empty-but-valid matrix tagged `fallback_formulas`.
+
+`sanitize_semantic(raw, segmentNames)` is the trust boundary between the LLM
+and the scorer: every score is either clamped into shape (finite number in
+`[0, 1]`, not a bare range check — `json.loads`/`JSON.parse` both accept
+`NaN`/`Infinity` in some form, so both engines check finiteness explicitly)
+or **dropped**, never silently clamped into a lying number. A dropped score
+just means that one field falls back to the formula value for that persona.
+
+### The blend (registry-tracked, 0.7 weight)
+
+For each of the 5 grounded criteria, if the semantic matrix has a score for
+this persona's segment, the raw (pre-jitter, pre-clamp) formula value is
+blended with it:
+
+```
+core[cid] = 0.7 * semantic_score + 0.3 * formula_value
+```
+
+`SEMANTIC_BLEND_WEIGHT = 0.7` is exported from `mockProvider.ts` /
+`mock_provider.py` so tests can assert against it directly, and the weight
+itself is registry-tracked: applying it fires the `semantic_blend_weight`
+assumption (`evidence_status: "derived"`) in `criteria/assumptions.ts` /
+`services/criteria/assumptions.py`. The blend happens **before** the
+existing jitter + clamp + round step, so a blended value still goes through
+the same persona-stable jitter and `[0, 1]` clamp as every other criterion —
+semantic grounding shifts the center of the distribution, it does not bypass
+the noise model.
+
+The assumption fires **at most once per persona**, not once per blended
+field — deliberately, so `calibration_evidence.assumptions_fired[].personas_affected`
+stays population-scoped like every other assumption in the ledger (a persona
+whose segment supplied 3 of the 5 grounded scores still counts as 1 affected
+persona, not 3).
+
+### `semantic_source` + fallback downgrade
+
+Every report's `calibration_evidence` carries `semantic_source` — the
+matrix's provenance: `"nvidia"` (or `"fireworks"`) for a real assessor call,
+or `"fallback_formulas"` when the assessor degraded (unconfigured, or any
+failure). When the source is `fallback_formulas`, `buildCalibrationEvidence()`
+(TS) / `_execute()` (Python) both append a `confidence_downgrades` entry —
+*"Semantic grounding unavailable — keyword formulas used; treat product-fit
+criteria as directional only."* — the same downgrade pattern already used
+for low-coverage persona priors and (TS-only) a skipped counterfactual
+audit.
+
+### The benchmark backtest (offline, disguised, recorded fixtures)
+
+`data/benchmark_outcomes/*.json` is a small set of product pitches with a
+publicly-documented outcome (`hit` / `moderate` / `flop`) — the engine's
+"reality anchor." Three design choices make the gate meaningful *and* safe
+to run in CI:
+
+1. **Disguise rule** — every stimulus has brand names, exact pricing copy,
+   and other identifying details rewritten before it goes into the pitch
+   text, so the assessor can't just pattern-match a memorized product name
+   instead of reasoning about the pitch (`data/benchmark_outcomes/README.md`
+   documents this in full, including the accepted limitation that a highly
+   distinctive disguised pattern may still be recognizable).
+2. **Recorded fixtures, no live call in CI** — `fixtures/<id>.json` holds
+   the committed semantic matrix produced by `getSemanticAssessor(cfg).assess(...)`
+   the last time fixtures were recorded (`npm run record:fixtures`). The
+   backtest gate (`benchmarkGate.test.ts` / `test_benchmark_backtest.py`)
+   injects that recorded matrix directly — via `runStorm(...,
+   semanticOverride)` in TS, and by constructing reactions with the injected
+   matrix directly (`MockPersonaProvider.react_batch(..., semantic=fixture)`)
+   in Python — so the full blend path runs deterministically offline, with
+   zero live LLM calls, regardless of which assessor recorded the fixture.
+3. **Measured, not invented, thresholds** — the gate does not hardcode a
+   "good" Spearman correlation or failure-mode hit rate up front. The
+   process is: run the backtest → record what the pipeline actually
+   achieves → set the threshold just below that observed value, named as a
+   constant with a comment explaining the number → tighten later as the
+   engine (or the benchmark set) improves. A threshold in this file is a
+   regression tripwire, not a claim that the number is "good."
+
+**The 5-entry seed set is illustrative, not curated** — composites drawn
+from public outcome *patterns*, not sourced/provenance-tracked real
+products (`data/benchmark_outcomes/README.md` carries the full curation
+rules: public documentation, disguise, a within-category hit/flop pair, and
+a hindsight-bias rule requiring pre-outcome material). A human must curate a
+real 15–25 entry set before any number the gate measures — on either engine
+— is treated as a validation claim. The two reference implementations
+(`apps/web`, `apps/api`) are **independent engines** with independent
+formulas and RNGs; their measured thresholds are tracked and documented
+separately per engine and are not expected to (and in general will not)
+match.

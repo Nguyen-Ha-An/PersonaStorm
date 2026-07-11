@@ -11,10 +11,14 @@ from __future__ import annotations
 import asyncio
 import logging
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 from ...schemas.persona import Persona
 from ...schemas.reaction import PersonaReaction
 from ..stimulus_parser import StimulusFeatures
+
+if TYPE_CHECKING:
+    from ..semantic.types import SemanticMatrix
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +40,7 @@ class PersonaInferenceProvider(ABC):
         stimulus_type: str,
         features: StimulusFeatures | None = None,
         category: str | None = None,
+        semantic: "SemanticMatrix | None" = None,
     ) -> PersonaReaction:
         """Produce a structured reaction for a single persona.
 
@@ -47,6 +52,11 @@ class PersonaInferenceProvider(ABC):
         storm_runner.py). When provided, it MUST be used for scoring instead
         of re-classifying internally, so every persona's market_fit_score is
         computed under the same category as the report's weights.
+
+        `semantic` (spec §7) is the run's cached semantic grounding matrix —
+        one assessment per storm, threaded to every reaction. Optional:
+        providers that don't ground scores in it (LLM-driven providers, whose
+        own prompt already reasons about fit) may simply ignore the param.
         """
 
     async def react_batch(
@@ -57,6 +67,7 @@ class PersonaInferenceProvider(ABC):
         features: StimulusFeatures | None = None,
         concurrency: int = 8,
         category: str | None = None,
+        semantic: "SemanticMatrix | None" = None,
     ) -> list[PersonaReaction]:
         """Default batching: bounded-concurrency fan-out over react().
 
@@ -68,7 +79,7 @@ class PersonaInferenceProvider(ABC):
 
         async def _one(p: Persona) -> PersonaReaction:
             async with sem:
-                return await self.react(p, stimulus, stimulus_type, features, category)
+                return await self.react(p, stimulus, stimulus_type, features, category, semantic)
 
         results = await asyncio.gather(*(_one(p) for p in personas), return_exceptions=True)
         reactions: list[PersonaReaction] = []

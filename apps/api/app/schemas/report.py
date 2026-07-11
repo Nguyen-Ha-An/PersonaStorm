@@ -149,5 +149,9 @@ class StormReport(BaseModel):
     # Calibration provenance — mirrors apps/web buildCalibrationEvidence(), minus
     # counterfactual_audit (that check does not exist in this reference engine;
     # see docs for the documented parity exception). Additive + optional so
-    # legacy persisted reports without this field still validate.
+    # legacy persisted reports without this field still validate. Keys:
+    # priors_coverage, priors_source, assumptions_fired, confidence_downgrades,
+    # and (Phase B) semantic_source — one of "nvidia" | "fireworks" |
+    # "fallback_formulas", the provenance of the semantic grounding matrix
+    # blended into the 5 grounded criteria (see services/semantic/types.py).
     calibration_evidence: dict | None = None

@@ -60,6 +60,14 @@ class Settings(BaseSettings):
     # Optional analyst-only model override; falls back to nvidia_model.
     analyst_model: str | None = None
 
+    # Semantic grounding assessor (spec §7) — separate knob from the persona
+    # swarm and analyst providers. None -> defaults to the analyst provider
+    # (mirrors env.ts's SEMANTIC_PROVIDER fallback chain); see
+    # effective_semantic_provider / effective_semantic_model below.
+    semantic_provider: Literal["mock", "nvidia"] | None = None
+    semantic_model: str | None = None
+    semantic_max_tokens: int = 2048
+
     # --- swarm pacing --------------------------------------------------------
     # The mock provider is instant, so we pace batches to make the live grid
     # readable for a human audience. Real providers replace pacing with actual
@@ -124,6 +132,17 @@ class Settings(BaseSettings):
         if self.nvidia_structured_output is not None:
             return self.nvidia_structured_output
         return "guided_json" if self.nvidia_use_guided_json else "json_object"
+
+    @property
+    def effective_semantic_provider(self) -> Literal["mock", "nvidia"]:
+        """Explicit SEMANTIC_PROVIDER wins; otherwise mirror the analyst provider."""
+        if self.semantic_provider is not None:
+            return self.semantic_provider
+        return "nvidia" if self.analyst_provider == "nvidia" else "mock"
+
+    @property
+    def effective_semantic_model(self) -> str:
+        return self.semantic_model or self.analyst_model or self.nvidia_model
 
 
 @lru_cache

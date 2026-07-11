@@ -51,6 +51,13 @@ export interface StormInput {
   productCategory?: string | null;
   personaCount: number;
   seed?: number | null;
+  /**
+   * Test/backtest-only escape hatch: when present, skips the live semantic
+   * assessor call entirely and uses this matrix instead (spec §9 backtest
+   * gate — recorded fixtures replay the full blend path offline, with NO
+   * live LLM call in CI regardless of which assessor recorded them).
+   */
+  semanticOverride?: SemanticMatrix;
 }
 
 /** Flat SSE reaction payload (matches apps/web/lib/types.ts ReactionEvent). */
@@ -105,7 +112,7 @@ export async function runStorm(input: StormInput, cfg: ServerConfig = getConfig(
     const sample = personas.find((p) => p.segment === name)!;
     return { name, occupations: [sample.occupation], income_bands: [sample.income_band], sub_segment_hint: sample.sub_segment };
   });
-  const semantic = await getSemanticAssessor(cfg).assess(input.stimulus, category, briefs);
+  const semantic = input.semanticOverride ?? (await getSemanticAssessor(cfg).assess(input.stimulus, category, briefs));
 
   // 3) swarm reactions.
   const provider = getProvider(cfg, ledger);

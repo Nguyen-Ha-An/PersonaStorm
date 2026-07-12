@@ -25,6 +25,24 @@ const TXN_TYPES = new Set<TxnType>(["credit_grant", "storm_charge", "refund", "a
 
 type Row = Record<string, any>;
 
+/**
+ * storm_runs METADATA columns for list queries. The jsonb payload columns
+ * (report_json, reactions_json, orchestration_json) are megabytes per
+ * completed 1,000-persona run and are only ever read one-row-at-a-time via
+ * getStorm(); a list query selecting * hauls potentially hundreds of MB
+ * through the serverless function and 502s the admin panel ("data backend
+ * unavailable"). Every list consumer maps to these metadata fields only.
+ */
+const STORM_LIST_COLUMNS =
+  "id,user_id,is_demo,title,stimulus_type,target_market,product_category,persona_count,status,price_credits,created_at,completed_at,error";
+
+/** In-memory mirror of STORM_LIST_COLUMNS: strip the heavy jsonb payloads so
+ * dev/prod list shapes match and nothing silently grows a dependency on them. */
+function stripHeavyStormFields(row: Row): Row {
+  const { report_json, reactions_json, orchestration_json, ...rest } = row;
+  return rest;
+}
+
 /** Flat DB shape for a settings write (classic inference + orchestration columns). */
 export interface InferenceSettingsRow {
   inference_provider: string;
@@ -251,7 +269,7 @@ class InMemoryGateway implements Gateway {
   async listUserStorms(userId: string, limit = 50): Promise<Row[]> {
     const rows = Array.from(this.storms.values()).filter((s) => s.user_id === userId);
     rows.sort((a, b) => ((a.created_at ?? "") < (b.created_at ?? "") ? 1 : -1));
-    return rows.slice(0, limit).map((r) => ({ ...r }));
+    return rows.slice(0, limit).map((r) => stripHeavyStormFields(r));
   }
 
   async adminListUsers(search?: string | null): Promise<Row[]> {
@@ -306,7 +324,7 @@ class InMemoryGateway implements Gateway {
   async adminListStorms(limit = 100): Promise<Row[]> {
     const rows = Array.from(this.storms.values());
     rows.sort((a, b) => ((a.created_at ?? "") < (b.created_at ?? "") ? 1 : -1));
-    return rows.slice(0, limit).map((s) => ({ ...s, user_email: this.profiles.get(s.user_id)?.email ?? null }));
+    return rows.slice(0, limit).map((s) => ({ ...stripHeavyStormFields(s), user_email: this.profiles.get(s.user_id)?.email ?? null }));
   }
 
   async countAdmins(): Promise<number> {
@@ -471,7 +489,7 @@ class HttpGateway implements Gateway {
   }
 
   async listUserStorms(userId: string, limit = 50): Promise<Row[]> {
-    return this.admin.get("storm_runs", { user_id: `eq.${userId}`, select: "*", order: "created_at.desc", limit: String(limit) });
+    return this.admin.get("storm_runs", { user_id: `eq.${userId}`, select: STORM_LIST_COLUMNS, order: "created_at.desc", limit: String(limit) });
   }
 
   async adminListUsers(search?: string | null): Promise<Row[]> {
@@ -524,7 +542,7 @@ class HttpGateway implements Gateway {
   }
 
   async adminListStorms(limit = 100): Promise<Row[]> {
-    const storms = await this.admin.get("storm_runs", { select: "*", order: "created_at.desc", limit: String(limit) });
+    const storms = await this.admin.get("storm_runs", { select: STORM_LIST_COLUMNS, order: "created_at.desc", limit: String(limit) });
     if (storms.length === 0) return [];
     const userIds = Array.from(new Set(storms.map((s) => s.user_id))).sort();
     const profiles = await this.admin.get("profiles", { id: `in.(${userIds.join(",")})`, select: "id,email" });

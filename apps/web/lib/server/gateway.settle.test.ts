@@ -32,3 +32,36 @@ describe("settleStormIfRunning — the refund idempotency gate", () => {
     expect(await gw.settleStormIfRunning("storm_missing", { status: "failed" })).toBe(false);
   });
 });
+
+describe("storm list queries exclude the heavy jsonb payloads", () => {
+  it("listUserStorms and adminListStorms return metadata only; getStorm returns everything", async () => {
+    const gw = buildGateway();
+    // The dev gateway is a process-wide singleton, so use a dedicated user id
+    // to keep rows from the settle tests above out of this list.
+    await gw.recordStorm({
+      id: "storm_big",
+      user_id: "u_heavy",
+      title: "t",
+      status: "complete",
+      price_credits: 65,
+      report_json: { huge: true },
+      reactions_json: { reactions: [1, 2, 3] },
+      orchestration_json: { plan: {} },
+    });
+
+    for (const row of await gw.listUserStorms("u_heavy", 5)) {
+      expect(row).not.toHaveProperty("report_json");
+      expect(row).not.toHaveProperty("reactions_json");
+      expect(row).not.toHaveProperty("orchestration_json");
+      expect(row.status).toBe("complete"); // metadata intact
+    }
+    for (const row of await gw.adminListStorms(5)) {
+      expect(row).not.toHaveProperty("report_json");
+      expect(row).not.toHaveProperty("reactions_json");
+      expect(row).not.toHaveProperty("orchestration_json");
+    }
+    // The single-row read still carries the full payload for the report page.
+    const full = await gw.getStorm("storm_big");
+    expect(full?.report_json).toEqual({ huge: true });
+  });
+});

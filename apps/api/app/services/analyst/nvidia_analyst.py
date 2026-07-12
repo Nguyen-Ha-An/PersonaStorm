@@ -32,11 +32,12 @@ logger = logging.getLogger(__name__)
 
 _VALID_PRIORITIES = {"now", "next", "later"}
 
-_FALLBACK_NOTE = "NVIDIA analyst unavailable — local report builder used."
-
 
 class NvidiaAnalyst(AnalystProvider):
     name = "nvidia"
+    # Human-readable provider label used in quality notes; subclasses
+    # (e.g. FireworksAnalyst) override it alongside `name`.
+    provider_label = "NVIDIA"
 
     def __init__(
         self,
@@ -169,14 +170,19 @@ class NvidiaAnalyst(AnalystProvider):
                 enhanced.kill_quote = kill_quote
             enhanced.quality.notes = [
                 *enhanced.quality.notes,
-                f"Report narrated by NVIDIA {self.model} analyst.",
+                f"Report narrated by {self.provider_label} {self.model} analyst.",
             ]
             return enhanced
         except Exception as exc:  # noqa: BLE001 — analyst must never crash a storm
             # Never log api_key or any secret — only the exception message.
             logger.warning(
-                "NVIDIA analyst unavailable, using local report builder: %s", exc
+                "%s analyst unavailable, using local report builder: %s",
+                self.provider_label,
+                exc,
             )
             report = report.model_copy(deep=True)
-            report.quality.notes = [*report.quality.notes, _FALLBACK_NOTE]
+            report.quality.notes = [
+                *report.quality.notes,
+                f"{self.provider_label} analyst unavailable — local report builder used.",
+            ]
             return report

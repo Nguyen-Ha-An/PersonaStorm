@@ -1,4 +1,34 @@
-# ⛈ PersonaStorm — the product wind tunnel
+<div align="center">
+
+<img src="docs/assets/cover.png" alt="PersonaStorm — 1,000 synthetic personas storm a product concept" width="840" />
+
+<h1>⛈ PersonaStorm</h1>
+
+<p><strong>The product wind tunnel</strong> — <em>1,000 synthetic personas. One honest verdict.</em></p>
+
+<p>
+  <a href="https://lablab.ai/ai-hackathons/amd-developer-hackathon-act-ii"><img src="https://img.shields.io/badge/AMD%20Developer%20Hackathon%20ACT%20II-Unicorn%20Track-ED1C24" alt="AMD Developer Hackathon: ACT II — Unicorn Track" /></a>
+  <a href="https://fireworks.ai"><img src="https://img.shields.io/badge/inference-Fireworks%20AI-5A31F4" alt="Inference: Fireworks AI" /></a>
+  <a href="https://github.com/Nguyen-Ha-An/PersonaStorm/pkgs/container/personastorm"><img src="https://img.shields.io/badge/docker-ghcr.io-2496ED?logo=docker&logoColor=white" alt="Docker image on GHCR" /></a>
+</p>
+
+<p>
+  <a href="https://github.com/Nguyen-Ha-An/PersonaStorm/actions/workflows/deploy.yml"><img src="https://github.com/Nguyen-Ha-An/PersonaStorm/actions/workflows/deploy.yml/badge.svg" alt="CI and Deploy" /></a>
+  <a href="https://github.com/Nguyen-Ha-An/PersonaStorm/actions/workflows/docker-publish.yml"><img src="https://github.com/Nguyen-Ha-An/PersonaStorm/actions/workflows/docker-publish.yml/badge.svg" alt="Publish Docker image" /></a>
+  <img src="https://img.shields.io/badge/tests-421%20passing-4CC38A" alt="421 tests passing" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license" /></a>
+  <a href="https://github.com/Nguyen-Ha-An/PersonaStorm/stargazers"><img src="https://img.shields.io/github/stars/Nguyen-Ha-An/PersonaStorm?style=flat&logo=github&color=E3B341" alt="GitHub stars" /></a>
+</p>
+
+<p>
+  <a href="https://personastorm.nguyenhaan.id.vn"><b>🌐 Live App</b></a> ·
+  <a href="https://github.com/Nguyen-Ha-An/PersonaStorm/pkgs/container/personastorm"><b>🐳 Docker Image</b></a> ·
+  <a href="#-amd-developer-hackathon-act-ii--unicorn-track"><b>🏆 Hackathon Brief</b></a> ·
+  <a href="docs/lablab-submission.md"><b>📦 Submission Kit</b></a> ·
+  <a href="docs/architecture.md"><b>📐 Architecture</b></a>
+</p>
+
+</div>
 
 Paste a product concept, landing page, ad, or pricing table. PersonaStorm
 generates **1,000 structured synthetic personas** for your target market,

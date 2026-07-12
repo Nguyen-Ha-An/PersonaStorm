@@ -153,6 +153,14 @@ export async function runStorm(input: StormInput, cfg: ServerConfig = getConfig(
 
   // 4) quality metrics.
   const quality = computeQuality(personas, reactions, features);
+  // Nothing silent: a live provider may drop a bounded fraction of personas
+  // after retries (fireworksProvider drop tolerance) — label it.
+  if (reactions.length < personas.length) {
+    const dropped = personas.length - reactions.length;
+    quality.notes.push(
+      `${dropped} of ${personas.length} personas failed after retries (live-provider transient errors) and were dropped — the report reflects the ${reactions.length} that completed.`,
+    );
+  }
 
   // 5) report + analyst re-narration (best-effort, never throws).
   const request: ReportRequest = {

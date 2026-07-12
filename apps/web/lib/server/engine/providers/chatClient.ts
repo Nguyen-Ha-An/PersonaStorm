@@ -67,8 +67,9 @@ export async function chatCompletion(opts: ChatCompletionOptions): Promise<strin
     });
     if (!resp.ok) {
       const body = await resp.text().catch(() => "");
-      // status carried so callers can classify transient (429/5xx) failures.
-      throw new ChatHttpError(resp.status, body.slice(0, 300));
+      // status carried so callers can classify transient (429/5xx) failures;
+      // Retry-After lets a rate-limited caller pace instead of hammering.
+      throw new ChatHttpError(resp.status, body.slice(0, 300), parseRetryAfterMs(resp.headers.get("retry-after")));
     }
     json = await resp.json();
   } finally {
@@ -82,10 +83,20 @@ export class ChatHttpError extends Error {
   constructor(
     readonly status: number,
     body: string,
+    /** Provider-requested wait from the Retry-After header, if present. */
+    readonly retryAfterMs?: number,
   ) {
     super(`chat/completions -> ${status}: ${body}`);
     this.name = "ChatHttpError";
   }
+}
+
+/** Parse a Retry-After header (delta-seconds form) to ms, capped at 30s. */
+export function parseRetryAfterMs(header: string | null): number | undefined {
+  if (!header) return undefined;
+  const seconds = Number(header.trim());
+  if (!Number.isFinite(seconds) || seconds < 0) return undefined;
+  return Math.min(seconds * 1000, 30_000);
 }
 
 /** True for transient failures worth retrying with backoff (429 + 5xx). */

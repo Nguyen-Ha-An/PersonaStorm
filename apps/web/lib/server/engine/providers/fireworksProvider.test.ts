@@ -95,7 +95,7 @@ describe("FireworksProvider.react", () => {
       .mockRejectedValueOnce(new ChatHttpError(429, "rate limited"))
       .mockRejectedValueOnce(new ChatHttpError(429, "rate limited"));
     const { personas } = new PersonaGenerator(7).generate("early_adopters", 1);
-    const err = await mk({ retryBaseMs: 1, maxRetries: 3 })
+    const err = await mk({ retryBaseMs: 1, maxRetries: 3, maxRateLimitRetries: 3 })
       .react(personas[0], "stim", "product_concept", null, null)
       .then(() => null, (e: unknown) => e);
     expect(err).toBeInstanceOf(ChatHttpError);
@@ -110,6 +110,55 @@ describe("FireworksProvider.react", () => {
       mk({ retryBaseMs: 1 }).react(personas[0], "stim", "product_concept", null, null),
     ).rejects.toThrow(/401/);
     expect(vi.mocked(chatCompletion)).toHaveBeenCalledTimes(1);
+  });
+
+  test("429s get extra paced attempts (Retry-After honored) beyond the 5xx budget", async () => {
+    vi.mocked(chatCompletion)
+      .mockRejectedValueOnce(new ChatHttpError(429, "rate limited", 1))
+      .mockRejectedValueOnce(new ChatHttpError(429, "rate limited", 1))
+      .mockRejectedValueOnce(new ChatHttpError(429, "rate limited", 1))
+      .mockRejectedValueOnce(new ChatHttpError(429, "rate limited", 1))
+      .mockResolvedValueOnce(VALID_REPLY);
+    const { personas } = new PersonaGenerator(7).generate("early_adopters", 1);
+    const r = await mk({ retryBaseMs: 1 }).react(personas[0], "stim", "product_concept", null, null);
+    expect(r.buy_likelihood).toBe(0.72);
+    expect(vi.mocked(chatCompletion)).toHaveBeenCalledTimes(5); // 5th attempt succeeds
+  });
+});
+
+describe("FireworksProvider.reactBatch drop tolerance (SWARM_MAX_DROP_FRACTION parity)", () => {
+  beforeEach(() => vi.mocked(chatCompletion).mockReset());
+
+  test("a bounded fraction of failed personas is dropped, not fatal", async () => {
+    const { personas } = new PersonaGenerator(7).generate("early_adopters", 10);
+    // First persona fails non-transiently; the other nine succeed.
+    vi.mocked(chatCompletion).mockImplementation(async () => {
+      const call = vi.mocked(chatCompletion).mock.calls.length;
+      if (call === 1) throw new ChatHttpError(400, "bad request");
+      return VALID_REPLY;
+    });
+    const reactions = await mk({ retryBaseMs: 1, maxDropFraction: 0.1 }).reactBatch(
+      personas, "stim", "product_concept", null, 1, null,
+    );
+    expect(reactions).toHaveLength(9); // 1/10 dropped ≤ 10% cap
+  });
+
+  test("exceeding the drop cap fails the storm with the real cause embedded", async () => {
+    const { personas } = new PersonaGenerator(7).generate("early_adopters", 10);
+    // Fail 3 of 10 (> the 10% cap). Kept to a handful of rejections because
+    // vitest's unhandled-rejection detector false-positives on a mock that
+    // emits many concurrent rejections, even though every one is caught
+    // (the per-persona warn logs show the catches firing).
+    vi.mocked(chatCompletion).mockImplementation(async () => {
+      const call = vi.mocked(chatCompletion).mock.calls.length;
+      if (call <= 3) throw new ChatHttpError(401, "unauthorized");
+      return VALID_REPLY;
+    });
+    const err = await mk({ retryBaseMs: 1, maxDropFraction: 0.1 })
+      .reactBatch(personas, "stim", "product_concept", null, 1, null)
+      .then(() => null, (e: unknown) => e);
+    expect(String(err)).toMatch(/drop cap exceeded/);
+    expect(String(err)).toMatch(/401/);
   });
 });
 

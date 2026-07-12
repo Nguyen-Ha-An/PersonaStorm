@@ -32,7 +32,20 @@ export function tokenize(text: string): string[] {
   const out: string[] = [];
   const matches = text.match(WORD_RE);
   if (matches) {
-    for (const w of matches) out.push(w.toLowerCase());
+    for (const w of matches) {
+      const lower = w.toLowerCase();
+      out.push(lower);
+      // Hyphenated compounds ("ai-powered") also emit their word parts so
+      // set-membership checks match on components ("ai") without dropping the
+      // compound — multi-word keywords like "money-back"/"soc-2"/"lock-in"
+      // still match on the whole token. Parts must be letter-initial and 2+
+      // chars, mirroring WORD_RE (so "soc-2" -> "soc", never a bare "2").
+      if (lower.includes("-")) {
+        for (const part of lower.split("-")) {
+          if (part.length >= 2 && /^[a-z]/.test(part)) out.push(part);
+        }
+      }
+    }
   }
   return out;
 }

@@ -7,11 +7,10 @@ import { RNG } from "../rng";
 import { parseStimulus, type StimulusFeatures } from "../stimulusParser";
 import type { Persona } from "../types";
 
-// Note: "AI-powered" (hyphenated) tokenizes as a single "ai-powered" token under
-// the shared WORD_RE (`[a-zA-Z][a-zA-Z0-9'-]+`, ported from stimulus_parser.py),
-// so it never matches AI_WORDS' "ai" entry. Using "AI assistant" (space-separated)
-// so mentionsAi actually flips true for this fixture, while keeping the two
-// stimuli otherwise identical.
+// The two stimuli are identical except for the "AI" mention, so any difference
+// isolates the AI-driven scoring paths. ("AI assistant" and hyphenated forms
+// like "AI-powered" both flip mentionsAi true — the shared tokenizer splits
+// hyphenated compounds into their word parts; see engine/text.test.ts.)
 const AI_STIMULUS = "NovaPilot — an AI assistant for freelancers. $12/month. Free trial included.";
 const PLAIN_STIMULUS = "NovaPilot — an assistant for freelancers. $12/month. Free trial included.";
 

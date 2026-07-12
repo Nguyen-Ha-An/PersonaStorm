@@ -256,6 +256,16 @@ export const adminUpdatePricing = (p: {
   analyst_report_credits: number;
 }) => apiSend<Pricing>("POST", "/admin/pricing", p);
 export const adminGetInferenceSettings = () => apiGet<InferenceSettings>("/admin/inference-settings");
+export interface InferenceTestResult {
+  provider: string;
+  model: string | null;
+  base_url: string | null;
+  api_key_configured: boolean;
+  basic: { ok: boolean; detail: string };
+  schema: { ok: boolean; detail: string };
+}
+export const adminTestInference = () =>
+  apiSend<InferenceTestResult>("POST", "/admin/inference-test", {});
 export const adminUpdateInferenceSettings = (body: {
   inference_provider: string;
   analyst_provider: string;

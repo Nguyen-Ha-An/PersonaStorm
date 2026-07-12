@@ -72,7 +72,7 @@ export function newStormId(): string {
  * env-var names, so only a curated, user-safe reason is ever persisted — the
  * verbatim message goes to the server log alone.
  */
-function publicFailureReason(err: unknown): string {
+export function publicFailureReason(err: unknown): string {
   if (err instanceof SupabaseError) return "Storage backend unavailable while saving the run.";
   const msg = err instanceof Error ? err.message : String(err);
   if (/FIREWORKS_API_KEY|NVIDIA_API_KEY|INFERENCE_PROVIDER|ANALYST_PROVIDER|not (set|configured)/i.test(msg)) {
@@ -81,8 +81,21 @@ function publicFailureReason(err: unknown): string {
   if (/timeout|timed out|aborted|ECONNRESET|fetch failed/i.test(msg)) {
     return "The run timed out or lost the connection to the inference provider. For live runs, try a smaller persona count.";
   }
+  // ChatHttpError messages carry the upstream status as "chat/completions -> NNN".
   if (/-> 429/.test(msg)) {
     return "The inference provider rate-limited the run. Try again in a minute, or use a smaller persona count.";
+  }
+  if (/-> 40[13]/.test(msg)) {
+    return "The inference provider rejected the API key (unauthorized). Check FIREWORKS_API_KEY on the server.";
+  }
+  if (/-> 402/.test(msg)) {
+    return "The inference provider account has insufficient credits.";
+  }
+  if (/-> 404/.test(msg)) {
+    return "The configured inference model was not found on the provider. Check FIREWORKS_MODEL.";
+  }
+  if (/-> 400/.test(msg)) {
+    return "The inference provider rejected the request format. Run the connection test in Admin → Inference for details.";
   }
   return "Internal error while running the storm.";
 }

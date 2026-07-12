@@ -575,7 +575,6 @@ function InferenceEditor({
             >
               <option value="mock">mock</option>
               <option value="fireworks">fireworks</option>
-              <option value="nvidia">nvidia</option>
             </Select>
           </div>
           <div>
@@ -589,7 +588,6 @@ function InferenceEditor({
             >
               <option value="mock">mock</option>
               <option value="fireworks">fireworks</option>
-              <option value="nvidia">nvidia</option>
             </Select>
           </div>
         </div>

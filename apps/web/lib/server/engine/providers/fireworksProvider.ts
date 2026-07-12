@@ -16,7 +16,7 @@
 import { ProviderNotConfiguredError } from "../../errors";
 import type { StimulusFeatures } from "../stimulusParser";
 import type { Persona, PersonaReaction } from "../types";
-import { chatCompletion } from "./chatClient";
+import { chatCompletion, isTransientChatError } from "./chatClient";
 import { parseLlmReaction } from "./nvidiaProvider";
 import { REACTION_JSON_SCHEMA, buildSystemPrompt, buildUserPrompt } from "./prompts";
 import { reactBatchDefault, type PersonaInferenceProvider } from "./types";
@@ -27,7 +27,13 @@ export interface FireworksProviderOptions {
   model: string;
   maxTokens?: number;
   timeoutMs?: number;
+  /** Attempts per persona on transient (429/5xx/network) failures. */
+  maxRetries?: number;
+  /** Backoff base in ms (delay = base * 2^attempt); tests pass a tiny value. */
+  retryBaseMs?: number;
 }
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export class FireworksProvider implements PersonaInferenceProvider {
   readonly name = "fireworks";
@@ -36,6 +42,8 @@ export class FireworksProvider implements PersonaInferenceProvider {
   private model: string;
   private maxTokens: number;
   private timeoutMs: number;
+  private maxRetries: number;
+  private retryBaseMs: number;
 
   constructor(opts: FireworksProviderOptions) {
     if (!opts.baseUrl) {
@@ -61,6 +69,8 @@ export class FireworksProvider implements PersonaInferenceProvider {
     this.model = opts.model;
     this.maxTokens = opts.maxTokens ?? 2048;
     this.timeoutMs = opts.timeoutMs ?? 120_000;
+    this.maxRetries = Math.max(1, opts.maxRetries ?? 3);
+    this.retryBaseMs = opts.retryBaseMs ?? 1_000;
   }
 
   async react(
@@ -70,20 +80,33 @@ export class FireworksProvider implements PersonaInferenceProvider {
     features: StimulusFeatures | null,
     category: string | null,
   ): Promise<PersonaReaction> {
-    const content = await chatCompletion({
-      baseUrl: this.baseUrl,
-      apiKey: this.apiKey,
-      model: this.model,
-      messages: [
-        { role: "system", content: buildSystemPrompt(persona) },
-        { role: "user", content: buildUserPrompt(stimulus, stimulusType, features) },
-      ],
-      maxTokens: this.maxTokens,
-      temperature: 0.8,
-      jsonSchema: REACTION_JSON_SCHEMA as Record<string, unknown>,
-      timeoutMs: this.timeoutMs,
-    });
-    return parseLlmReaction(content, persona, features, category);
+    // Retry transient failures (429/5xx/network) with exponential backoff —
+    // one rate-limited persona out of 1,000 must not fail the whole storm.
+    // Non-transient errors (schema, auth, 404 model) surface immediately.
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < this.maxRetries; attempt++) {
+      if (attempt > 0) await sleep(this.retryBaseMs * 2 ** (attempt - 1));
+      try {
+        const content = await chatCompletion({
+          baseUrl: this.baseUrl,
+          apiKey: this.apiKey,
+          model: this.model,
+          messages: [
+            { role: "system", content: buildSystemPrompt(persona) },
+            { role: "user", content: buildUserPrompt(stimulus, stimulusType, features) },
+          ],
+          maxTokens: this.maxTokens,
+          temperature: 0.8,
+          jsonSchema: REACTION_JSON_SCHEMA as Record<string, unknown>,
+          timeoutMs: this.timeoutMs,
+        });
+        return parseLlmReaction(content, persona, features, category);
+      } catch (err) {
+        lastErr = err;
+        if (!isTransientChatError(err)) throw err;
+      }
+    }
+    throw lastErr;
   }
 
   reactBatch(

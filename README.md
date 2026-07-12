@@ -475,17 +475,20 @@ analyst/report model:
 ```bash
 INFERENCE_PROVIDER=mock       # deterministic local reaction engine (default, CI, demos)
 INFERENCE_PROVIDER=fireworks  # Fireworks reaction swarm — the real prototype (needs FIREWORKS_API_KEY)
-INFERENCE_PROVIDER=nvidia     # NVIDIA NIM GLM-5.2 reaction swarm (testing; needs NVIDIA_API_KEY)
 INFERENCE_PROVIDER=vllm       # any OpenAI-compatible vLLM server (MI300X/ROCm target)
 
 SEMANTIC_PROVIDER=mock        # deterministic stand-in — no blend, formulas stand, honestly labeled (default)
 SEMANTIC_PROVIDER=fireworks   # one real LLM call/storm grounds 5 product-fit criteria (needs FIREWORKS_API_KEY)
-SEMANTIC_PROVIDER=nvidia      # same, on NVIDIA NIM (testing; needs NVIDIA_API_KEY)
 
 ANALYST_PROVIDER=mock         # local deterministic report builder's own text (default)
 ANALYST_PROVIDER=fireworks    # Fireworks re-narrates the report (needs FIREWORKS_API_KEY)
-ANALYST_PROVIDER=nvidia       # NVIDIA NIM GLM-5.2 re-narrates the report (testing; needs NVIDIA_API_KEY)
 ```
+
+**Fireworks-only policy:** in the current prototype every live storm path runs
+on the Fireworks API. A `nvidia` value — whether from env or a stored admin
+settings row — is redirected to `fireworks` when the per-storm config is
+resolved, so a run can never split its spend across two providers. The NVIDIA
+NIM client code remains in both engines for local/reference use.
 
 Separately, the opt-in **orchestrated Fireworks worker swarm** (admin
 **Inference settings** panel / `orchestration_enabled`, needs

@@ -49,6 +49,26 @@ function coerceProvider(
   return v === "mock" || v === "nvidia" || v === "fireworks" ? v : fallback;
 }
 
+/**
+ * FIREWORKS-ONLY POLICY: the current prototype serves live inference from the
+ * Fireworks API exclusively. Any 'nvidia' routing — a stale settings row saved
+ * before the fireworks provider existed, or a leftover env var — is redirected
+ * to fireworks here, so a storm can never split its spend across two
+ * providers (the observed failure mode: swarm billing NVIDIA while
+ * semantic/orchestration billed Fireworks). 'mock' (offline) passes through
+ * untouched. The NvidiaProvider code remains for local/reference use only.
+ */
+function fireworksOnly(p: "mock" | "nvidia" | "fireworks"): "mock" | "fireworks" {
+  return p === "nvidia" ? "fireworks" : p;
+}
+
+/** Fireworks model ids live under accounts/…; anything else (e.g. an NVIDIA
+ * catalog id left in a row or env var) falls back so it is never sent to the
+ * Fireworks endpoint. */
+function fireworksModelOr(raw: string, fallback: string): string {
+  return raw && raw.startsWith("accounts/") ? raw : fallback;
+}
+
 function posInt(v: unknown, fallback: number): number {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
@@ -84,12 +104,9 @@ export function orchestrationSettingsFromRow(
 ): OrchestrationSettings {
   const rawWorkerModel = typeof r.worker_model === "string" ? r.worker_model.trim() : "";
   const rawOrchModel = typeof r.orchestrator_model === "string" ? r.orchestrator_model.trim() : "";
-  const orchestratorProvider =
-    r.orchestrator_provider === "nvidia" || r.orchestrator_provider === "fireworks"
-      ? r.orchestrator_provider
-      : env.orchestratorProvider;
-  const orchestratorDefault =
-    orchestratorProvider === "fireworks" ? env.fireworksOrchestratorModel : env.orchestratorModel;
+  // Fireworks-only: a row or env pinning the brain to 'nvidia' is redirected.
+  const orchestratorProvider: OrchestratorProvider = "fireworks";
+  const orchestratorDefault = env.fireworksOrchestratorModel;
   return {
     orchestrationEnabled: boolField(r.orchestration_enabled, false),
     orchestratorProvider,
@@ -125,14 +142,16 @@ export function inferenceSettingsFromRow(
   const rawFireworksModel = typeof r.fireworks_model === "string" ? r.fireworks_model.trim() : "";
   const rawAnalystModel = typeof r.analyst_model === "string" ? r.analyst_model.trim() : "";
   const nvidiaModel = rawNvidiaModel || env.nvidiaModel;
-  const fireworksModel = rawFireworksModel || env.fireworksModel;
-  const analystProvider = coerceProvider(r.analyst_provider, env.analystProvider);
+  const fireworksModel = fireworksModelOr(rawFireworksModel, env.fireworksModel);
+  const analystProvider = fireworksOnly(coerceProvider(r.analyst_provider, env.analystProvider));
+  // An analyst model inherited from an old nvidia setup (e.g. z-ai/glm-5.2)
+  // must not be sent to Fireworks — the namespace guard drops it.
   const analystModel =
-    rawAnalystModel ||
-    env.analystModel ||
-    (analystProvider === "fireworks" ? fireworksModel : nvidiaModel);
+    analystProvider === "fireworks"
+      ? fireworksModelOr(rawAnalystModel || env.analystModel, fireworksModel)
+      : rawAnalystModel || env.analystModel || nvidiaModel;
   return {
-    inferenceProvider: coerceProvider(r.inference_provider, env.inferenceProvider),
+    inferenceProvider: fireworksOnly(coerceProvider(r.inference_provider, env.inferenceProvider)),
     analystProvider,
     nvidiaModel,
     fireworksModel,
@@ -162,6 +181,16 @@ export async function resolveEffectiveConfig(
   env: ServerConfig = getConfig(),
 ): Promise<ServerConfig> {
   const s = await getInferenceSettings(gateway, env);
+  // Semantic assessor follows the EFFECTIVE analyst provider unless
+  // SEMANTIC_PROVIDER is explicitly set in env (mock stays mock, nvidia is
+  // redirected by the fireworks-only policy). Previously it followed the env
+  // analyst only, so a row switching the analyst left the semantic assessor
+  // on the old provider — one of the ways a storm split across two APIs.
+  const semanticProvider = fireworksOnly(env.semanticProviderRaw || s.analystProvider);
+  const semanticModel =
+    semanticProvider === "fireworks"
+      ? fireworksModelOr(env.semanticModelRaw || env.analystModel, s.fireworksModel)
+      : env.semanticModel;
   return {
     ...env,
     inferenceProvider: s.inferenceProvider,
@@ -171,6 +200,8 @@ export async function resolveEffectiveConfig(
     analystModel: s.analystModel,
     nvidiaMaxTokens: s.nvidiaMaxTokens,
     analystMaxTokens: s.analystMaxTokens,
+    semanticProvider,
+    semanticModel,
     // nvidiaApiKey/nvidiaBaseUrl + fireworksApiKey/fireworksBaseUrl
     // deliberately left as `...env`.
   };

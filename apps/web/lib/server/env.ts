@@ -54,6 +54,11 @@ export interface ServerConfig {
   semanticProvider: SemanticProvider;
   semanticModel: string;
   semanticMaxTokens: number;
+  /** Raw env-only values ("" when unset), kept so resolveEffectiveConfig can
+   * re-derive the semantic provider/model from the EFFECTIVE analyst provider
+   * after the DB settings row is layered on. */
+  semanticProviderRaw: "" | "mock" | "nvidia" | "fireworks";
+  semanticModelRaw: string;
   personaSeed: number;
   // Live-replay pacing for the SSE stream (data is precomputed at create time).
   streamBatchSize: number;
@@ -103,8 +108,9 @@ export function getConfig(): ServerConfig {
     liveProvider(trimmed(process.env.ANALYST_PROVIDER).toLowerCase()) || "mock";
   // Semantic assessor defaults to whatever the analyst uses (mock stays mock).
   const semanticRaw = trimmed(process.env.SEMANTIC_PROVIDER).toLowerCase();
-  const semanticProvider: SemanticProvider =
-    semanticRaw === "mock" ? "mock" : liveProvider(semanticRaw) || analystProvider;
+  const semanticProviderRaw: "" | "mock" | "nvidia" | "fireworks" =
+    semanticRaw === "mock" ? "mock" : liveProvider(semanticRaw);
+  const semanticProvider: SemanticProvider = semanticProviderRaw || analystProvider;
 
   // Fireworks model resolution: FIREWORKS_MODEL for the classic engine paths,
   // falling back to the (worker-swarm) FIREWORKS_DEEPSEEK_MODEL default so a
@@ -137,6 +143,8 @@ export function getConfig(): ServerConfig {
       (semanticProvider === "fireworks"
         ? fireworksModel
         : trimmed(process.env.NVIDIA_MODEL) || "z-ai/glm-5.2"),
+    semanticProviderRaw,
+    semanticModelRaw: trimmed(process.env.SEMANTIC_MODEL),
     semanticMaxTokens: intEnv("SEMANTIC_MAX_TOKENS", 2048),
     personaSeed: intEnv("PERSONA_SEED", 1337),
     streamBatchSize: intEnv("STREAM_BATCH_SIZE", 25),

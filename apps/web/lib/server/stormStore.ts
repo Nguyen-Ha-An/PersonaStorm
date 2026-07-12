@@ -75,11 +75,14 @@ export function newStormId(): string {
 function publicFailureReason(err: unknown): string {
   if (err instanceof SupabaseError) return "Storage backend unavailable while saving the run.";
   const msg = err instanceof Error ? err.message : String(err);
-  if (/NVIDIA_API_KEY|INFERENCE_PROVIDER|ANALYST_PROVIDER|not (set|configured)/i.test(msg)) {
+  if (/FIREWORKS_API_KEY|NVIDIA_API_KEY|INFERENCE_PROVIDER|ANALYST_PROVIDER|not (set|configured)/i.test(msg)) {
     return "The inference provider is not configured on the server.";
   }
   if (/timeout|timed out|aborted|ECONNRESET|fetch failed/i.test(msg)) {
-    return "The run timed out or lost the connection to the inference provider.";
+    return "The run timed out or lost the connection to the inference provider. For live runs, try a smaller persona count.";
+  }
+  if (/-> 429/.test(msg)) {
+    return "The inference provider rate-limited the run. Try again in a minute, or use a smaller persona count.";
   }
   return "Internal error while running the storm.";
 }
@@ -94,7 +97,7 @@ function publicFailureReason(err: unknown): string {
  * and admin wallet-adjust once an infra choice is made — see
  * docs/deployment.md "Security hardening backlog".
  */
-const STALE_RUNNING_MS = 3 * 60 * 1000;
+const STALE_RUNNING_MS = 6 * 60 * 1000;
 
 async function assertNoActiveRun(gateway: Gateway, userId: string): Promise<void> {
   const recent = await gateway.listUserStorms(userId, 5);
@@ -106,6 +109,28 @@ async function assertNoActiveRun(gateway: Gateway, userId: string): Promise<void
   );
   if (active) {
     throw new HttpError(429, "You already have a storm running. Wait for it to finish before starting another.");
+  }
+  // A 'running' row older than the stale window is a CRASHED invocation — the
+  // platform killed the function (time limit / OOM) before the in-process
+  // refund could execute, so the user was charged with no result and the
+  // frontend never received a response. Settle it here: mark failed + refund.
+  // Best-effort; a failure to settle must not block the new run.
+  for (const r of recent) {
+    if (r.status !== "running") continue;
+    if (now - new Date(String(r.created_at ?? 0)).getTime() < STALE_RUNNING_MS) continue;
+    try {
+      await gateway.updateStorm(String(r.id), {
+        status: "failed",
+        error: "The run was interrupted before it could finish (server time limit). Your credits have been refunded — try a smaller persona count for live runs.",
+      });
+      const credits = Number(r.price_credits ?? 0);
+      if (credits > 0) {
+        await refundStorm(gateway, userId, credits, String(r.id), `Refund — storm ${r.id} interrupted`);
+      }
+      console.warn(`[personastorm storm] settled crashed run ${r.id}: marked failed and refunded ${r.price_credits} credits.`);
+    } catch (settleErr) {
+      console.error(`[personastorm storm] could not settle crashed run ${r.id}:`, (settleErr as Error).message);
+    }
   }
 }
 

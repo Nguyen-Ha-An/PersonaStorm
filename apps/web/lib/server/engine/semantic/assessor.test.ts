@@ -38,4 +38,24 @@ describe("getSemanticAssessor", () => {
     const cfg = { ...getConfig(), semanticProvider: "mock" as const };
     expect(getSemanticAssessor(cfg).name).toBe("mock");
   });
+
+  test("fireworks with a key yields the LLM assessor", () => {
+    const cfg = {
+      ...getConfig(),
+      semanticProvider: "fireworks" as const,
+      fireworksApiKey: "fw-key",
+      fireworksBaseUrl: "https://api.fireworks.ai/inference/v1",
+    };
+    expect(getSemanticAssessor(cfg).name).toBe("llm");
+  });
+
+  test("fireworks on the hosted endpoint without a key degrades to mock", () => {
+    const cfg = {
+      ...getConfig(),
+      semanticProvider: "fireworks" as const,
+      fireworksApiKey: "",
+      fireworksBaseUrl: "https://api.fireworks.ai/inference/v1",
+    };
+    expect(getSemanticAssessor(cfg).name).toBe("mock");
+  });
 });

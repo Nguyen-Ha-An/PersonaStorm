@@ -19,18 +19,28 @@ class Settings(BaseSettings):
     """Environment-driven settings. Every field can be overridden via env vars."""
 
     # --- inference -----------------------------------------------------------
-    # mock   -> deterministic local provider, no GPU / network needed (P0 demo)
-    # vllm   -> OpenAI-compatible vLLM server (target: AMD MI300X + ROCm)
-    # nvidia -> NVIDIA NIM (hosted build.nvidia.com or self-hosted container)
-    inference_provider: Literal["mock", "nvidia", "vllm"] = "mock"
+    # mock      -> deterministic local provider, no GPU / network needed (P0 demo)
+    # fireworks -> Fireworks AI (OpenAI-compatible) — the real prototype's API
+    # vllm      -> OpenAI-compatible vLLM server (target: AMD MI300X + ROCm)
+    # nvidia    -> NVIDIA NIM (hosted build.nvidia.com or self-hosted container);
+    #              kept as a reference/testing path
+    inference_provider: Literal["mock", "nvidia", "vllm", "fireworks"] = "mock"
 
     # analyst/aggregator agent (executive summary, objection cluster labeling,
     # recommendations rewriting) — separate knob from the persona swarm provider.
-    analyst_provider: Literal["mock", "nvidia"] = "mock"
+    analyst_provider: Literal["mock", "nvidia", "fireworks"] = "mock"
 
     vllm_base_url: str = "http://localhost:8001/v1"
     vllm_model: str = "google/gemma-3-27b-it"
     vllm_api_key: str = "not-needed"  # vLLM ignores it unless --api-key is set
+
+    # Fireworks AI — OpenAI-compatible; the real prototype's inference API.
+    # Mirrors apps/web/lib/server/env.ts (FIREWORKS_* env vars).
+    fireworks_api_key: str | None = None
+    fireworks_base_url: str = "https://api.fireworks.ai/inference/v1"
+    fireworks_model: str = "accounts/fireworks/models/deepseek-v4-flash"
+    fireworks_max_tokens: int = 2048
+    fireworks_max_retries: int = 3  # 429/5xx backoff attempts
 
     # NVIDIA NIM — OpenAI-compatible. Default targets the hosted API catalog;
     # point nvidia_base_url at a self-hosted NIM container's /v1 to run on-GPU.
@@ -64,7 +74,7 @@ class Settings(BaseSettings):
     # swarm and analyst providers. None -> defaults to the analyst provider
     # (mirrors env.ts's SEMANTIC_PROVIDER fallback chain); see
     # effective_semantic_provider / effective_semantic_model below.
-    semantic_provider: Literal["mock", "nvidia"] | None = None
+    semantic_provider: Literal["mock", "nvidia", "fireworks"] | None = None
     semantic_model: str | None = None
     semantic_max_tokens: int = 2048
 
@@ -134,15 +144,23 @@ class Settings(BaseSettings):
         return "guided_json" if self.nvidia_use_guided_json else "json_object"
 
     @property
-    def effective_semantic_provider(self) -> Literal["mock", "nvidia"]:
+    def effective_semantic_provider(self) -> Literal["mock", "nvidia", "fireworks"]:
         """Explicit SEMANTIC_PROVIDER wins; otherwise mirror the analyst provider."""
         if self.semantic_provider is not None:
             return self.semantic_provider
-        return "nvidia" if self.analyst_provider == "nvidia" else "mock"
+        return self.analyst_provider if self.analyst_provider in ("nvidia", "fireworks") else "mock"
 
     @property
     def effective_semantic_model(self) -> str:
-        return self.semantic_model or self.analyst_model or self.nvidia_model
+        """Model fallback ends at the provider actually making the call, so a
+        bare SEMANTIC_PROVIDER=fireworks never sends an NVIDIA model id to
+        Fireworks (mirrors env.ts's semanticModel resolution)."""
+        default = (
+            self.fireworks_model
+            if self.effective_semantic_provider == "fireworks"
+            else self.nvidia_model
+        )
+        return self.semantic_model or self.analyst_model or default
 
 
 @lru_cache

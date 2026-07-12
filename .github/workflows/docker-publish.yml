@@ -1,0 +1,127 @@
+# ============================================================================
+# Build and publish the PersonaStorm web image to GitHub Container Registry.
+#
+# Produces a publicly pullable image reference for hackathon submission /
+# automated judging:
+#
+#     ghcr.io/nguyen-ha-an/personastorm:latest        (default branch)
+#     ghcr.io/nguyen-ha-an/personastorm:sha-<commit>  (every build)
+#     ghcr.io/nguyen-ha-an/personastorm:<tag>         (on v* release tags)
+#
+# The image is the full app (Next.js frontend + API Route Handlers) built from
+# apps/web/Dockerfile with the REPO ROOT as build context (it copies data/ for
+# the evidence-annotated persona priors). It runs fully offline in mock mode
+# with zero env vars:
+#
+#     docker run -p 3000:3000 ghcr.io/nguyen-ha-an/personastorm:latest
+#
+# and switches to live Fireworks inference at run time (never baked in):
+#
+#     docker run -p 3000:3000 \
+#       -e INFERENCE_PROVIDER=fireworks -e ANALYST_PROVIDER=fireworks \
+#       -e FIREWORKS_API_KEY=fw-... \
+#       ghcr.io/nguyen-ha-an/personastorm:latest
+#
+# ONE-TIME SETUP: the first push creates the GHCR package as PRIVATE. To make
+# it publicly pullable (required for judging), open the repo on GitHub →
+# Packages → personastorm → Package settings → Change visibility → Public.
+#
+# Optional secrets: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY
+# are baked into the browser bundle when set (the anon key is safe to expose —
+# it cannot bypass RLS). When unset the image uses the in-memory dev gateway.
+# Server-side secrets are NEVER build args — they are read at `docker run`.
+# ============================================================================
+
+name: Publish Docker image
+
+on:
+  push:
+    # claude/** included so the image publishes from feature branches too —
+    # GitHub only surfaces workflow_dispatch in the Actions tab once the
+    # workflow file reaches the default branch, so branch pushes are the way
+    # to build a submission image before merging (tags: branch name + sha;
+    # `latest` is still reserved for main).
+    branches: [main, "claude/**"]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  # Manual runs — available in the Actions tab once this file is on main.
+  workflow_dispatch:
+
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        # PRs from forks have no package permissions — build-only there.
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata (tags + labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # metadata-action lowercases this for ghcr (GHCR requires lowercase).
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,prefix=sha-
+
+      - name: Build (and push) image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          # Automated judging runs linux/amd64 containers.
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test the built image
+        # Boot the image with zero env (offline mock mode) and require the
+        # landing page to answer 200 — catches a broken standalone bundle
+        # before anything is published as "latest".
+        if: github.event_name != 'pull_request'
+        run: |
+          set -eu
+          IMAGE="$(echo '${{ steps.meta.outputs.tags }}' | head -n1)"
+          # buildx pushed straight to the registry; pull it back to run it.
+          docker pull "$IMAGE"
+          docker run -d --name smoke -p 3000:3000 "$IMAGE"
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3000/ >/dev/null 2>&1; then
+              echo "OK: $IMAGE serves on :3000"
+              docker rm -f smoke
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Image failed to serve within 30s:" >&2
+          docker logs smoke >&2 || true
+          docker rm -f smoke
+          exit 1

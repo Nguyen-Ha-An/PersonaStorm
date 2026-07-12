@@ -30,10 +30,12 @@ export interface InferenceSettingsRow {
   inference_provider: string;
   analyst_provider: string;
   nvidia_model: string;
+  fireworks_model?: string;
   analyst_model: string;
   nvidia_max_tokens: number;
   analyst_max_tokens: number;
   orchestration_enabled?: boolean;
+  orchestrator_provider?: string;
   orchestrator_model?: string;
   worker_model?: string;
   max_physical_workers?: number;

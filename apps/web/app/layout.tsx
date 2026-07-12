@@ -1,14 +1,19 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { AuthHashRedirector } from "@/components/AuthHashRedirector";
 import { AuthProvider } from "@/lib/auth";
 
-// Inter is named first in the Tailwind sans stack; next/font self-hosts it at
-// build time so visitors actually get it (previously it silently fell back to
-// system fonts because nothing ever loaded it).
-const inter = Inter({
-  subsets: ["latin"],
+// Inter is named first in the Tailwind sans stack. It is VENDORED
+// (app/fonts/InterVariable.woff2, the official variable font from
+// rsms/inter) and served via next/font/local rather than next/font/google:
+// the google loader fetches from Google Fonts at BUILD time, which makes
+// `next build` fail in offline/airgapped environments (Docker image builds,
+// restricted CI) — the local font keeps the build hermetic with identical
+// visual output.
+const inter = localFont({
+  src: "./fonts/InterVariable.woff2",
+  weight: "100 900",
   display: "swap",
   variable: "--font-inter",
 });

@@ -222,6 +222,9 @@ jobs:
           SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
           INFERENCE_PROVIDER: ${{ secrets.INFERENCE_PROVIDER }}
           ANALYST_PROVIDER: ${{ secrets.ANALYST_PROVIDER }}
+          FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+          FIREWORKS_BASE_URL: ${{ secrets.FIREWORKS_BASE_URL }}
+          FIREWORKS_MODEL: ${{ secrets.FIREWORKS_MODEL }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           NVIDIA_BASE_URL: ${{ secrets.NVIDIA_BASE_URL }}
           NVIDIA_MODEL: ${{ secrets.NVIDIA_MODEL }}
@@ -246,6 +249,9 @@ jobs:
           sync_env SUPABASE_JWT_SECRET "$SUPABASE_JWT_SECRET" preview
           sync_env INFERENCE_PROVIDER "$INFERENCE_PROVIDER" preview
           sync_env ANALYST_PROVIDER "$ANALYST_PROVIDER" preview
+          sync_env FIREWORKS_API_KEY "$FIREWORKS_API_KEY" preview
+          sync_env FIREWORKS_BASE_URL "$FIREWORKS_BASE_URL" preview
+          sync_env FIREWORKS_MODEL "$FIREWORKS_MODEL" preview
           sync_env NVIDIA_API_KEY "$NVIDIA_API_KEY" preview
           sync_env NVIDIA_BASE_URL "$NVIDIA_BASE_URL" preview
           sync_env NVIDIA_MODEL "$NVIDIA_MODEL" preview
@@ -474,7 +480,7 @@ jobs:
       # ever piped via stdin (never echoed); the loop prints names only.
       # NEVER-SYNC list (deliberately absent below): SUPABASE_DB_PASSWORD,
       # SUPABASE_ACCESS_TOKEN, VERCEL_TOKEN, ADMIN_PASSWORD. Public NEXT_PUBLIC_*
-      # keys and server-side SUPABASE_*/NVIDIA_* are synced; SUPABASE_URL falls
+      # keys and server-side SUPABASE_*/FIREWORKS_*/NVIDIA_* are synced; SUPABASE_URL falls
       # back to NEXT_PUBLIC_SUPABASE_URL. Server-side vars must NOT be prefixed
       # with NEXT_PUBLIC_ (they are not, here or in the app).
       - name: Sync Vercel environment variables (production)
@@ -488,6 +494,9 @@ jobs:
           SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
           INFERENCE_PROVIDER: ${{ secrets.INFERENCE_PROVIDER }}
           ANALYST_PROVIDER: ${{ secrets.ANALYST_PROVIDER }}
+          FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+          FIREWORKS_BASE_URL: ${{ secrets.FIREWORKS_BASE_URL }}
+          FIREWORKS_MODEL: ${{ secrets.FIREWORKS_MODEL }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           NVIDIA_BASE_URL: ${{ secrets.NVIDIA_BASE_URL }}
           NVIDIA_MODEL: ${{ secrets.NVIDIA_MODEL }}
@@ -516,6 +525,9 @@ jobs:
           sync_env AUTH_DEBUG_SECRET "$AUTH_DEBUG_SECRET" production
           sync_env INFERENCE_PROVIDER "$INFERENCE_PROVIDER" production
           sync_env ANALYST_PROVIDER "$ANALYST_PROVIDER" production
+          sync_env FIREWORKS_API_KEY "$FIREWORKS_API_KEY" production
+          sync_env FIREWORKS_BASE_URL "$FIREWORKS_BASE_URL" production
+          sync_env FIREWORKS_MODEL "$FIREWORKS_MODEL" production
           sync_env NVIDIA_API_KEY "$NVIDIA_API_KEY" production
           sync_env NVIDIA_BASE_URL "$NVIDIA_BASE_URL" production
           sync_env NVIDIA_MODEL "$NVIDIA_MODEL" production

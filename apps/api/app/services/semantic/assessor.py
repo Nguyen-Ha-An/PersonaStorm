@@ -157,6 +157,20 @@ class LlmSemanticAssessor(SemanticAssessor):
 
 def get_semantic_assessor(settings: Settings) -> SemanticAssessor:
     provider = settings.effective_semantic_provider
+    if provider == "fireworks":
+        if "api.fireworks.ai" in settings.fireworks_base_url and not settings.fireworks_api_key:
+            logger.warning(
+                "[personastorm semantic] SEMANTIC_PROVIDER=fireworks but FIREWORKS_API_KEY "
+                "missing; using mock assessor."
+            )
+            return MockSemanticAssessor(settings.persona_seed)
+        return LlmSemanticAssessor(
+            settings.fireworks_api_key,
+            settings.fireworks_base_url,
+            settings.effective_semantic_model,
+            settings.semantic_max_tokens,
+            "fireworks",
+        )
     if provider == "nvidia":
         if "integrate.api.nvidia.com" in settings.nvidia_base_url and not settings.nvidia_api_key:
             logger.warning(

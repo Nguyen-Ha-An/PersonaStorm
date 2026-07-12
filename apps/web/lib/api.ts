@@ -260,6 +260,7 @@ export const adminUpdateInferenceSettings = (body: {
   inference_provider: string;
   analyst_provider: string;
   nvidia_model: string;
+  fireworks_model?: string;
   analyst_model: string;
   nvidia_max_tokens: number;
   analyst_max_tokens: number;

@@ -1,8 +1,9 @@
 """Provider factory tests — INFERENCE_PROVIDER routing (mock/nvidia/vllm).
 
-Fireworks and NIM providers were removed in favor of a single NvidiaProvider
-(name="nvidia"). These tests exercise `factory.get_provider(settings)` exactly
-as `storm_runner.py` calls it: with a `Settings`-like object, not kwargs.
+These tests exercise `factory.get_provider(settings)` exactly as
+`storm_runner.py` calls it: with a `Settings`-like object, not kwargs. The
+fireworks provider (the real prototype's inference API) is covered in
+test_fireworks_provider.py.
 """
 
 import pytest

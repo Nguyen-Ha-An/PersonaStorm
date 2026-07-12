@@ -1,0 +1,97 @@
+// @vitest-environment node
+import { beforeEach, describe, expect, test, vi } from "vitest";
+
+vi.mock("./chatClient", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./chatClient")>();
+  return { ...actual, chatCompletion: vi.fn() };
+});
+
+import { ProviderNotConfiguredError } from "../../errors";
+import { PersonaGenerator } from "../persona/generator";
+import { chatCompletion } from "./chatClient";
+import { FireworksProvider } from "./fireworksProvider";
+import { getProvider } from "./index";
+import { REACTION_JSON_SCHEMA } from "./prompts";
+import { getConfig } from "../../env";
+
+const HOSTED = "https://api.fireworks.ai/inference/v1";
+const MODEL = "accounts/fireworks/models/deepseek-v4-flash";
+
+const mk = (over: Partial<ConstructorParameters<typeof FireworksProvider>[0]> = {}) =>
+  new FireworksProvider({ apiKey: "fw-key", baseUrl: HOSTED, model: MODEL, ...over });
+
+const VALID_REPLY = JSON.stringify({
+  criteria_scores: { price_value: 0.7, need_intensity: 0.6 },
+  buy_likelihood: 0.72,
+  max_price: 12,
+  recommended_pricing_model: "subscription",
+  // Numbers the model must never be trusted for — deliberately absurd:
+  market_fit_score: 7,
+  status: "green",
+  qualitative: { first_objection: "price", quote: "sounds useful" },
+  research_recommendation: { best_next_test: "survey" },
+  reasoning_summary: "fits my workflow",
+});
+
+describe("FireworksProvider construction guards", () => {
+  test("hosted endpoint without FIREWORKS_API_KEY refuses to construct", () => {
+    expect(() => mk({ apiKey: "" })).toThrow(ProviderNotConfiguredError);
+  });
+  test("missing model refuses to construct", () => {
+    expect(() => mk({ model: "" })).toThrow(ProviderNotConfiguredError);
+  });
+  test("missing base URL refuses to construct", () => {
+    expect(() => mk({ baseUrl: "" })).toThrow(ProviderNotConfiguredError);
+  });
+  test("self-hosted (non-fireworks.ai) endpoint constructs without a key", () => {
+    expect(mk({ apiKey: "", baseUrl: "http://localhost:8001/v1" }).name).toBe("fireworks");
+  });
+});
+
+describe("FireworksProvider.react", () => {
+  beforeEach(() => vi.mocked(chatCompletion).mockReset());
+
+  test("sends the reaction schema via Fireworks JSON mode and parses the reply", async () => {
+    vi.mocked(chatCompletion).mockResolvedValueOnce(VALID_REPLY);
+    const { personas } = new PersonaGenerator(7).generate("early_adopters", 1);
+    const r = await mk().react(personas[0], "An AI assistant. $12/month.", "product_concept", null, null);
+
+    const opts = vi.mocked(chatCompletion).mock.calls[0][0];
+    expect(opts.baseUrl).toBe(HOSTED);
+    expect(opts.model).toBe(MODEL);
+    expect(opts.temperature).toBe(0.8);
+    expect(opts.jsonSchema).toBe(REACTION_JSON_SCHEMA);
+
+    expect(r.persona_id).toBe(personas[0].persona_id);
+    expect(r.buy_likelihood).toBe(0.72);
+    // market_fit_score/status recomputed server-side, never the model's values.
+    expect(r.market_fit_score).toBeGreaterThanOrEqual(0);
+    expect(r.market_fit_score).toBeLessThanOrEqual(1);
+    expect(r.recommended_pricing_model).toBe("subscription");
+  });
+
+  test("non-JSON content raises (counts as a failed persona, never fabricated)", async () => {
+    vi.mocked(chatCompletion).mockResolvedValueOnce("sorry, I cannot");
+    const { personas } = new PersonaGenerator(7).generate("early_adopters", 1);
+    await expect(
+      mk().react(personas[0], "stim", "product_concept", null, null),
+    ).rejects.toThrow(/non-JSON/);
+  });
+});
+
+describe("getProvider factory", () => {
+  test("INFERENCE_PROVIDER=fireworks builds the FireworksProvider", () => {
+    const cfg = {
+      ...getConfig(),
+      inferenceProvider: "fireworks" as const,
+      fireworksApiKey: "fw-key",
+      fireworksBaseUrl: HOSTED,
+      fireworksModel: MODEL,
+    };
+    expect(getProvider(cfg).name).toBe("fireworks");
+  });
+  test("mock stays the default", () => {
+    const cfg = { ...getConfig(), inferenceProvider: "mock" as const };
+    expect(getProvider(cfg).name).toBe("mock");
+  });
+});

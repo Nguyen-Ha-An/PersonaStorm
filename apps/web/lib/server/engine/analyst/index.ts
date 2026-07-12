@@ -6,7 +6,9 @@
  * any failure returns the original deterministic report unchanged.
  *
  * MockAnalyst (default) is a no-op — the deterministic builder already writes
- * good text. NvidiaAnalyst rewrites the summary via one OpenAI-compatible call.
+ * good text. LlmAnalyst rewrites the summary via one OpenAI-compatible call —
+ * the same class serves the fireworks (real prototype) and nvidia
+ * (reference/testing) providers, differing only in credentials + model.
  */
 
 import type { ServerConfig } from "../../env";
@@ -24,9 +26,9 @@ class MockAnalyst implements AnalystProvider {
   }
 }
 
-class NvidiaAnalyst implements AnalystProvider {
-  readonly name = "nvidia";
+class LlmAnalyst implements AnalystProvider {
   constructor(
+    readonly name: string,
     private apiKey: string,
     private baseUrl: string,
     private model: string,
@@ -94,13 +96,20 @@ class NvidiaAnalyst implements AnalystProvider {
 }
 
 export function getAnalyst(cfg: ServerConfig): AnalystProvider {
+  // Fall back to mock if a hosted endpoint has no key (never a hard failure).
+  if (cfg.analystProvider === "fireworks") {
+    if (cfg.fireworksBaseUrl.includes("api.fireworks.ai") && !cfg.fireworksApiKey) {
+      console.warn("[personastorm analyst] ANALYST_PROVIDER=fireworks but FIREWORKS_API_KEY missing; using mock analyst.");
+      return new MockAnalyst();
+    }
+    return new LlmAnalyst("fireworks", cfg.fireworksApiKey, cfg.fireworksBaseUrl, cfg.analystModel || cfg.fireworksModel, cfg.analystMaxTokens);
+  }
   if (cfg.analystProvider === "nvidia") {
-    // Fall back to mock if the hosted endpoint has no key (never a hard failure).
     if (cfg.nvidiaBaseUrl.includes("integrate.api.nvidia.com") && !cfg.nvidiaApiKey) {
       console.warn("[personastorm analyst] ANALYST_PROVIDER=nvidia but NVIDIA_API_KEY missing; using mock analyst.");
       return new MockAnalyst();
     }
-    return new NvidiaAnalyst(cfg.nvidiaApiKey, cfg.nvidiaBaseUrl, cfg.analystModel || cfg.nvidiaModel, cfg.analystMaxTokens);
+    return new LlmAnalyst("nvidia", cfg.nvidiaApiKey, cfg.nvidiaBaseUrl, cfg.analystModel || cfg.nvidiaModel, cfg.analystMaxTokens);
   }
   return new MockAnalyst();
 }

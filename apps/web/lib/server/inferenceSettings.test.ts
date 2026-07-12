@@ -45,6 +45,50 @@ describe("inferenceSettingsFromRow", () => {
     const s = inferenceSettingsFromRow({ nvidia_model: "m/x", analyst_model: "" }, env);
     expect(s.analystModel).toBe("m/x");
   });
+
+  it("accepts fireworks providers and the fireworks_model override", () => {
+    const s = inferenceSettingsFromRow(
+      { inference_provider: "fireworks", analyst_provider: "fireworks", fireworks_model: "accounts/acme/models/m1" },
+      env,
+    );
+    expect(s.inferenceProvider).toBe("fireworks");
+    expect(s.analystProvider).toBe("fireworks");
+    expect(s.fireworksModel).toBe("accounts/acme/models/m1");
+  });
+
+  it("falls back analyst_model to the fireworks model when the analyst runs on fireworks", () => {
+    const s = inferenceSettingsFromRow(
+      { analyst_provider: "fireworks", fireworks_model: "accounts/acme/models/m1", analyst_model: "" },
+      { ...env, analystModel: "" },
+    );
+    expect(s.analystModel).toBe("accounts/acme/models/m1");
+  });
+});
+
+describe("orchestrator provider resolution", () => {
+  it("defaults to the env orchestrator provider with a matching model", () => {
+    const s = inferenceSettingsFromRow({}, { ...env, orchestratorProvider: "fireworks", fireworksOrchestratorModel: "accounts/f/models/x" });
+    expect(s.orchestration.orchestratorProvider).toBe("fireworks");
+    expect(s.orchestration.orchestratorModel).toBe("accounts/f/models/x");
+  });
+
+  it("row can pin the orchestrator to nvidia", () => {
+    const s = inferenceSettingsFromRow(
+      { orchestrator_provider: "nvidia", orchestrator_model: "nvidia/nemotron-3-ultra-550b-a55b" },
+      { ...env, orchestratorProvider: "fireworks" },
+    );
+    expect(s.orchestration.orchestratorProvider).toBe("nvidia");
+    expect(s.orchestration.orchestratorModel).toBe("nvidia/nemotron-3-ultra-550b-a55b");
+  });
+
+  it("a stored model from the wrong provider namespace is ignored, not misrouted", () => {
+    // Row still holds a Nemotron id but the provider now resolves to fireworks:
+    const s = inferenceSettingsFromRow(
+      { orchestrator_model: "nvidia/nemotron-3-ultra-550b-a55b" },
+      { ...env, orchestratorProvider: "fireworks", fireworksOrchestratorModel: "accounts/f/models/x" },
+    );
+    expect(s.orchestration.orchestratorModel).toBe("accounts/f/models/x");
+  });
 });
 
 describe("resolveEffectiveConfig", () => {
@@ -83,8 +127,26 @@ describe("validateInferenceSettingsBody", () => {
   it("accepts a valid body", () => {
     expect(validateInferenceSettingsBody(ok).nvidia_model).toBe("x/y");
   });
+  it("accepts fireworks providers and an optional fireworks_model", () => {
+    const v = validateInferenceSettingsBody({
+      ...ok,
+      inference_provider: "fireworks",
+      analyst_provider: "fireworks",
+      fireworks_model: " accounts/acme/models/m1 ",
+    });
+    expect(v.inference_provider).toBe("fireworks");
+    expect(v.analyst_provider).toBe("fireworks");
+    expect(v.fireworks_model).toBe("accounts/acme/models/m1");
+    // Empty fireworks_model means "inherit from env" and must stay valid:
+    expect(validateInferenceSettingsBody(ok).fireworks_model).toBe("");
+  });
   it("rejects a bad provider", () => {
     expect(() => validateInferenceSettingsBody({ ...ok, inference_provider: "bogus" })).toThrow();
+  });
+  it("rejects a bad orchestrator_provider", () => {
+    expect(() =>
+      validateInferenceSettingsBody({ ...ok, orchestration: { orchestrator_provider: "openai" } }),
+    ).toThrow();
   });
   it("rejects an empty model", () => {
     expect(() => validateInferenceSettingsBody({ ...ok, nvidia_model: "  " })).toThrow();

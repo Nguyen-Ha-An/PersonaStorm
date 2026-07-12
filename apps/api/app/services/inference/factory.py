@@ -5,6 +5,7 @@ from __future__ import annotations
 from ...config import Settings
 from ..criteria.assumptions import AssumptionLedger
 from .base import PersonaInferenceProvider
+from .fireworks_provider import FireworksProvider
 from .mock_provider import MockPersonaProvider
 from .nvidia_provider import NvidiaProvider
 from .vllm_provider import VLLMProvider
@@ -16,6 +17,14 @@ def get_provider(
     match settings.inference_provider:
         case "mock":
             return MockPersonaProvider(seed=settings.persona_seed, ledger=ledger)
+        case "fireworks":
+            return FireworksProvider(
+                api_key=settings.fireworks_api_key,
+                base_url=settings.fireworks_base_url,
+                model=settings.fireworks_model,
+                max_tokens=settings.fireworks_max_tokens,
+                max_retries=settings.fireworks_max_retries,
+            )
         case "vllm":
             return VLLMProvider(
                 base_url=settings.vllm_base_url,

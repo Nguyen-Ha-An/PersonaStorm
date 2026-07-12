@@ -58,4 +58,12 @@ describe("LlmSemanticAssessor never-throw + source tagging", () => {
     const m = await mk().assess("stim", "b2b_saas", SEGS);
     expect(m.source).toBe("fallback_formulas");
   });
+
+  test("a fireworks-backed assessor tags source fireworks on success", async () => {
+    vi.mocked(chatCompletion).mockResolvedValueOnce(valid);
+    const fw = new LlmSemanticAssessor("fw-key", "https://api.fireworks.ai/inference/v1", "accounts/fireworks/models/deepseek-v4-flash", 2048, "fireworks");
+    const m = await fw.assess("stim", "b2b_saas", SEGS);
+    expect(m.source).toBe("fireworks");
+    expect(m.segments["Ops manager"].scores.solution_fit).toBe(0.8);
+  });
 });

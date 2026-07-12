@@ -28,5 +28,11 @@ ENV NODE_ENV=production
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
+# Shared engine data (evidence-annotated persona priors, benchmark outcomes).
+# The engine's default resolution is <cwd>/../../data/* — with the app at
+# /app that is /data/* — so without this COPY a containerized run would fall
+# back to embedded presets labeled "unverified" instead of the real priors.
+COPY data /data
+
 EXPOSE 3000
 CMD ["node", "server.js"]

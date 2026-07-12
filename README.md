@@ -37,10 +37,21 @@ product/market potential).
   same swarm (the `vllm` provider is already plumbed — one `.env` change, no
   rewrite), sized around MI300X's 192 GB HBM3 for single-device serving with
   prefix caching across the storm's shared stimulus.
-- **Containerized & reproducible.** `apps/web/Dockerfile` +
-  `docker-compose.yml`; mock mode is fully offline and deterministic, so
-  judges can run the complete product with **zero keys** — and flip to live
-  Fireworks inference with two env vars.
+- **Containerized & reproducible.** A public linux/amd64 image is built and
+  published by CI ([docker-publish.yml](.github/workflows/docker-publish.yml)):
+
+  ```bash
+  # Full product, zero keys — offline deterministic mock mode:
+  docker run -p 3000:3000 ghcr.io/nguyen-ha-an/personastorm:latest
+
+  # Same image, live Fireworks inference (config at run time, never baked in):
+  docker run -p 3000:3000 \
+    -e INFERENCE_PROVIDER=fireworks -e ANALYST_PROVIDER=fireworks \
+    -e FIREWORKS_API_KEY=fw-... \
+    ghcr.io/nguyen-ha-an/personastorm:latest
+  ```
+
+  (`docker compose up --build` and `apps/web/Dockerfile` work locally too.)
 
 **Why "Unicorn":** PersonaStorm isn't a demo wrapper around a chat endpoint —
 it ships as a working SaaS (auth, credit wallets, per-run pricing, admin

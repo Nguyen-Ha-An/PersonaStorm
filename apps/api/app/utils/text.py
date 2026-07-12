@@ -37,7 +37,20 @@ GENERIC_MARKETING: set[str] = {
 
 
 def tokenize(text: str) -> list[str]:
-    return [w.lower() for w in _WORD_RE.findall(text)]
+    out: list[str] = []
+    for w in _WORD_RE.findall(text):
+        lower = w.lower()
+        out.append(lower)
+        # Hyphenated compounds ("ai-powered") also emit their word parts so
+        # set-membership checks match on components ("ai") without dropping the
+        # compound — multi-word keywords like "money-back"/"soc-2"/"lock-in"
+        # still match on the whole token. Parts must be letter-initial and 2+
+        # chars, mirroring _WORD_RE (so "soc-2" -> "soc", never a bare "2").
+        if "-" in lower:
+            for part in lower.split("-"):
+                if len(part) >= 2 and part[0].isalpha():
+                    out.append(part)
+    return out
 
 
 def salient_tokens(text: str, top_n: int = 24) -> list[str]:

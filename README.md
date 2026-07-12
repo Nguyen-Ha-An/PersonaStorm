@@ -10,6 +10,47 @@ red), and produces a **Market Evaluation Dashboard**: a system-computed
 segment insights, price sensitivity, objection clusters, and a
 **trust/calibration panel**.
 
+## 🏆 AMD Developer Hackathon: ACT II — Unicorn Track
+
+This project is a submission to the
+[AMD Developer Hackathon: ACT II](https://lablab.ai/ai-hackathons/amd-developer-hackathon-act-ii)
+(**Track 3 — Unicorn**: an open, product/startup-oriented track judged on
+creativity, originality, completeness, use of AMD platforms, and
+product/market potential).
+
+**How it uses the hackathon stack**
+
+- **Fireworks AI API is the inference layer.** All live LLM work — the
+  1,000-persona reaction swarm, the semantic grounding assessor, the analyst
+  re-narration, and the orchestrated worker swarm (planner brain +
+  DeepSeek-V4-Flash workers) — runs on the **Fireworks AI API** with a single
+  `FIREWORKS_API_KEY`, using open models (DeepSeek-V4 family) and Fireworks'
+  JSON-schema structured output. See [Switching providers](#switching-providers).
+- **Token-efficient by architecture.** The orchestrated swarm hard-caps
+  physical API calls at 10 per storm and packs extra demand into *virtual*
+  agents inside shard prompts; the classic swarm uses a cheap flash-tier open
+  model per persona. Every aggregate number is computed by a deterministic
+  server-side scoring engine, so no tokens are ever spent asking a model to do
+  arithmetic.
+- **AMD GPU path.** Stage 2 of [docs/inference-roadmap.md](docs/inference-roadmap.md)
+  is a self-hosted **vLLM on AMD Instinct MI300X / ROCm** deployment of the
+  same swarm (the `vllm` provider is already plumbed — one `.env` change, no
+  rewrite), sized around MI300X's 192 GB HBM3 for single-device serving with
+  prefix caching across the storm's shared stimulus.
+- **Containerized & reproducible.** `apps/web/Dockerfile` +
+  `docker-compose.yml`; mock mode is fully offline and deterministic, so
+  judges can run the complete product with **zero keys** — and flip to live
+  Fireworks inference with two env vars.
+
+**Why "Unicorn":** PersonaStorm isn't a demo wrapper around a chat endpoint —
+it ships as a working SaaS (auth, credit wallets, per-run pricing, admin
+console, live SSE swarm grid) around a genuinely novel core: a *calibrated,
+honesty-first* synthetic market wind tunnel whose trust panel will tell you
+when **not** to believe a run. That "honest synthetic research" stance — every
+number system-computed, every assumption ledgered, every degradation labeled —
+is the product bet. Both engine implementations (production TypeScript +
+Python reference mirror) ship green with **421 tests** across them.
+
 ## What PersonaStorm is — and is not
 
 **It is** a pre-research wind tunnel: a fast, cheap way to discover *likely*
@@ -261,6 +302,19 @@ Open http://localhost:3000, click a sample (e.g. **"AI SaaS concept"** —
 PersonaPilot, an AI-SaaS product-concept sample with clear tiered pricing),
 **Run Storm**.
 
+**Live inference (the hackathon path)** — same app, two knobs and a
+[Fireworks AI](https://fireworks.ai) key:
+
+```bash
+INFERENCE_PROVIDER=fireworks ANALYST_PROVIDER=fireworks \
+FIREWORKS_API_KEY=fw-... npm run dev
+```
+
+(The semantic assessor follows the analyst provider automatically. Start with
+a small persona count on a first live run — 1,000 personas is 1,000 real
+completions. Or containerized: `docker compose up --build` passes the same
+variables through.)
+
 The original Python engine still runs as a reference / test suite:
 
 ```bash
@@ -454,5 +508,9 @@ persona model is roadmapped (see [docs/training-roadmap.md](docs/training-roadma
 
 ## License / hackathon note
 
-Built as a hackathon project base. Sample data is illustrative; synthetic
-outputs are hypotheses, not human research.
+Built for the
+[AMD Developer Hackathon: ACT II](https://lablab.ai/ai-hackathons/amd-developer-hackathon-act-ii)
+(Unicorn Track) on the Fireworks AI API — see the
+[hackathon section](#-amd-developer-hackathon-act-ii--unicorn-track) at the
+top. Sample data is illustrative; synthetic outputs are hypotheses, not human
+research.

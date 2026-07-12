@@ -22,6 +22,12 @@ services:
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
       INFERENCE_PROVIDER: ${INFERENCE_PROVIDER:-mock}
       ANALYST_PROVIDER: ${ANALYST_PROVIDER:-mock}
+      SEMANTIC_PROVIDER: ${SEMANTIC_PROVIDER:-}
+      # Fireworks AI — the real prototype's inference API (AMD hackathon path).
+      FIREWORKS_API_KEY: ${FIREWORKS_API_KEY:-}
+      FIREWORKS_BASE_URL: ${FIREWORKS_BASE_URL:-}
+      FIREWORKS_MODEL: ${FIREWORKS_MODEL:-}
+      # Reference/testing path only.
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
       PERSONA_SEED: ${PERSONA_SEED:-1337}
     ports:

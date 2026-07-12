@@ -12,55 +12,118 @@ segment insights, price sensitivity, objection clusters, and a
 
 ## 🏆 AMD Developer Hackathon: ACT II — Unicorn Track
 
-This project is a submission to the
-[AMD Developer Hackathon: ACT II](https://lablab.ai/ai-hackathons/amd-developer-hackathon-act-ii)
-(**Track 3 — Unicorn**: an open, product/startup-oriented track judged on
-creativity, originality, completeness, use of AMD platforms, and
-product/market potential).
+A submission to the
+[AMD Developer Hackathon: ACT II](https://lablab.ai/ai-hackathons/amd-developer-hackathon-act-ii),
+**Track 3 — Unicorn**: the open, product/startup-oriented track — open-source
+models on AMD platforms and/or the Fireworks AI API, judged on creativity,
+originality, completeness, use of AMD platforms, and product/market
+potential. This section maps the project to each criterion; everything below
+it is the product documentation that backs the claims.
 
-**How it uses the hackathon stack**
+### Submission at a glance
 
-- **Fireworks AI API is the inference layer.** All live LLM work — the
-  1,000-persona reaction swarm, the semantic grounding assessor, the analyst
+| | |
+|---|---|
+| **Live app** | https://personastorm.nguyenhaan.id.vn (deployed production SaaS) |
+| **Public Docker image** | `ghcr.io/nguyen-ha-an/personastorm:latest` (linux/amd64, built + boot-tested by [CI](.github/workflows/docker-publish.yml)) |
+| **Inference** | **Fireworks AI API** — open DeepSeek-V4-family models, JSON-schema structured output, one key for the whole pipeline |
+| **AMD GPU path** | vLLM on AMD Instinct MI300X / ROCm — provider plumbed, deployment designed ([roadmap](docs/inference-roadmap.md)) |
+| **Engines** | Production TypeScript (Next.js full-stack) + Python reference mirror, behaviorally identical |
+| **Verification** | **421 automated tests** green across both engines + an offline known-outcome benchmark backtest in CI |
+
+### Judges: run it in 60 seconds
+
+```bash
+# Full product, ZERO keys — deterministic offline mock mode:
+docker run -p 3000:3000 ghcr.io/nguyen-ha-an/personastorm:latest
+
+# Same image, LIVE Fireworks inference (config at run time, never baked in):
+docker run -p 3000:3000 \
+  -e INFERENCE_PROVIDER=fireworks -e ANALYST_PROVIDER=fireworks \
+  -e FIREWORKS_API_KEY=fw-... \
+  ghcr.io/nguyen-ha-an/personastorm:latest
+```
+
+Open http://localhost:3000 → pick a built-in sample (e.g. **"AI SaaS
+concept"**) → **Run Storm** → watch the 1,000-cell swarm stream live → read
+the Market Evaluation Dashboard, including the trust panel telling you how
+much to believe it. (`docker compose up --build` and the
+[Quickstart](#quickstart-local-no-gpu-no-keys) work too.)
+
+### Creativity & originality
+
+Most "AI market research" tools ask one model for an opinion and format the
+answer. PersonaStorm's core is a different architecture bet — a **calibrated,
+honesty-first wind tunnel**:
+
+- **The LLM is never allowed to invent a number.** Persona reactions provide
+  text and raw per-criterion judgments; every score, count, and the
+  `market_fit_score` itself are recomputed by a deterministic server-side
+  scoring engine (`compute_market_fit`). Same seed → identical storm.
+- **1,000 personas without 1,000 model calls of waste.** Personas are *data*
+  (evidence-annotated trait priors, correlated sampling), not 1,000 model
+  instances; the orchestrated swarm hard-caps physical Fireworks calls at 10
+  per storm and absorbs extra demand as *virtual agents* inside shard prompts.
+- **It tells you when not to trust it.** A trust/calibration panel surfaces
+  collapse risk, priors evidence coverage, every directional assumption that
+  fired (a per-run **assumptions ledger**), whether semantic grounding was
+  real or a formula fallback, and what to validate with real humans next.
+  New behavior, not a new wrapper.
+
+### Completeness
+
+Not a hackathon scaffold — a shippable product, end to end:
+
+- **Full SaaS**: Supabase auth, credit wallets, atomic per-run billing with
+  refunds, price preview, owned runs, admin console (users, wallets, pricing,
+  runtime inference settings), live SSE swarm grid, full report dashboard.
+- **Two mirrored engines** (TypeScript production + Python reference) kept
+  behaviorally identical, with **421 tests** green and a production build
+  verified in CI on every push.
+- **Deployed** (Vercel + Supabase) *and* **containerized** (public GHCR
+  image, boot-tested by the publish pipeline before it can become `latest`);
+  mock mode makes every feature reviewable offline with zero keys.
+- Documented: architecture, criteria system, inference roadmap, deployment,
+  evaluation framework, and dated design specs/plans under `docs/`.
+
+### Use of AMD platforms
+
+- **Fireworks AI API** (the hackathon's inference platform) is the project's
+  live inference layer — not an optional add-on. All four LLM roles — the
+  persona reaction swarm, the semantic grounding assessor, the analyst
   re-narration, and the orchestrated worker swarm (planner brain +
-  DeepSeek-V4-Flash workers) — runs on the **Fireworks AI API** with a single
-  `FIREWORKS_API_KEY`, using open models (DeepSeek-V4 family) and Fireworks'
-  JSON-schema structured output. See [Switching providers](#switching-providers).
-- **Token-efficient by architecture.** The orchestrated swarm hard-caps
-  physical API calls at 10 per storm and packs extra demand into *virtual*
-  agents inside shard prompts; the classic swarm uses a cheap flash-tier open
-  model per persona. Every aggregate number is computed by a deterministic
-  server-side scoring engine, so no tokens are ever spent asking a model to do
-  arithmetic.
-- **AMD GPU path.** Stage 2 of [docs/inference-roadmap.md](docs/inference-roadmap.md)
-  is a self-hosted **vLLM on AMD Instinct MI300X / ROCm** deployment of the
-  same swarm (the `vllm` provider is already plumbed — one `.env` change, no
-  rewrite), sized around MI300X's 192 GB HBM3 for single-device serving with
-  prefix caching across the storm's shared stimulus.
-- **Containerized & reproducible.** A public linux/amd64 image is built and
-  published by CI ([docker-publish.yml](.github/workflows/docker-publish.yml)):
+  DeepSeek-V4-Flash workers) — run on Fireworks with a single
+  `FIREWORKS_API_KEY`, using open models and Fireworks' JSON-schema
+  structured output. See [Switching providers](#switching-providers).
+- **AMD Instinct GPU path**: Stage 2 of
+  [docs/inference-roadmap.md](docs/inference-roadmap.md) is a self-hosted
+  **vLLM on MI300X / ROCm** deployment of the same swarm — the `vllm`
+  provider is already plumbed (one `.env` change, no rewrite), sized around
+  MI300X's 192 GB HBM3 for single-device serving with prefix caching across
+  the storm's shared stimulus.
+- The published image targets **linux/amd64** and all engine paths degrade
+  gracefully (labeled, never silent) when a key or endpoint is absent.
 
-  ```bash
-  # Full product, zero keys — offline deterministic mock mode:
-  docker run -p 3000:3000 ghcr.io/nguyen-ha-an/personastorm:latest
+### Product & market potential
 
-  # Same image, live Fireworks inference (config at run time, never baked in):
-  docker run -p 3000:3000 \
-    -e INFERENCE_PROVIDER=fireworks -e ANALYST_PROVIDER=fireworks \
-    -e FIREWORKS_API_KEY=fw-... \
-    ghcr.io/nguyen-ha-an/personastorm:latest
-  ```
-
-  (`docker compose up --build` and `apps/web/Dockerfile` work locally too.)
-
-**Why "Unicorn":** PersonaStorm isn't a demo wrapper around a chat endpoint —
-it ships as a working SaaS (auth, credit wallets, per-run pricing, admin
-console, live SSE swarm grid) around a genuinely novel core: a *calibrated,
-honesty-first* synthetic market wind tunnel whose trust panel will tell you
-when **not** to believe a run. That "honest synthetic research" stance — every
-number system-computed, every assumption ledgered, every degradation labeled —
-is the product bet. Both engine implementations (production TypeScript +
-Python reference mirror) ship green with **421 tests** across them.
+- **The problem is expensive**: real pre-launch research (surveys, panels,
+  focus groups) costs thousands of dollars and weeks per iteration, so most
+  founders and PMs skip it and launch blind. PersonaStorm gives a
+  directional read — likely objections, price resistance, weak messaging,
+  segment risks — in about a minute, for cents of inference.
+- **The business model is already implemented, not pitched**: credit wallets,
+  editable pricing rules (a 1,000-persona run = 65 credits), starter grants,
+  and an admin console — the demo *is* the monetizable product.
+- **The honesty stance is the moat**: synthetic research tools die on the
+  question "why should I believe this?" PersonaStorm answers it structurally
+  — every number system-computed, every assumption ledgered, every
+  degradation labeled, plus a known-outcome benchmark harness
+  (`data/benchmark_outcomes/`) built to measure — not assert — accuracy as
+  the validation set grows.
+- **Honest limits, stated on purpose** (it's the brand): outputs are
+  pre-research hypotheses, every report says so, and the shipped benchmark
+  seed set is illustrative machinery, not accuracy proof. The roadmap to
+  "actually validated" is documented and priced into the product story.
 
 ## What PersonaStorm is — and is not
 

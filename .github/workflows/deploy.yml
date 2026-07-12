@@ -72,6 +72,12 @@ jobs:
         working-directory: apps/web
         run: npm ci
 
+      - name: Run web tests
+        working-directory: apps/web
+        # The TS engine suite (incl. the offline benchmark backtest gate) —
+        # fully offline in mock mode, no keys or network needed.
+        run: npx vitest run
+
       - name: Build web app
         working-directory: apps/web
         # PersonaStorm is a Vercel full-stack app: the API is Next.js Route

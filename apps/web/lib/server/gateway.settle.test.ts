@@ -64,4 +64,13 @@ describe("storm list queries exclude the heavy jsonb payloads", () => {
     const full = await gw.getStorm("storm_big");
     expect(full?.report_json).toEqual({ huge: true });
   });
+
+  it("adminListStorms tolerates the demo row's NULL user_id", async () => {
+    const gw = buildGateway();
+    await gw.recordStorm({ id: "storm_demo", user_id: null, is_demo: true, title: "demo", status: "complete", price_credits: 0 });
+    const rows = await gw.adminListStorms(50);
+    const demo = rows.find((r) => r.id === "storm_demo");
+    expect(demo).toBeDefined();
+    expect(demo?.user_email).toBeNull();
+  });
 });

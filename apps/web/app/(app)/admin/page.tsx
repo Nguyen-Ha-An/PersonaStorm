@@ -541,6 +541,7 @@ function InferenceEditor({
         inference_provider: form.inference_provider,
         analyst_provider: form.analyst_provider,
         nvidia_model: form.nvidia_model,
+        fireworks_model: form.fireworks_model,
         analyst_model: form.analyst_model,
         nvidia_max_tokens: form.nvidia_max_tokens,
         analyst_max_tokens: form.analyst_max_tokens,
@@ -573,6 +574,7 @@ function InferenceEditor({
               }
             >
               <option value="mock">mock</option>
+              <option value="fireworks">fireworks</option>
               <option value="nvidia">nvidia</option>
             </Select>
           </div>
@@ -586,9 +588,20 @@ function InferenceEditor({
               }
             >
               <option value="mock">mock</option>
+              <option value="fireworks">fireworks</option>
               <option value="nvidia">nvidia</option>
             </Select>
           </div>
+        </div>
+
+        <div>
+          <Label htmlFor="fireworks_model">Fireworks model</Label>
+          <Input
+            id="fireworks_model"
+            value={form.fireworks_model}
+            onChange={(e) => set("fireworks_model", e.target.value)}
+            placeholder="accounts/fireworks/models/…"
+          />
         </div>
 
         <div>
@@ -634,6 +647,22 @@ function InferenceEditor({
         </div>
 
         <div>
+          <Label>Fireworks base URL</Label>
+          <p className="truncate rounded-lg border border-storm-800 bg-storm-900/60 px-3 py-2 text-xs text-storm-400">
+            {form.fireworks_base_url}
+          </p>
+        </div>
+
+        <div>
+          <Label>Fireworks API key</Label>
+          <div>
+            <StatusBadge tone={form.fireworks_api_key_configured ? "green" : "yellow"}>
+              {form.fireworks_api_key_configured ? "API key: configured" : "API key: not set"}
+            </StatusBadge>
+          </div>
+        </div>
+
+        <div>
           <Label>NVIDIA base URL</Label>
           <p className="truncate rounded-lg border border-storm-800 bg-storm-900/60 px-3 py-2 text-xs text-storm-400">
             {form.nvidia_base_url}
@@ -652,18 +681,22 @@ function InferenceEditor({
         {form.orchestration && (
           <div className="rounded-lg border border-storm-800 bg-storm-900/40 p-4">
             <p className="mb-2 text-xs font-semibold text-storm-200">
-              Nemotron / Fireworks worker swarm
+              Orchestrated Fireworks worker swarm
             </p>
             <div className="flex flex-wrap gap-2">
               <StatusBadge tone={form.orchestration.orchestration_enabled ? "green" : "yellow"}>
                 {form.orchestration.orchestration_enabled ? "orchestration: on" : "orchestration: off"}
+              </StatusBadge>
+              <StatusBadge tone="green">
+                {`orchestrator: ${form.orchestration.orchestrator_provider}`}
               </StatusBadge>
               <StatusBadge tone={form.fireworks_api_key_configured ? "green" : "yellow"}>
                 {form.fireworks_api_key_configured ? "Fireworks key: configured" : "Fireworks key: not set"}
               </StatusBadge>
             </div>
             <p className="mt-2 text-xs text-storm-400">
-              Main brain: Nemotron ({form.orchestration.orchestrator_model}). Workers:{" "}
+              Main brain: {form.orchestration.orchestrator_model} via{" "}
+              {form.orchestration.orchestrator_provider}. Workers:{" "}
               {form.orchestration.worker_model || "DeepSeek-V4-Flash"} via Fireworks. Physical
               workers: {form.orchestration.max_physical_workers} (hard cap{" "}
               {form.orchestration.max_physical_workers_cap}); ~

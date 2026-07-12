@@ -26,10 +26,12 @@ function trimmed(v: string | undefined): string {
   return (v ?? "").trim();
 }
 
-export type InferenceProvider = "mock" | "nvidia";
-export type AnalystProvider = "mock" | "nvidia";
+export type InferenceProvider = "mock" | "nvidia" | "fireworks";
+export type AnalystProvider = "mock" | "nvidia" | "fireworks";
+export type SemanticProvider = "mock" | "nvidia" | "fireworks";
+export type OrchestratorProvider = "nvidia" | "fireworks";
 
-/** Default Nemotron orchestrator model ("main brain"). */
+/** Default Nemotron orchestrator model when the orchestrator runs on NVIDIA. */
 export const DEFAULT_ORCHESTRATOR_MODEL = "nvidia/nemotron-3-ultra-550b-a55b";
 /** Default Fireworks DeepSeek worker model if FIREWORKS_DEEPSEEK_MODEL is unset. */
 export const DEFAULT_WORKER_MODEL = "accounts/fireworks/models/deepseek-v4-flash";
@@ -49,18 +51,25 @@ export interface ServerConfig {
   analystModel: string;
   nvidiaMaxTokens: number;
   analystMaxTokens: number;
-  semanticProvider: "mock" | "nvidia";
+  semanticProvider: SemanticProvider;
   semanticModel: string;
   semanticMaxTokens: number;
   personaSeed: number;
   // Live-replay pacing for the SSE stream (data is precomputed at create time).
   streamBatchSize: number;
   streamBatchIntervalMs: number;
-  // ── Nemotron-orchestrated Fireworks worker swarm (server-only secrets) ──
+  // ── Fireworks (server-only secrets) — the real prototype's inference API ──
+  // Used by the classic engine paths when a provider knob is set to
+  // "fireworks", and by the orchestrated worker swarm.
   fireworksApiKey: string;
   fireworksBaseUrl: string;
+  fireworksModel: string;
+  fireworksMaxTokens: number;
   fireworksDeepseekModel: string;
+  // ── Orchestrated worker swarm ──
+  orchestratorProvider: OrchestratorProvider;
   orchestratorModel: string;
+  fireworksOrchestratorModel: string;
 }
 
 function intEnv(name: string, fallback: number): number {
@@ -86,8 +95,23 @@ export function getConfig(): ServerConfig {
   const supabaseAnonKey =
     trimmed(process.env.SUPABASE_ANON_KEY) || trimmed(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
-  const inference = trimmed(process.env.INFERENCE_PROVIDER).toLowerCase();
-  const analyst = trimmed(process.env.ANALYST_PROVIDER).toLowerCase();
+  const liveProvider = (v: string): "nvidia" | "fireworks" | "" =>
+    v === "nvidia" || v === "fireworks" ? v : "";
+  const inferenceProvider: InferenceProvider =
+    liveProvider(trimmed(process.env.INFERENCE_PROVIDER).toLowerCase()) || "mock";
+  const analystProvider: AnalystProvider =
+    liveProvider(trimmed(process.env.ANALYST_PROVIDER).toLowerCase()) || "mock";
+  // Semantic assessor defaults to whatever the analyst uses (mock stays mock).
+  const semanticRaw = trimmed(process.env.SEMANTIC_PROVIDER).toLowerCase();
+  const semanticProvider: SemanticProvider =
+    semanticRaw === "mock" ? "mock" : liveProvider(semanticRaw) || analystProvider;
+
+  // Fireworks model resolution: FIREWORKS_MODEL for the classic engine paths,
+  // falling back to the (worker-swarm) FIREWORKS_DEEPSEEK_MODEL default so a
+  // single-model setup needs only one env var.
+  const fireworksDeepseekModel =
+    trimmed(process.env.FIREWORKS_DEEPSEEK_MODEL) || DEFAULT_WORKER_MODEL;
+  const fireworksModel = trimmed(process.env.FIREWORKS_MODEL) || fireworksDeepseekModel;
 
   return {
     supabaseUrl,
@@ -96,25 +120,40 @@ export function getConfig(): ServerConfig {
     supabaseJwtSecret: trimmed(process.env.SUPABASE_JWT_SECRET),
     starterCredits: intEnv("STARTER_CREDITS", DEMO_SIGNUP_CREDITS),
     apiEnv: trimmed(process.env.API_ENV).toLowerCase() === "prod" ? "prod" : "dev",
-    inferenceProvider: inference === "nvidia" ? "nvidia" : "mock",
-    analystProvider: analyst === "nvidia" ? "nvidia" : "mock",
+    inferenceProvider,
+    analystProvider,
     nvidiaApiKey: trimmed(process.env.NVIDIA_API_KEY),
     nvidiaBaseUrl: trimmed(process.env.NVIDIA_BASE_URL) || "https://integrate.api.nvidia.com/v1",
     nvidiaModel: trimmed(process.env.NVIDIA_MODEL) || "z-ai/glm-5.2",
     analystModel: trimmed(process.env.ANALYST_MODEL),
     nvidiaMaxTokens: intEnv("NVIDIA_MAX_TOKENS", 2048),
     analystMaxTokens: intEnv("ANALYST_MAX_TOKENS", 4096),
-    semanticProvider: (trimmed(process.env.SEMANTIC_PROVIDER).toLowerCase() || (analyst === "nvidia" ? "nvidia" : "mock")) === "nvidia" ? "nvidia" : "mock",
-    semanticModel: trimmed(process.env.SEMANTIC_MODEL) || trimmed(process.env.ANALYST_MODEL) || trimmed(process.env.NVIDIA_MODEL) || "z-ai/glm-5.2",
+    semanticProvider,
+    // Model fallback ends at the provider actually making the call, so a bare
+    // SEMANTIC_PROVIDER=fireworks never sends an NVIDIA model id to Fireworks.
+    semanticModel:
+      trimmed(process.env.SEMANTIC_MODEL) ||
+      trimmed(process.env.ANALYST_MODEL) ||
+      (semanticProvider === "fireworks"
+        ? fireworksModel
+        : trimmed(process.env.NVIDIA_MODEL) || "z-ai/glm-5.2"),
     semanticMaxTokens: intEnv("SEMANTIC_MAX_TOKENS", 2048),
     personaSeed: intEnv("PERSONA_SEED", 1337),
     streamBatchSize: intEnv("STREAM_BATCH_SIZE", 25),
     streamBatchIntervalMs: intEnv("STREAM_BATCH_INTERVAL_MS", 45),
-    // Fireworks worker swarm — keys/base URLs ALWAYS from env, never a DB row.
+    // Fireworks — keys/base URLs ALWAYS from env, never a DB row.
     fireworksApiKey: trimmed(process.env.FIREWORKS_API_KEY),
     fireworksBaseUrl: trimmed(process.env.FIREWORKS_BASE_URL) || "https://api.fireworks.ai/inference/v1",
-    fireworksDeepseekModel: trimmed(process.env.FIREWORKS_DEEPSEEK_MODEL) || DEFAULT_WORKER_MODEL,
+    fireworksModel,
+    fireworksMaxTokens: intEnv("FIREWORKS_MAX_TOKENS", 2048),
+    fireworksDeepseekModel,
+    // Orchestrator "brain" defaults to Fireworks so the whole swarm runs on a
+    // single FIREWORKS_API_KEY; set ORCHESTRATOR_PROVIDER=nvidia for Nemotron.
+    orchestratorProvider:
+      trimmed(process.env.ORCHESTRATOR_PROVIDER).toLowerCase() === "nvidia" ? "nvidia" : "fireworks",
     orchestratorModel: trimmed(process.env.NVIDIA_ORCHESTRATOR_MODEL) || DEFAULT_ORCHESTRATOR_MODEL,
+    fireworksOrchestratorModel:
+      trimmed(process.env.FIREWORKS_ORCHESTRATOR_MODEL) || fireworksModel,
   };
 }
 

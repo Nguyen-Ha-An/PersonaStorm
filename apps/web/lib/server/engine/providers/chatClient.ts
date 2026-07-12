@@ -22,6 +22,12 @@ export interface ChatCompletionOptions {
   temperature: number;
   /** Ask for a JSON object response where the provider supports it. */
   jsonObject?: boolean;
+  /**
+   * Hard-constrain the response to a JSON schema (Fireworks structured-output
+   * dialect: response_format {type:"json_object", schema}). Wins over
+   * jsonObject when both are set.
+   */
+  jsonSchema?: Record<string, unknown>;
   timeoutMs?: number;
   signal?: AbortSignal;
 }
@@ -41,7 +47,8 @@ export async function chatCompletion(opts: ChatCompletionOptions): Promise<strin
     max_tokens: opts.maxTokens,
     temperature: opts.temperature,
   };
-  if (opts.jsonObject) payload.response_format = { type: "json_object" };
+  if (opts.jsonSchema) payload.response_format = { type: "json_object", schema: opts.jsonSchema };
+  else if (opts.jsonObject) payload.response_format = { type: "json_object" };
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 120_000);

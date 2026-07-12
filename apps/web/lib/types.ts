@@ -74,7 +74,7 @@ export interface Pricing {
 
 export interface OrchestrationSettingsView {
   orchestration_enabled: boolean;
-  orchestrator_provider: "nvidia";
+  orchestrator_provider: "nvidia" | "fireworks";
   orchestrator_model: string;
   worker_provider: "fireworks";
   worker_model: string;
@@ -90,15 +90,16 @@ export interface OrchestrationSettingsView {
 }
 
 export interface InferenceSettings {
-  inference_provider: "mock" | "nvidia";
-  analyst_provider: "mock" | "nvidia";
+  inference_provider: "mock" | "nvidia" | "fireworks";
+  analyst_provider: "mock" | "nvidia" | "fireworks";
   nvidia_model: string;
+  fireworks_model: string;
   analyst_model: string;
   nvidia_max_tokens: number;
   analyst_max_tokens: number;
   nvidia_base_url: string;
   nvidia_api_key_configured: boolean;
-  // Nemotron/Fireworks orchestration — keys exposed only as booleans.
+  // Fireworks credentials — keys exposed only as booleans.
   fireworks_base_url: string;
   fireworks_api_key_configured: boolean;
   orchestration: OrchestrationSettingsView;

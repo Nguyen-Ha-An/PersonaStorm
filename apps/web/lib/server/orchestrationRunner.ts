@@ -42,9 +42,14 @@ export async function maybeRunOrchestration(
   const nowIso = () => new Date().toISOString();
   try {
     // Keys + base URLs come ONLY from env; the settings row supplies models/knobs.
+    // The orchestrator "brain" runs on Fireworks by default (single-key setup);
+    // ORCHESTRATOR_PROVIDER=nvidia routes it to NVIDIA-hosted Nemotron instead.
+    const orchestratorCreds =
+      o.orchestratorProvider === "nvidia"
+        ? { apiKey: cfg.nvidiaApiKey, baseUrl: cfg.nvidiaBaseUrl }
+        : { apiKey: cfg.fireworksApiKey, baseUrl: cfg.fireworksBaseUrl };
     const planner = new NemotronPlanner({
-      apiKey: cfg.nvidiaApiKey,
-      baseUrl: cfg.nvidiaBaseUrl,
+      ...orchestratorCreds,
       model: o.orchestratorModel,
       maxTokens: o.orchestratorMaxTokens,
       temperature: o.orchestratorTemperature,
@@ -57,8 +62,7 @@ export async function maybeRunOrchestration(
       temperature: o.workerTemperature,
     });
     const synthesizer = new NemotronSynthesizer({
-      apiKey: cfg.nvidiaApiKey,
-      baseUrl: cfg.nvidiaBaseUrl,
+      ...orchestratorCreds,
       model: o.orchestratorModel,
       maxTokens: o.orchestratorMaxTokens,
       temperature: o.orchestratorTemperature,

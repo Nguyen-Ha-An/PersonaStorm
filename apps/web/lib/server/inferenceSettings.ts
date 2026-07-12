@@ -1,6 +1,12 @@
 import "./only";
 
-import { getConfig, type AnalystProvider, type InferenceProvider, type ServerConfig } from "./env";
+import {
+  getConfig,
+  type AnalystProvider,
+  type InferenceProvider,
+  type OrchestratorProvider,
+  type ServerConfig,
+} from "./env";
 import type { Gateway } from "./gateway";
 import { HttpError } from "./errors";
 import { clampPhysicalWorkers, MAX_PHYSICAL_SWARM_WORKERS } from "./engine/orchestration/caps";
@@ -8,7 +14,7 @@ import { clampPhysicalWorkers, MAX_PHYSICAL_SWARM_WORKERS } from "./engine/orche
 /** Runtime-tunable orchestration knobs (subset stored in the DB row). */
 export interface OrchestrationSettings {
   orchestrationEnabled: boolean;
-  orchestratorProvider: "nvidia";
+  orchestratorProvider: OrchestratorProvider;
   orchestratorModel: string;
   workerProvider: "fireworks";
   workerModel: string;
@@ -27,6 +33,7 @@ export interface InferenceSettings {
   inferenceProvider: InferenceProvider;
   analystProvider: AnalystProvider;
   nvidiaModel: string;
+  fireworksModel: string;
   analystModel: string;
   nvidiaMaxTokens: number;
   analystMaxTokens: number;
@@ -35,8 +42,11 @@ export interface InferenceSettings {
 }
 
 /** Coerce an untrusted value to a valid provider, else the given fallback. */
-function coerceProvider(v: unknown, fallback: "mock" | "nvidia"): "mock" | "nvidia" {
-  return v === "mock" || v === "nvidia" ? v : fallback;
+function coerceProvider(
+  v: unknown,
+  fallback: "mock" | "nvidia" | "fireworks",
+): "mock" | "nvidia" | "fireworks" {
+  return v === "mock" || v === "nvidia" || v === "fireworks" ? v : fallback;
 }
 
 function posInt(v: unknown, fallback: number): number {
@@ -54,6 +64,16 @@ function tempField(v: unknown, fallback: number): number {
 }
 
 /**
+ * A Fireworks model id always lives under an accounts/ namespace
+ * (accounts/<owner>/models/<model>); NVIDIA catalog ids never do. Used to keep
+ * a stored orchestrator model from being sent to the wrong provider after an
+ * ORCHESTRATOR_PROVIDER switch.
+ */
+function modelMatchesProvider(model: string, provider: OrchestratorProvider): boolean {
+  return provider === "fireworks" ? model.startsWith("accounts/") : !model.startsWith("accounts/");
+}
+
+/**
  * Resolve orchestration settings from a DB row, defaulting to env. The physical
  * worker count is ALWAYS clamped to [1, MAX_PHYSICAL_SWARM_WORKERS] and the
  * virtual-agents-per-worker floored at 1 — no stored value can exceed the cap.
@@ -64,10 +84,20 @@ export function orchestrationSettingsFromRow(
 ): OrchestrationSettings {
   const rawWorkerModel = typeof r.worker_model === "string" ? r.worker_model.trim() : "";
   const rawOrchModel = typeof r.orchestrator_model === "string" ? r.orchestrator_model.trim() : "";
+  const orchestratorProvider =
+    r.orchestrator_provider === "nvidia" || r.orchestrator_provider === "fireworks"
+      ? r.orchestrator_provider
+      : env.orchestratorProvider;
+  const orchestratorDefault =
+    orchestratorProvider === "fireworks" ? env.fireworksOrchestratorModel : env.orchestratorModel;
   return {
     orchestrationEnabled: boolField(r.orchestration_enabled, false),
-    orchestratorProvider: "nvidia",
-    orchestratorModel: rawOrchModel || env.orchestratorModel,
+    orchestratorProvider,
+    // A stored model from before a provider switch is ignored, not misrouted.
+    orchestratorModel:
+      rawOrchModel && modelMatchesProvider(rawOrchModel, orchestratorProvider)
+        ? rawOrchModel
+        : orchestratorDefault,
     workerProvider: "fireworks",
     workerModel: rawWorkerModel || env.fireworksDeepseekModel,
     // Hard cap enforced here, regardless of what the DB stored.
@@ -92,13 +122,20 @@ export function inferenceSettingsFromRow(
 ): InferenceSettings {
   const r = row ?? {};
   const rawNvidiaModel = typeof r.nvidia_model === "string" ? r.nvidia_model.trim() : "";
+  const rawFireworksModel = typeof r.fireworks_model === "string" ? r.fireworks_model.trim() : "";
   const rawAnalystModel = typeof r.analyst_model === "string" ? r.analyst_model.trim() : "";
   const nvidiaModel = rawNvidiaModel || env.nvidiaModel;
-  const analystModel = rawAnalystModel || env.analystModel || nvidiaModel;
+  const fireworksModel = rawFireworksModel || env.fireworksModel;
+  const analystProvider = coerceProvider(r.analyst_provider, env.analystProvider);
+  const analystModel =
+    rawAnalystModel ||
+    env.analystModel ||
+    (analystProvider === "fireworks" ? fireworksModel : nvidiaModel);
   return {
     inferenceProvider: coerceProvider(r.inference_provider, env.inferenceProvider),
-    analystProvider: coerceProvider(r.analyst_provider, env.analystProvider),
+    analystProvider,
     nvidiaModel,
+    fireworksModel,
     analystModel,
     nvidiaMaxTokens: posInt(r.nvidia_max_tokens, env.nvidiaMaxTokens),
     analystMaxTokens: posInt(r.analyst_max_tokens, env.analystMaxTokens),
@@ -130,10 +167,12 @@ export async function resolveEffectiveConfig(
     inferenceProvider: s.inferenceProvider,
     analystProvider: s.analystProvider,
     nvidiaModel: s.nvidiaModel,
+    fireworksModel: s.fireworksModel,
     analystModel: s.analystModel,
     nvidiaMaxTokens: s.nvidiaMaxTokens,
     analystMaxTokens: s.analystMaxTokens,
-    // nvidiaApiKey + nvidiaBaseUrl deliberately left as `...env`.
+    // nvidiaApiKey/nvidiaBaseUrl + fireworksApiKey/fireworksBaseUrl
+    // deliberately left as `...env`.
   };
 }
 
@@ -142,6 +181,8 @@ const MAX_TOKENS = 200_000;
 
 export interface OrchestrationSettingsInput {
   orchestration_enabled: boolean;
+  /** '' = inherit the env default (ORCHESTRATOR_PROVIDER). */
+  orchestrator_provider: "" | "nvidia" | "fireworks";
   orchestrator_model: string;
   worker_model: string;
   max_physical_workers: number;
@@ -155,18 +196,19 @@ export interface OrchestrationSettingsInput {
 }
 
 export interface InferenceSettingsInput {
-  inference_provider: "mock" | "nvidia";
-  analyst_provider: "mock" | "nvidia";
+  inference_provider: "mock" | "nvidia" | "fireworks";
+  analyst_provider: "mock" | "nvidia" | "fireworks";
   nvidia_model: string;
+  fireworks_model: string;
   analyst_model: string;
   nvidia_max_tokens: number;
   analyst_max_tokens: number;
   orchestration: OrchestrationSettingsInput;
 }
 
-function providerField(v: unknown, label: string): "mock" | "nvidia" {
-  if (v === "mock" || v === "nvidia") return v;
-  throw new HttpError(400, `${label} must be 'mock' or 'nvidia'.`);
+function providerField(v: unknown, label: string): "mock" | "nvidia" | "fireworks" {
+  if (v === "mock" || v === "nvidia" || v === "fireworks") return v;
+  throw new HttpError(400, `${label} must be 'mock', 'nvidia' or 'fireworks'.`);
 }
 
 function tokensField(v: unknown, label: string): number {
@@ -212,8 +254,13 @@ export function validateOrchestrationBody(body: unknown): OrchestrationSettingsI
   const b = (body ?? {}) as Record<string, unknown>;
   const orchestrator_model = typeof b.orchestrator_model === "string" ? b.orchestrator_model.trim().slice(0, 200) : "";
   const worker_model = typeof b.worker_model === "string" ? b.worker_model.trim().slice(0, 200) : "";
+  const rawOrchProvider = b.orchestrator_provider;
+  if (rawOrchProvider != null && rawOrchProvider !== "" && rawOrchProvider !== "nvidia" && rawOrchProvider !== "fireworks") {
+    throw new HttpError(400, "orchestrator_provider must be '', 'nvidia' or 'fireworks'.");
+  }
   return {
     orchestration_enabled: optBool(b.orchestration_enabled, false),
+    orchestrator_provider: (rawOrchProvider ?? "") as "" | "nvidia" | "fireworks",
     orchestrator_model,
     worker_model,
     max_physical_workers: clampPhysicalWorkers(
@@ -234,11 +281,14 @@ export function validateInferenceSettingsBody(body: unknown): InferenceSettingsI
   const nvidia_model =
     typeof b.nvidia_model === "string" && b.nvidia_model.trim() ? b.nvidia_model.trim().slice(0, 200) : "";
   if (!nvidia_model) throw new HttpError(400, "nvidia_model must be a non-empty string.");
+  // Empty is allowed — it means "inherit FIREWORKS_MODEL from env".
+  const fireworks_model = typeof b.fireworks_model === "string" ? b.fireworks_model.trim().slice(0, 200) : "";
   const analyst_model = typeof b.analyst_model === "string" ? b.analyst_model.trim().slice(0, 200) : "";
   return {
     inference_provider: providerField(b.inference_provider, "inference_provider"),
     analyst_provider: providerField(b.analyst_provider, "analyst_provider"),
     nvidia_model,
+    fireworks_model,
     analyst_model,
     nvidia_max_tokens: tokensField(b.nvidia_max_tokens, "nvidia_max_tokens"),
     analyst_max_tokens: tokensField(b.analyst_max_tokens, "analyst_max_tokens"),
@@ -246,8 +296,9 @@ export function validateInferenceSettingsBody(body: unknown): InferenceSettingsI
   };
 }
 
-export interface OrchestrationSettingsView extends OrchestrationSettingsInput {
-  orchestrator_provider: "nvidia";
+export interface OrchestrationSettingsView extends Omit<OrchestrationSettingsInput, "orchestrator_provider"> {
+  /** Resolved provider (row override or env default) — never ''. */
+  orchestrator_provider: OrchestratorProvider;
   worker_provider: "fireworks";
   /** Compile-time reminder of the hard ceiling, surfaced read-only to the UI. */
   max_physical_workers_cap: number;
@@ -290,6 +341,7 @@ export function toInferenceSettingsView(s: InferenceSettings, env: ServerConfig)
     inference_provider: s.inferenceProvider,
     analyst_provider: s.analystProvider,
     nvidia_model: s.nvidiaModel,
+    fireworks_model: s.fireworksModel,
     analyst_model: s.analystModel,
     nvidia_max_tokens: s.nvidiaMaxTokens,
     analyst_max_tokens: s.analystMaxTokens,

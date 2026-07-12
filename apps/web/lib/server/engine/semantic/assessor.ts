@@ -100,6 +100,13 @@ export class LlmSemanticAssessor implements SemanticAssessor {
 export { SEMANTIC_JSON_SCHEMA };
 
 export function getSemanticAssessor(cfg: ServerConfig): SemanticAssessor {
+  if (cfg.semanticProvider === "fireworks") {
+    if (cfg.fireworksBaseUrl.includes("api.fireworks.ai") && !cfg.fireworksApiKey) {
+      console.warn("[personastorm semantic] SEMANTIC_PROVIDER=fireworks but FIREWORKS_API_KEY missing; using mock assessor.");
+      return new MockSemanticAssessor(cfg.personaSeed);
+    }
+    return new LlmSemanticAssessor(cfg.fireworksApiKey, cfg.fireworksBaseUrl, cfg.semanticModel, cfg.semanticMaxTokens, "fireworks");
+  }
   if (cfg.semanticProvider === "nvidia") {
     if (cfg.nvidiaBaseUrl.includes("integrate.api.nvidia.com") && !cfg.nvidiaApiKey) {
       console.warn("[personastorm semantic] SEMANTIC_PROVIDER=nvidia but NVIDIA_API_KEY missing; using mock assessor.");

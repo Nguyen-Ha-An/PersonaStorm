@@ -1,12 +1,12 @@
-# Inference roadmap: mock → NVIDIA NIM GLM-5.2 → vLLM on AMD MI300X
+# Inference roadmap: mock → Fireworks API → vLLM on AMD MI300X
 
 PersonaStorm has **two independent LLM swap points**, each a pure `.env`
 change, not a rewrite:
 
-1. **Persona reaction swarm** — `INFERENCE_PROVIDER=mock|nvidia|vllm`
+1. **Persona reaction swarm** — `INFERENCE_PROVIDER=mock|fireworks|nvidia|vllm`
    (`services/inference/`, `PersonaInferenceProvider`). Generates the 1,000
    individual persona reactions.
-2. **Analyst/report engine** — `ANALYST_PROVIDER=mock|nvidia`
+2. **Analyst/report engine** — `ANALYST_PROVIDER=mock|fireworks|nvidia`
    (`services/analyst/`, `AnalystProvider`). One call per storm; re-narrates
    the executive summary, recommendations, top-objection labels, and kill
    quote from aggregates the deterministic engine already computed. Numbers
@@ -25,11 +25,44 @@ Zero GPU, zero network, reproducible demos. Also the permanent **fallback +
 CI provider**: tests and the eval harness run against it forever, so
 pipeline regressions never need a GPU or an API key to catch.
 
-## Stage 1 — NVIDIA NIM GLM-5.2 (shipped)
+## Stage 1 — Fireworks API (shipped — the real prototype's inference)
+
+The competition path (AMD Developer Hackathon: Fireworks serves open models
+on AMD hardware). An OpenAI-compatible `FireworksProvider` /
+`FireworksAnalyst` pair plus the semantic assessor all run against
+**Fireworks AI** with a single key:
+
+```bash
+INFERENCE_PROVIDER=fireworks   # persona reaction swarm
+ANALYST_PROVIDER=fireworks     # report narration (semantic follows it)
+FIREWORKS_API_KEY=fw-...               # from fireworks.ai
+FIREWORKS_BASE_URL=https://api.fireworks.ai/inference/v1
+FIREWORKS_MODEL=accounts/fireworks/models/deepseek-v4-flash
+FIREWORKS_MAX_TOKENS=2048
+```
+
+Structured output uses Fireworks' JSON-mode schema dialect
+(`response_format={"type": "json_object", "schema": REACTION_JSON_SCHEMA}`),
+which hard-constrains generation to the reaction schema the same way
+`nvext.guided_json` does on NIM. Parsing reuses the shared, defensive
+`parse_llm_reaction()` — `market_fit_score` and `status` are always recomputed
+server-side. Every Fireworks path degrades gracefully without a key (swarm
+refuses to construct with a clear error; analyst and semantic assessor fall
+back to their deterministic mocks with a visible note/label).
+
+The **orchestrated worker swarm** (opt-in, `orchestration_enabled`) also runs
+its "main brain" on Fireworks by default (`ORCHESTRATOR_PROVIDER=fireworks`,
+model from `FIREWORKS_ORCHESTRATOR_MODEL`, falling back to `FIREWORKS_MODEL`)
+with DeepSeek-V4-Flash physical workers — the whole prototype needs only
+`FIREWORKS_API_KEY`. Set `ORCHESTRATOR_PROVIDER=nvidia` to route the brain to
+NVIDIA-hosted Nemotron instead.
+
+## Reference path — NVIDIA NIM GLM-5.2 (testing only)
 
 A single, OpenAI-compatible `NvidiaProvider` / `NvidiaAnalyst` pair targets
 **NVIDIA Build / NVIDIA NIM** — either the hosted `build.nvidia.com` catalog
-(`https://integrate.api.nvidia.com/v1`) or a self-hosted NIM container. Both
+(`https://integrate.api.nvidia.com/v1`) or a self-hosted NIM container. Kept
+for testing/reference; the real prototype runs on Fireworks (above). Both
 roles share the same model family, `z-ai/glm-5.2`:
 
 1. **Analyst/report agent** (`ANALYST_PROVIDER=nvidia`,
@@ -83,10 +116,11 @@ Self-hosted: point `NVIDIA_BASE_URL` at a NIM container's own `/v1`
 endpoint (`http://<host>:8000/v1`); `NVIDIA_API_KEY` is usually not needed
 in that case.
 
-*Legacy note: an earlier iteration of this roadmap used Fireworks-hosted
-Gemma 27B as the analyst/swarm model. Fireworks has been removed in favor of
-NVIDIA NIM GLM-5.2 as the primary non-mock path; nothing above depends on
-Fireworks.*
+*History note: an earlier iteration used Fireworks-hosted Gemma 27B, was then
+moved to NVIDIA NIM GLM-5.2, and has now returned to Fireworks (DeepSeek-V4
+family) as the primary non-mock path to fit the AMD hackathon guidelines —
+see Stage 1 above. The NVIDIA path in this section remains functional for
+testing.*
 
 ### Nemotron (reasoning model) variant
 

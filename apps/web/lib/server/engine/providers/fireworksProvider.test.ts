@@ -3,12 +3,12 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("./chatClient", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./chatClient")>();
-  return { ...actual, chatCompletion: vi.fn() };
+  return { ...actual, chatCompletionWithMeta: vi.fn() };
 });
 
 import { ProviderNotConfiguredError } from "../../errors";
 import { PersonaGenerator } from "../persona/generator";
-import { ChatHttpError, chatCompletion } from "./chatClient";
+import { ChatHttpError, chatCompletionWithMeta } from "./chatClient";
 import { FireworksProvider } from "./fireworksProvider";
 import { getProvider } from "./index";
 import { REACTION_JSON_SCHEMA } from "./prompts";
@@ -19,6 +19,8 @@ const MODEL = "accounts/fireworks/models/deepseek-v4-flash";
 
 const mk = (over: Partial<ConstructorParameters<typeof FireworksProvider>[0]> = {}) =>
   new FireworksProvider({ apiKey: "fw-key", baseUrl: HOSTED, model: MODEL, ...over });
+
+const ok = (content: string) => ({ content, finishReason: "stop" });
 
 const VALID_REPLY = JSON.stringify({
   criteria_scores: { price_value: 0.7, need_intensity: 0.6 },
@@ -49,14 +51,14 @@ describe("FireworksProvider construction guards", () => {
 });
 
 describe("FireworksProvider.react", () => {
-  beforeEach(() => vi.mocked(chatCompletion).mockReset());
+  beforeEach(() => vi.mocked(chatCompletionWithMeta).mockReset());
 
   test("sends the reaction schema via Fireworks JSON mode and parses the reply", async () => {
-    vi.mocked(chatCompletion).mockResolvedValueOnce(VALID_REPLY);
+    vi.mocked(chatCompletionWithMeta).mockResolvedValueOnce(ok(VALID_REPLY));
     const { personas } = new PersonaGenerator(7).generate("early_adopters", 1);
     const r = await mk().react(personas[0], "An AI assistant. $12/month.", "product_concept", null, null);
 
-    const opts = vi.mocked(chatCompletion).mock.calls[0][0];
+    const opts = vi.mocked(chatCompletionWithMeta).mock.calls[0][0];
     expect(opts.baseUrl).toBe(HOSTED);
     expect(opts.model).toBe(MODEL);
     expect(opts.temperature).toBe(0.8);
@@ -71,26 +73,38 @@ describe("FireworksProvider.react", () => {
   });
 
   test("non-JSON content raises (counts as a failed persona, never fabricated)", async () => {
-    vi.mocked(chatCompletion).mockResolvedValueOnce("sorry, I cannot");
+    vi.mocked(chatCompletionWithMeta).mockResolvedValueOnce(ok("sorry, I cannot"));
     const { personas } = new PersonaGenerator(7).generate("early_adopters", 1);
     await expect(
       mk().react(personas[0], "stim", "product_concept", null, null),
     ).rejects.toThrow(/non-JSON/);
   });
 
+  test("a length-cut reply is classified as truncation, not a generic parse error", async () => {
+    // finish_reason=length + unparseable JSON → actionable token-budget error.
+    vi.mocked(chatCompletionWithMeta).mockResolvedValueOnce({
+      content: '{"criteria_scores": {"price_value": 0.7, "need_int',
+      finishReason: "length",
+    });
+    const { personas } = new PersonaGenerator(7).generate("early_adopters", 1);
+    await expect(
+      mk().react(personas[0], "stim", "product_concept", null, null),
+    ).rejects.toThrow(/truncated at max_tokens/);
+  });
+
   test("retries a transient 429 and succeeds — one rate limit never kills a storm", async () => {
-    vi.mocked(chatCompletion)
+    vi.mocked(chatCompletionWithMeta)
       .mockRejectedValueOnce(new ChatHttpError(429, "rate limited"))
       .mockRejectedValueOnce(new ChatHttpError(503, "overloaded"))
-      .mockResolvedValueOnce(VALID_REPLY);
+      .mockResolvedValueOnce(ok(VALID_REPLY));
     const { personas } = new PersonaGenerator(7).generate("early_adopters", 1);
     const r = await mk({ retryBaseMs: 1 }).react(personas[0], "stim", "product_concept", null, null);
     expect(r.buy_likelihood).toBe(0.72);
-    expect(vi.mocked(chatCompletion)).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(chatCompletionWithMeta)).toHaveBeenCalledTimes(3);
   });
 
   test("exhausted retries surface the transient error", async () => {
-    vi.mocked(chatCompletion)
+    vi.mocked(chatCompletionWithMeta)
       .mockRejectedValueOnce(new ChatHttpError(429, "rate limited"))
       .mockRejectedValueOnce(new ChatHttpError(429, "rate limited"))
       .mockRejectedValueOnce(new ChatHttpError(429, "rate limited"));
@@ -100,42 +114,42 @@ describe("FireworksProvider.react", () => {
       .then(() => null, (e: unknown) => e);
     expect(err).toBeInstanceOf(ChatHttpError);
     expect(String(err)).toMatch(/429/);
-    expect(vi.mocked(chatCompletion)).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(chatCompletionWithMeta)).toHaveBeenCalledTimes(3);
   });
 
   test("non-transient errors (bad key) are NOT retried", async () => {
-    vi.mocked(chatCompletion).mockRejectedValueOnce(new ChatHttpError(401, "unauthorized"));
+    vi.mocked(chatCompletionWithMeta).mockRejectedValueOnce(new ChatHttpError(401, "unauthorized"));
     const { personas } = new PersonaGenerator(7).generate("early_adopters", 1);
     await expect(
       mk({ retryBaseMs: 1 }).react(personas[0], "stim", "product_concept", null, null),
     ).rejects.toThrow(/401/);
-    expect(vi.mocked(chatCompletion)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(chatCompletionWithMeta)).toHaveBeenCalledTimes(1);
   });
 
   test("429s get extra paced attempts (Retry-After honored) beyond the 5xx budget", async () => {
-    vi.mocked(chatCompletion)
+    vi.mocked(chatCompletionWithMeta)
       .mockRejectedValueOnce(new ChatHttpError(429, "rate limited", 1))
       .mockRejectedValueOnce(new ChatHttpError(429, "rate limited", 1))
       .mockRejectedValueOnce(new ChatHttpError(429, "rate limited", 1))
       .mockRejectedValueOnce(new ChatHttpError(429, "rate limited", 1))
-      .mockResolvedValueOnce(VALID_REPLY);
+      .mockResolvedValueOnce(ok(VALID_REPLY));
     const { personas } = new PersonaGenerator(7).generate("early_adopters", 1);
     const r = await mk({ retryBaseMs: 1 }).react(personas[0], "stim", "product_concept", null, null);
     expect(r.buy_likelihood).toBe(0.72);
-    expect(vi.mocked(chatCompletion)).toHaveBeenCalledTimes(5); // 5th attempt succeeds
+    expect(vi.mocked(chatCompletionWithMeta)).toHaveBeenCalledTimes(5); // 5th attempt succeeds
   });
 });
 
 describe("FireworksProvider.reactBatch drop tolerance (SWARM_MAX_DROP_FRACTION parity)", () => {
-  beforeEach(() => vi.mocked(chatCompletion).mockReset());
+  beforeEach(() => vi.mocked(chatCompletionWithMeta).mockReset());
 
   test("a bounded fraction of failed personas is dropped, not fatal", async () => {
     const { personas } = new PersonaGenerator(7).generate("early_adopters", 10);
     // First persona fails non-transiently; the other nine succeed.
-    vi.mocked(chatCompletion).mockImplementation(async () => {
-      const call = vi.mocked(chatCompletion).mock.calls.length;
+    vi.mocked(chatCompletionWithMeta).mockImplementation(async () => {
+      const call = vi.mocked(chatCompletionWithMeta).mock.calls.length;
       if (call === 1) throw new ChatHttpError(400, "bad request");
-      return VALID_REPLY;
+      return ok(VALID_REPLY);
     });
     const reactions = await mk({ retryBaseMs: 1, maxDropFraction: 0.1 }).reactBatch(
       personas, "stim", "product_concept", null, 1, null,
@@ -149,10 +163,10 @@ describe("FireworksProvider.reactBatch drop tolerance (SWARM_MAX_DROP_FRACTION p
     // vitest's unhandled-rejection detector false-positives on a mock that
     // emits many concurrent rejections, even though every one is caught
     // (the per-persona warn logs show the catches firing).
-    vi.mocked(chatCompletion).mockImplementation(async () => {
-      const call = vi.mocked(chatCompletion).mock.calls.length;
+    vi.mocked(chatCompletionWithMeta).mockImplementation(async () => {
+      const call = vi.mocked(chatCompletionWithMeta).mock.calls.length;
       if (call <= 3) throw new ChatHttpError(401, "unauthorized");
-      return VALID_REPLY;
+      return ok(VALID_REPLY);
     });
     const err = await mk({ retryBaseMs: 1, maxDropFraction: 0.1 })
       .reactBatch(personas, "stim", "product_concept", null, 1, null)

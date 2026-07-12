@@ -168,7 +168,9 @@ export function getConfig(): ServerConfig {
     fireworksApiKey: trimmed(process.env.FIREWORKS_API_KEY),
     fireworksBaseUrl: trimmed(process.env.FIREWORKS_BASE_URL) || "https://api.fireworks.ai/inference/v1",
     fireworksModel,
-    fireworksMaxTokens: intEnv("FIREWORKS_MAX_TOKENS", 2048),
+    // 4096: schema-constrained reactions at temperature 0.8 can exceed 2048
+    // tokens; a length-cut reply is unparseable and drops the persona.
+    fireworksMaxTokens: intEnv("FIREWORKS_MAX_TOKENS", 4096),
     fireworksDeepseekModel,
     swarmMaxDropFraction: (() => {
       const raw = Number(trimmed(process.env.SWARM_MAX_DROP_FRACTION));

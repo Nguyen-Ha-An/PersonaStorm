@@ -22,17 +22,21 @@ export const REACTION_JSON_SCHEMA: Record<string, unknown> = {
       type: "object",
       additionalProperties: { type: "number", minimum: 0, maximum: 1 },
     },
+    // String caps mirror parseLlmReaction's slice() limits. Without them a
+    // temperature-0.8 persona can ramble past max_tokens under constrained
+    // decoding, truncating the JSON mid-string — the parse then fails and the
+    // persona is dropped.
     qualitative: {
       type: "object",
       properties: {
-        first_objection: { type: "string" },
-        top_positive_trigger: { type: "string" },
-        top_negative_trigger: { type: "string" },
-        dealbreaker: { type: "string" },
-        proof_needed: { type: "string" },
-        emotional_reaction: { type: "string" },
-        would_tell: { type: "string" },
-        quote: { type: "string" },
+        first_objection: { type: "string", maxLength: 280 },
+        top_positive_trigger: { type: "string", maxLength: 280 },
+        top_negative_trigger: { type: "string", maxLength: 280 },
+        dealbreaker: { type: "string", maxLength: 200 },
+        proof_needed: { type: "string", maxLength: 200 },
+        emotional_reaction: { type: "string", maxLength: 160 },
+        would_tell: { type: "string", maxLength: 280 },
+        quote: { type: "string", maxLength: 400 },
       },
       required: ["first_objection", "top_positive_trigger", "top_negative_trigger", "dealbreaker", "proof_needed", "emotional_reaction", "would_tell", "quote"],
       additionalProperties: false,
@@ -47,7 +51,7 @@ export const REACTION_JSON_SCHEMA: Record<string, unknown> = {
       type: "object",
       properties: {
         should_validate_with_humans: { type: "boolean" },
-        validation_question: { type: "string" },
+        validation_question: { type: "string", maxLength: 300 },
         best_next_test: {
           type: "string",
           enum: ["survey", "interview", "landing_page_ab_test", "pricing_test", "ad_test", "usability_test"],

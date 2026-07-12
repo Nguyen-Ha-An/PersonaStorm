@@ -743,6 +743,9 @@ function InferenceEditor({
               <p className={testResult.schema.ok ? "text-signal-green" : "text-signal-red"}>
                 schema call: {testResult.schema.ok ? "OK" : "FAILED"} — {testResult.schema.detail}
               </p>
+              <p className={testResult.swarm.ok ? "text-signal-green" : "text-signal-red"}>
+                full reaction: {testResult.swarm.ok ? "OK" : "FAILED"} — {testResult.swarm.detail}
+              </p>
             </div>
           )}
         </div>

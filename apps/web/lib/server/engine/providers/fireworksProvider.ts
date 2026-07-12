@@ -16,7 +16,7 @@
 import { ProviderNotConfiguredError } from "../../errors";
 import type { StimulusFeatures } from "../stimulusParser";
 import type { Persona, PersonaReaction } from "../types";
-import { ChatHttpError, chatCompletion, isTransientChatError } from "./chatClient";
+import { ChatHttpError, chatCompletionWithMeta, isTransientChatError } from "./chatClient";
 import { parseLlmReaction } from "./nvidiaProvider";
 import { REACTION_JSON_SCHEMA, buildSystemPrompt, buildUserPrompt } from "./prompts";
 import type { PersonaInferenceProvider } from "./types";
@@ -105,7 +105,7 @@ export class FireworksProvider implements PersonaInferenceProvider {
     let lastErr: unknown;
     for (let attempt = 0; ; attempt++) {
       try {
-        const content = await chatCompletion({
+        const { content, finishReason } = await chatCompletionWithMeta({
           baseUrl: this.baseUrl,
           apiKey: this.apiKey,
           model: this.model,
@@ -118,7 +118,18 @@ export class FireworksProvider implements PersonaInferenceProvider {
           jsonSchema: REACTION_JSON_SCHEMA as Record<string, unknown>,
           timeoutMs: this.timeoutMs,
         });
-        return parseLlmReaction(content, persona, features, category);
+        try {
+          return parseLlmReaction(content, persona, features, category);
+        } catch (parseErr) {
+          // A parse failure on a length-cut reply is a token-budget problem,
+          // not a model problem — name it so the failure classifies usefully.
+          if (finishReason === "length") {
+            throw new Error(
+              `reaction truncated at max_tokens (${this.maxTokens}) for ${persona.persona_id} — increase FIREWORKS_MAX_TOKENS`,
+            );
+          }
+          throw parseErr;
+        }
       } catch (err) {
         lastErr = err;
         if (!isTransientChatError(err)) throw err;

@@ -32,11 +32,23 @@ export interface ChatCompletionOptions {
   signal?: AbortSignal;
 }
 
+export interface ChatCompletionResult {
+  content: string;
+  /** Upstream finish_reason ("stop", "length", …) — "length" means the reply
+   * was truncated at max_tokens, which downstream parsers need to know. */
+  finishReason: string | null;
+}
+
 /**
  * POST a chat completion and return the assistant message content string.
  * Throws on non-2xx (with a truncated, credential-free body) or timeout.
  */
 export async function chatCompletion(opts: ChatCompletionOptions): Promise<string> {
+  return (await chatCompletionWithMeta(opts)).content;
+}
+
+/** Like chatCompletion, but also surfaces the upstream finish_reason. */
+export async function chatCompletionWithMeta(opts: ChatCompletionOptions): Promise<ChatCompletionResult> {
   const base = opts.baseUrl.replace(/\/+$/, "");
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (opts.apiKey && opts.apiKey !== "not-needed") headers.Authorization = `Bearer ${opts.apiKey}`;
@@ -57,7 +69,7 @@ export async function chatCompletion(opts: ChatCompletionOptions): Promise<strin
     else opts.signal.addEventListener("abort", () => controller.abort(), { once: true });
   }
 
-  let json: { choices?: { message?: { content?: string } }[] };
+  let json: { choices?: { message?: { content?: string }; finish_reason?: string }[] };
   try {
     const resp = await fetch(`${base}/chat/completions`, {
       method: "POST",
@@ -75,7 +87,8 @@ export async function chatCompletion(opts: ChatCompletionOptions): Promise<strin
   } finally {
     clearTimeout(timeout);
   }
-  return json.choices?.[0]?.message?.content ?? "";
+  const choice = json.choices?.[0];
+  return { content: choice?.message?.content ?? "", finishReason: choice?.finish_reason ?? null };
 }
 
 /** HTTP error that preserves the status code for retry classification. */

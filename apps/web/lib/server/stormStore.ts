@@ -255,7 +255,9 @@ export async function createAndRunStorm(
     } catch (refundErr) {
       console.error(`[personastorm storm] refund after failed run also failed for ${stormId}:`, (refundErr as Error).message);
     }
-    throw new HttpError(500, "Could not complete the storm. Your credits have been refunded.");
+    // Surface the CLASSIFIED cause in the create-page banner itself — the
+    // curated reason is user-safe by construction (publicFailureReason).
+    throw new HttpError(500, `Could not complete the storm. ${publicFailureReason(err)} Your credits have been refunded.`);
   }
 }
 

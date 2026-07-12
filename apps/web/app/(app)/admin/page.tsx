@@ -28,8 +28,10 @@ import {
   adminListStormRuns,
   adminListUsers,
   adminSetRole,
+  adminTestInference,
   adminUpdateInferenceSettings,
   adminUpdatePricing,
+  type InferenceTestResult,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatCredits, formatDate, formatNumberCompact } from "@/lib/format";
@@ -526,10 +528,26 @@ function InferenceEditor({
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<InferenceTestResult | null>(null);
+  const [testErr, setTestErr] = useState<string | null>(null);
 
   useEffect(() => setForm(inference), [inference]);
 
   if (!form) return <Skeleton className="h-56 w-full" />;
+
+  async function runTest() {
+    setTesting(true);
+    setTestResult(null);
+    setTestErr(null);
+    try {
+      setTestResult(await adminTestInference());
+    } catch (e) {
+      setTestErr(e instanceof Error ? e.message : "Connection test failed.");
+    } finally {
+      setTesting(false);
+    }
+  }
 
   async function save() {
     if (!form) return;
@@ -702,6 +720,32 @@ function InferenceEditor({
             </p>
           </div>
         )}
+
+        <div className="rounded-lg border border-storm-800 bg-storm-900/40 p-4">
+          <p className="mb-2 text-xs font-semibold text-storm-200">Live connection test</p>
+          <p className="mb-3 text-xs text-storm-400">
+            Makes two tiny Fireworks calls with the exact per-storm config: a plain JSON call
+            (key + model + endpoint) and a schema-constrained call (the swarm&apos;s request shape).
+          </p>
+          <Button onClick={runTest} disabled={testing}>
+            {testing ? "Testing…" : "Test Fireworks connection"}
+          </Button>
+          {testErr && <p className="mt-2 text-xs text-signal-red">{testErr}</p>}
+          {testResult && (
+            <div className="mt-3 space-y-1 text-xs">
+              <p className="text-storm-400">
+                provider: {testResult.provider} · model: {testResult.model ?? "—"} · key:{" "}
+                {testResult.api_key_configured ? "configured" : "NOT SET"}
+              </p>
+              <p className={testResult.basic.ok ? "text-signal-green" : "text-signal-red"}>
+                basic call: {testResult.basic.ok ? "OK" : "FAILED"} — {testResult.basic.detail}
+              </p>
+              <p className={testResult.schema.ok ? "text-signal-green" : "text-signal-red"}>
+                schema call: {testResult.schema.ok ? "OK" : "FAILED"} — {testResult.schema.detail}
+              </p>
+            </div>
+          )}
+        </div>
 
         {msg && <p className="text-xs text-signal-green">{msg}</p>}
         {err && <p className="text-xs text-signal-red">{err}</p>}

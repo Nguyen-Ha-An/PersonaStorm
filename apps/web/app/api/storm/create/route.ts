@@ -6,8 +6,12 @@ import { createAndRunStorm, type CreateStormPayload } from "@/lib/server/stormSt
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// The storm engine runs synchronously at create time; give it headroom.
-export const maxDuration = 60;
+// The storm engine runs synchronously at create time; give it headroom. Live
+// Fireworks runs need minutes, not seconds — 300s is the Fluid Compute cap on
+// the Hobby plan. If the platform still kills an over-long run, the stale-run
+// settler in stormStore refunds it on the user's next request
+// (STALE_RUNNING_MS is deliberately > this value).
+export const maxDuration = 300;
 
 const STIMULUS_TYPES = new Set(["product_concept", "landing_page", "ad", "pricing_table"]);
 const TARGET_MARKETS = new Set(["sea_genz", "us_smb", "parents", "enterprise", "budget", "early_adopters", "custom"]);

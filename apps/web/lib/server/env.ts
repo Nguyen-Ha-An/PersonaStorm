@@ -54,6 +54,11 @@ export interface ServerConfig {
   semanticProvider: SemanticProvider;
   semanticModel: string;
   semanticMaxTokens: number;
+  /** Raw env-only values ("" when unset), kept so resolveEffectiveConfig can
+   * re-derive the semantic provider/model from the EFFECTIVE analyst provider
+   * after the DB settings row is layered on. */
+  semanticProviderRaw: "" | "mock" | "nvidia" | "fireworks";
+  semanticModelRaw: string;
   personaSeed: number;
   // Live-replay pacing for the SSE stream (data is precomputed at create time).
   streamBatchSize: number;
@@ -80,6 +85,7 @@ function intEnv(name: string, fallback: number): number {
 }
 
 let warnedBadUrl = false;
+let warnedBadFireworksModel = false;
 
 export function getConfig(): ServerConfig {
   const rawSupabaseUrl =
@@ -103,15 +109,27 @@ export function getConfig(): ServerConfig {
     liveProvider(trimmed(process.env.ANALYST_PROVIDER).toLowerCase()) || "mock";
   // Semantic assessor defaults to whatever the analyst uses (mock stays mock).
   const semanticRaw = trimmed(process.env.SEMANTIC_PROVIDER).toLowerCase();
-  const semanticProvider: SemanticProvider =
-    semanticRaw === "mock" ? "mock" : liveProvider(semanticRaw) || analystProvider;
+  const semanticProviderRaw: "" | "mock" | "nvidia" | "fireworks" =
+    semanticRaw === "mock" ? "mock" : liveProvider(semanticRaw);
+  const semanticProvider: SemanticProvider = semanticProviderRaw || analystProvider;
 
   // Fireworks model resolution: FIREWORKS_MODEL for the classic engine paths,
   // falling back to the (worker-swarm) FIREWORKS_DEEPSEEK_MODEL default so a
-  // single-model setup needs only one env var.
+  // single-model setup needs only one env var. Fireworks ids always live
+  // under accounts/… — anything else (e.g. an NVIDIA id pasted into the
+  // wrong var) is rejected here so it can never be POSTed to Fireworks.
+  const accountsModel = (name: string, v: string): string => {
+    if (v && !v.startsWith("accounts/") && !warnedBadFireworksModel) {
+      console.error(`[personastorm] ${name} is not a Fireworks model id (expected accounts/…); using the default instead.`);
+      warnedBadFireworksModel = true;
+    }
+    return v.startsWith("accounts/") ? v : "";
+  };
   const fireworksDeepseekModel =
-    trimmed(process.env.FIREWORKS_DEEPSEEK_MODEL) || DEFAULT_WORKER_MODEL;
-  const fireworksModel = trimmed(process.env.FIREWORKS_MODEL) || fireworksDeepseekModel;
+    accountsModel("FIREWORKS_DEEPSEEK_MODEL", trimmed(process.env.FIREWORKS_DEEPSEEK_MODEL)) ||
+    DEFAULT_WORKER_MODEL;
+  const fireworksModel =
+    accountsModel("FIREWORKS_MODEL", trimmed(process.env.FIREWORKS_MODEL)) || fireworksDeepseekModel;
 
   return {
     supabaseUrl,
@@ -137,6 +155,8 @@ export function getConfig(): ServerConfig {
       (semanticProvider === "fireworks"
         ? fireworksModel
         : trimmed(process.env.NVIDIA_MODEL) || "z-ai/glm-5.2"),
+    semanticProviderRaw,
+    semanticModelRaw: trimmed(process.env.SEMANTIC_MODEL),
     semanticMaxTokens: intEnv("SEMANTIC_MAX_TOKENS", 2048),
     personaSeed: intEnv("PERSONA_SEED", 1337),
     streamBatchSize: intEnv("STREAM_BATCH_SIZE", 25),
@@ -153,7 +173,8 @@ export function getConfig(): ServerConfig {
       trimmed(process.env.ORCHESTRATOR_PROVIDER).toLowerCase() === "nvidia" ? "nvidia" : "fireworks",
     orchestratorModel: trimmed(process.env.NVIDIA_ORCHESTRATOR_MODEL) || DEFAULT_ORCHESTRATOR_MODEL,
     fireworksOrchestratorModel:
-      trimmed(process.env.FIREWORKS_ORCHESTRATOR_MODEL) || fireworksModel,
+      accountsModel("FIREWORKS_ORCHESTRATOR_MODEL", trimmed(process.env.FIREWORKS_ORCHESTRATOR_MODEL)) ||
+      fireworksModel,
   };
 }
 

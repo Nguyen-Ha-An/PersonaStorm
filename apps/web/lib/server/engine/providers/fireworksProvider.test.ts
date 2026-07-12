@@ -8,7 +8,7 @@ vi.mock("./chatClient", async (importOriginal) => {
 
 import { ProviderNotConfiguredError } from "../../errors";
 import { PersonaGenerator } from "../persona/generator";
-import { chatCompletion } from "./chatClient";
+import { ChatHttpError, chatCompletion } from "./chatClient";
 import { FireworksProvider } from "./fireworksProvider";
 import { getProvider } from "./index";
 import { REACTION_JSON_SCHEMA } from "./prompts";
@@ -76,6 +76,40 @@ describe("FireworksProvider.react", () => {
     await expect(
       mk().react(personas[0], "stim", "product_concept", null, null),
     ).rejects.toThrow(/non-JSON/);
+  });
+
+  test("retries a transient 429 and succeeds — one rate limit never kills a storm", async () => {
+    vi.mocked(chatCompletion)
+      .mockRejectedValueOnce(new ChatHttpError(429, "rate limited"))
+      .mockRejectedValueOnce(new ChatHttpError(503, "overloaded"))
+      .mockResolvedValueOnce(VALID_REPLY);
+    const { personas } = new PersonaGenerator(7).generate("early_adopters", 1);
+    const r = await mk({ retryBaseMs: 1 }).react(personas[0], "stim", "product_concept", null, null);
+    expect(r.buy_likelihood).toBe(0.72);
+    expect(vi.mocked(chatCompletion)).toHaveBeenCalledTimes(3);
+  });
+
+  test("exhausted retries surface the transient error", async () => {
+    vi.mocked(chatCompletion)
+      .mockRejectedValueOnce(new ChatHttpError(429, "rate limited"))
+      .mockRejectedValueOnce(new ChatHttpError(429, "rate limited"))
+      .mockRejectedValueOnce(new ChatHttpError(429, "rate limited"));
+    const { personas } = new PersonaGenerator(7).generate("early_adopters", 1);
+    const err = await mk({ retryBaseMs: 1, maxRetries: 3 })
+      .react(personas[0], "stim", "product_concept", null, null)
+      .then(() => null, (e: unknown) => e);
+    expect(err).toBeInstanceOf(ChatHttpError);
+    expect(String(err)).toMatch(/429/);
+    expect(vi.mocked(chatCompletion)).toHaveBeenCalledTimes(3);
+  });
+
+  test("non-transient errors (bad key) are NOT retried", async () => {
+    vi.mocked(chatCompletion).mockRejectedValueOnce(new ChatHttpError(401, "unauthorized"));
+    const { personas } = new PersonaGenerator(7).generate("early_adopters", 1);
+    await expect(
+      mk({ retryBaseMs: 1 }).react(personas[0], "stim", "product_concept", null, null),
+    ).rejects.toThrow(/401/);
+    expect(vi.mocked(chatCompletion)).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -39,17 +39,20 @@ REACTION_JSON_SCHEMA: dict = {
             "type": "object",
             "additionalProperties": {"type": "number", "minimum": 0, "maximum": 1},
         },
+        # String caps mirror parse_llm_reaction's slice limits — unbounded
+        # strings let a hot-temperature persona ramble past max_tokens under
+        # constrained decoding, truncating the JSON mid-string.
         "qualitative": {
             "type": "object",
             "properties": {
-                "first_objection": {"type": "string"},
-                "top_positive_trigger": {"type": "string"},
-                "top_negative_trigger": {"type": "string"},
-                "dealbreaker": {"type": "string"},
-                "proof_needed": {"type": "string"},
-                "emotional_reaction": {"type": "string"},
-                "would_tell": {"type": "string"},
-                "quote": {"type": "string"},
+                "first_objection": {"type": "string", "maxLength": 280},
+                "top_positive_trigger": {"type": "string", "maxLength": 280},
+                "top_negative_trigger": {"type": "string", "maxLength": 280},
+                "dealbreaker": {"type": "string", "maxLength": 200},
+                "proof_needed": {"type": "string", "maxLength": 200},
+                "emotional_reaction": {"type": "string", "maxLength": 160},
+                "would_tell": {"type": "string", "maxLength": 280},
+                "quote": {"type": "string", "maxLength": 400},
             },
             "required": [
                 "first_objection", "top_positive_trigger", "top_negative_trigger",
@@ -68,7 +71,7 @@ REACTION_JSON_SCHEMA: dict = {
             "type": "object",
             "properties": {
                 "should_validate_with_humans": {"type": "boolean"},
-                "validation_question": {"type": "string"},
+                "validation_question": {"type": "string", "maxLength": 300},
                 "best_next_test": {
                     "type": "string",
                     "enum": ["survey", "interview", "landing_page_ab_test",

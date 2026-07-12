@@ -263,6 +263,7 @@ export interface InferenceTestResult {
   api_key_configured: boolean;
   basic: { ok: boolean; detail: string };
   schema: { ok: boolean; detail: string };
+  swarm: { ok: boolean; detail: string };
 }
 export const adminTestInference = () =>
   apiSend<InferenceTestResult>("POST", "/admin/inference-test", {});

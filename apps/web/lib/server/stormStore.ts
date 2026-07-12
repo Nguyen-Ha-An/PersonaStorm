@@ -97,6 +97,12 @@ export function publicFailureReason(err: unknown): string {
   if (/-> 400/.test(msg)) {
     return "The inference provider rejected the request format. Run the connection test in Admin → Inference for details.";
   }
+  if (/truncated at max_tokens/i.test(msg)) {
+    return "The model ran out of output tokens mid-reaction for too many personas. Increase FIREWORKS_MAX_TOKENS.";
+  }
+  if (/non-JSON content|missing criteria_scores|Unexpected end of JSON|Unexpected token|Unterminated string/i.test(msg)) {
+    return "The model returned malformed reactions for too many personas. Increase FIREWORKS_MAX_TOKENS or try a different FIREWORKS_MODEL, and run the connection test in Admin → Inference.";
+  }
   return "Internal error while running the storm.";
 }
 

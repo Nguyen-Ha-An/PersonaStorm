@@ -21,12 +21,22 @@ weights + age overlay + bounded modifiers + rare hard gates), never invented
 or eyeballed by a language model.
 
 **It is not** a replacement for human research. Outputs are synthetic
-hypotheses from a calibrated model — every report carries a disclaimer, a
-trust panel that will happily tell you not to trust a run (collapse risk, low
-benchmark confidence, criteria consistency), and a `next_human_validation`
-list that always points to real-human validation. No persona is a real
-human, and no chain-of-thought is ever exposed — only short, honest,
-user-facing rationale.
+hypotheses from a calibrated model — every report carries a disclaimer and a
+**trust/calibration panel** that will happily tell you not to trust a run:
+collapse risk, low benchmark confidence, criteria consistency, **how much of
+the persona trait model is actually evidence-backed vs. an unverified
+estimate**, **which directional assumptions fired and on how many personas**,
+whether **semantic grounding** was real or a formula fallback, and a
+`next_human_validation` list that always points to real-human validation. No
+persona is a real human, and no chain-of-thought is ever exposed — only short,
+honest, user-facing rationale.
+
+Recent work hardened this honesty end-to-end (see **Calibration & semantic
+grounding** below): persona trait priors were moved out of code into
+evidence-annotated data files, every directional nudge is now recorded in a
+per-run assumptions ledger, an optional **semantic grounding** layer makes the
+swarm react to what a product *is* (not just its copy surface), and a
+known-outcome **benchmark backtest** gates regressions.
 
 ## Dashboard SaaS: auth, wallets, pricing & admin
 
@@ -116,22 +126,73 @@ multiplicative hard gates (e.g. a teen persona in a paid-education category
 with near-zero parent approval), then clamps to `[0,1]` — that's the
 `market_fit_score`. Full model: [docs/criteria-system.md](docs/criteria-system.md).
 
+## Calibration & semantic grounding
+
+Two things a synthetic-persona tool can get quietly wrong are (1) inventing a
+population from a developer's gut and (2) reacting to a pitch's *wording*
+instead of the product's *substance*. Both are addressed explicitly, and the
+report says out loud how much to trust the result.
+
+- **Evidence-backed persona priors.** Trait distributions live in versioned
+  data files (`data/persona_priors/*.json`), not code — each trait carries an
+  evidence status (`sourced` \| `derived` \| `unverified`). Unverified priors
+  have their spread automatically **widened ×1.5** (uncertainty we can't source
+  becomes uncertainty the population expresses), and the report surfaces a
+  **prior-coverage %**. Traits are sampled with **realistic correlations**
+  (Cholesky), and a diversity **coherence** check flags incoherent tails.
+- **Assumptions ledger.** Every directional "nudge" in the engine (e.g. a
+  pricing-dealbreaker injection, an AI-novelty activation boost, the semantic
+  blend) is registered with an evidence status and counted per run — the report
+  lists exactly **which assumptions fired and on how many personas**. Objections
+  are no longer gated by hand-authored dealbreaker pools; a matching dealbreaker
+  only *boosts* an evidence-justified objection's weight.
+- **Semantic grounding (optional).** One LLM call per storm assesses whether the
+  product genuinely fits each segment across five criteria (`solution_fit`,
+  `need_intensity`, `differentiation`, `workflow_fit`, `problem_awareness`) —
+  with an anti-optimism prompt (forced cross-segment ranking, differentiation
+  vs. *named* real alternatives, the stimulus fenced as untrusted data). Those
+  scores are clamped-or-dropped at a trust boundary and blended
+  `0.7·semantic + 0.3·formula` **only when a real assessment exists**; mock /
+  offline mode honestly stays on formulas and labels itself `fallback_formulas`.
+  The assessment is cached once per storm, so runs stay deterministic.
+- **Honest counterfactual audit.** A cheap sensitivity check flips one context
+  field at a time and re-runs; fields that can't move a reaction in the current
+  provider are reported as `not_applicable` rather than a fake "pass".
+- **Known-outcome benchmark.** `data/benchmark_outcomes/` holds disguised
+  products with documented outcomes; an **offline backtest** (rank correlation +
+  failure-mode + within-category-inversion gates) runs the full blend path
+  against recorded fixtures — no live LLM in CI. *The shipped seed set is small
+  and illustrative (a machinery tripwire, not accuracy validation); real
+  validation needs a curated 15–25-product set — see
+  `data/benchmark_outcomes/README.md`.*
+
+Design + rationale:
+[docs/superpowers/specs/2026-07-10-persona-calibration-semantic-grounding-design.md](docs/superpowers/specs/2026-07-10-persona-calibration-semantic-grounding-design.md).
+
 ## Architecture (short version)
 
 ```
-input → parser → category classifier → persona space builder (1,000 personas,
-      life_stage + decision_context) → diversity validator → criteria preset
-      selection → multi-criteria reaction engine (mock | nvidia | vLLM)
-      → market-fit scoring (compute_market_fit) → SSE stream → quality /
-      collapse / consistency check → segment + age-cohort + criteria
-      aggregation → weakness diagnosis → analyst re-narration (mock | nvidia)
-      → report + trust panel
+input → parser → category classifier
+   → persona space builder (1,000 personas: evidence-backed trait priors,
+     correlated sampling, life_stage + decision_context) → diversity + coherence check
+   → semantic assessor (one LLM call/storm: mock | nvidia) grounds 5 criteria per segment
+   → multi-criteria reaction engine (mock | nvidia | vLLM), blends semantic + formula,
+     records every directional nudge in the assumptions ledger
+   → market-fit scoring (compute_market_fit) → SSE stream
+   → quality / collapse / consistency + counterfactual bias audit
+   → segment + age-cohort + criteria aggregation → weakness diagnosis
+   → analyst re-narration (mock | nvidia)
+   → report + trust/calibration panel (priors coverage · assumptions fired ·
+     semantic source · confidence downgrades)
 ```
 
-Two independent engines, two separate `.env` knobs: the **reaction
+Three independent `.env` knobs, three graceful fallbacks: the **reaction
 provider** (`INFERENCE_PROVIDER`) generates the 1,000 persona reactions; the
-**analyst model** (`ANALYST_PROVIDER`) summarizes and diagnoses that swarm
-output afterward — it re-narrates text only and never invents a number.
+**semantic assessor** (`SEMANTIC_PROVIDER`) makes one LLM call per storm to
+ground five product-fit criteria; the **analyst model** (`ANALYST_PROVIDER`)
+summarizes and diagnoses the swarm output afterward. Every one of them
+re-narrates or grounds only — **none ever invents a number**; `market_fit_score`
+is always recomputed server-side by `compute_market_fit`.
 
 One calibrated model + 1,000 persona *profiles* — not 1,000 models. Personas
 are data; the model has one trained skill: react consistently as the persona
@@ -146,18 +207,20 @@ personastorm/
 │                            wallet · billing/quote · storm/* · admin/*)
 │   └── lib/server/          server-only backend: auth (session verify + lazy profile/wallet repair) ·
 │                            supabaseAdmin (algorithm-aware JWT verify, GoTrue fallback) · gateway ·
-│                            pricing · wallet · stormStore · stormEngine + engine/ (criteria · persona ·
-│                            providers · aggregation · quality) — the TypeScript port of the engine
+│                            pricing · wallet · stormStore · stormEngine + engine/ (criteria · persona
+│                            [priors · correlation · featureWiring] · providers · semantic · aggregation ·
+│                            quality [+ counterfactual biasAudit] · benchmark) — the TS port of the engine
 │   └── lib/                 config.ts (site URL + Supabase URL validation, single source of truth) ·
 │                            supabase browser client · auth context · api client (same-origin /api/*)
 ├── apps/api        FastAPI backend — LOCAL/DEV/REFERENCE ONLY (not deployed in production)
-│   └── app/services/…       the original Python engine the TypeScript port mirrors
+│   └── app/services/…       the Python engine the TypeScript port mirrors 1:1 (calibration + semantic incl.)
 ├── supabase/migrations/  SaaS schema (profiles · wallets · transactions · storm_runs · pricing_rules) + RLS
 ├── packages/schemas  JSON Schema contract (mirrors Pydantic + TS types)
-├── data/           sample inputs, benchmark samples, persona exports, runs
+├── data/           persona_priors/ (evidence-annotated trait priors) · benchmark_outcomes/ (+ fixtures/) ·
+│                    sample inputs · persona exports · runs
 ├── scripts/        create_admin_user.py · seed_personas.py · run_local_demo.py · evaluate_outputs.py
-└── docs/           architecture · criteria-system · api-contract · deployment ·
-                    inference/training roadmaps · evaluation framework · demo script
+└── docs/           architecture · criteria-system · api-contract · deployment · demo script ·
+                    inference/training roadmaps · superpowers/ (calibration + semantic specs & plans)
 ```
 
 > **Deployment:** the whole app deploys to **Vercel** — frontend **and** the API
@@ -208,7 +271,10 @@ key needed.
 |---|---|---|
 | `INFERENCE_PROVIDER` | `mock` | reaction engine for the 1,000-persona swarm: `mock` \| `nvidia` \| `vllm` |
 | `ANALYST_PROVIDER` | `mock` | report/analyst model: `mock` (local deterministic builder) \| `nvidia` (GLM-5.2) |
-| `NVIDIA_API_KEY` | — | required for the hosted NVIDIA endpoint (get an `nvapi-` key at [build.nvidia.com](https://build.nvidia.com)) |
+| `SEMANTIC_PROVIDER` | *(analyst provider)* | semantic grounding: `mock` (deterministic offline stand-in — no blend, honest formula fallback) \| `nvidia` (one real LLM call/storm grounding 5 criteria). Defaults to whatever `ANALYST_PROVIDER` is. |
+| `SEMANTIC_MODEL` / `SEMANTIC_MAX_TOKENS` | *(analyst model)* / `2048` | model + token budget for the semantic assessor; model falls back to `ANALYST_MODEL` → `NVIDIA_MODEL`. |
+| `PERSONA_PRIORS_DIR` | *(repo `data/persona_priors`)* | directory of evidence-annotated trait priors; unset → repo data when present, else embedded presets (labeled `unverified`). See `data/persona_priors/README.md`. |
+| `NVIDIA_API_KEY` | — | required for any hosted NVIDIA path — reaction swarm, analyst, **and** semantic assessor (get an `nvapi-` key at [build.nvidia.com](https://build.nvidia.com)) |
 | `NVIDIA_BASE_URL` | `https://integrate.api.nvidia.com/v1` | NVIDIA NIM (hosted or self-hosted, OpenAI-compatible) |
 | `NVIDIA_MODEL` | `z-ai/glm-5.2` | used by both the `nvidia` reaction provider and the `nvidia` analyst |
 | `NVIDIA_MAX_TOKENS` / `ANALYST_MAX_TOKENS` | `2048` / `4096` | per-persona reaction budget / larger analyst-report budget |
@@ -228,21 +294,29 @@ key needed.
 
 ## Switching providers
 
-Two independent knobs — the reaction swarm and the analyst/report model:
+Three independent knobs — the reaction swarm, the semantic assessor, and the
+analyst/report model:
 
 ```bash
 INFERENCE_PROVIDER=mock    # deterministic local reaction engine (default, CI, demos)
 INFERENCE_PROVIDER=nvidia  # NVIDIA NIM GLM-5.2 reaction swarm (needs NVIDIA_API_KEY)
 INFERENCE_PROVIDER=vllm    # any OpenAI-compatible vLLM server (MI300X/ROCm target)
 
+SEMANTIC_PROVIDER=mock     # deterministic stand-in — no blend, formulas stand, honestly labeled (default)
+SEMANTIC_PROVIDER=nvidia   # one real LLM call/storm grounds 5 product-fit criteria (needs NVIDIA_API_KEY)
+
 ANALYST_PROVIDER=mock      # local deterministic report builder's own text (default)
 ANALYST_PROVIDER=nvidia    # NVIDIA NIM GLM-5.2 re-narrates the report (needs NVIDIA_API_KEY)
 ```
 
-Three practical combos: **mock + mock** (fully offline demo/CI), **mock
-swarm + nvidia analyst** (fast local swarm, one real-LLM call for report
-polish), and **vllm swarm + nvidia analyst** (future AMD MI300X-hosted
-swarm plus the GLM-5.2 analyst).
+Practical combos: **all mock** (fully offline demo/CI — the default; semantic
+grounding is honestly disabled, criteria stay on formulas), **mock swarm +
+nvidia semantic + nvidia analyst** (offline swarm, one grounding call + one
+report-polish call), and **vllm swarm + nvidia semantic/analyst** (future AMD
+MI300X-hosted swarm). Semantic grounding only *changes* the numbers when
+`SEMANTIC_PROVIDER=nvidia` and a live key is present — in mock mode the report
+labels `semantic_source: fallback_formulas` and adds a confidence downgrade, so
+a demo never silently passes off ungrounded scores as grounded.
 
 No code changes for either knob — the swap points are
 `apps/api/app/services/inference/` (`PersonaInferenceProvider`) and
@@ -290,36 +364,57 @@ full argument.
 
 ## Tests & headless verification
 
+The TypeScript engine (production) and the Python engine (reference) are tested
+independently and must both stay green:
+
 ```bash
-cd apps/api
-.venv/bin/python -m pytest -q                 # ~76 tests: criteria/scoring integrity,
-                                               # schema, diversity, determinism,
-                                               # consistency checker, collapse, e2e SSE
+# TypeScript engine + API + UI — from apps/web
+npx vitest run       # ~184 tests: criteria/scoring, priors loader, correlation,
+                     # assumptions ledger, semantic sanitize/blend, benchmark
+                     # metrics + offline backtest gate, report/trust-panel
+npx tsc --noEmit     # typecheck
+
+# Python reference engine — from apps/api  (Windows: .venv\Scripts\python)
+.venv/bin/python -m pytest -q                 # ~202 tests: the same coverage mirrored
 .venv/bin/python scripts/run_local_demo.py    # full pipeline in the terminal
 .venv/bin/python scripts/evaluate_outputs.py  # re-grade any persisted run
 .venv/bin/python scripts/seed_personas.py     # export persona populations
 ```
 
+The benchmark backtest runs offline against recorded fixtures (no live LLM in
+CI). To (re)record fixtures from whatever assessor is configured:
+`npm run record:fixtures` (from `apps/web`).
+
 ## Status: implemented vs placeholder
 
-**Implemented and verified:** full multi-criteria storm pipeline end-to-end
-(mock provider) — category classifier, 17-criterion scoring with age/life-stage
-overlays and `compute_market_fit`, criteria + age-cohort + segment
-aggregation, weakness/strength diagnosis, consistency checker, all quality
-metrics (including `age_cohort_variance` and `criteria_consistency`), SSE
-streaming with live collapse monitoring, objection theme clustering, price
-curve, kill-quote selection, recommendations, `next_human_validation`, the
-full Market Evaluation Dashboard UI (live grid + report), tests, Docker, JSON
-persistence.
+**Implemented and verified (mock provider, end-to-end, both engines green):**
+full multi-criteria storm pipeline — category classifier, 17-criterion scoring
+with age/life-stage overlays and `compute_market_fit`, criteria + age-cohort +
+segment aggregation, weakness/strength diagnosis, consistency checker, all
+quality metrics (including `age_cohort_variance` and `criteria_consistency`),
+SSE streaming with live collapse monitoring, objection theme clustering, price
+curve, kill-quote selection, recommendations, `next_human_validation`, the full
+Market Evaluation Dashboard UI (live grid + report), tests, Docker, JSON
+persistence. **Plus the calibration layer:** evidence-annotated trait priors +
+loader (unverified-std widening, coverage), correlated Cholesky sampling +
+coherence check, the assumptions registry/ledger + de-nudged provider,
+evidence-weighted objections, the honest counterfactual bias audit, and the
+`calibration_evidence` block on the report/trust panel. **Plus semantic
+grounding:** the sanitizer trust boundary, the anti-optimism assessor (mock +
+LLM, never-throw), the source-gated `0.7/0.3` blend, and the offline
+benchmark backtest — all surfaced as `semantic_source` + confidence downgrades.
 
-**Structured placeholders (marked with TODOs):** `VLLMProvider` (plumbing +
-prompts + guided-JSON schema ready; needs a live MI300X/vLLM endpoint to test
-end-to-end), a future LoRA-calibrated persona model (see
-[docs/training-roadmap.md](docs/training-roadmap.md)), real benchmark
-calibration data (shipped samples are labeled illustrative). `NvidiaProvider`
-(reaction swarm) and `NvidiaAnalyst` (report narration) are implemented
-against NVIDIA NIM GLM-5.2 and fall back gracefully without a live key, but
-have not been exercised against a live key in this environment.
+**Structured placeholders / not yet exercised:** `VLLMProvider` (plumbing +
+prompts + guided-JSON schema ready; needs a live MI300X/vLLM endpoint). The
+hosted LLM paths — `NvidiaProvider` (reaction swarm), `NvidiaAnalyst` (report
+narration), and the `SemanticAssessor` — are implemented against NVIDIA NIM
+GLM-5.2 and **fall back gracefully without a live key, but have not been run
+against a live `NVIDIA_API_KEY` in this environment**, so semantic grounding's
+real accuracy gain is unmeasured (mock mode honestly stays on formulas). The
+benchmark ships an **illustrative 5-entry seed set** (a machinery tripwire, not
+accuracy validation) — real validation needs a curated 15–25-product set and
+re-derived thresholds. A future LoRA-calibrated persona model is roadmapped
+(see [docs/training-roadmap.md](docs/training-roadmap.md)).
 
 ## License / hackathon note
 

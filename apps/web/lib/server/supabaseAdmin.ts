@@ -134,16 +134,35 @@ export async function verifyAccessToken(token: string, cfg: ServerConfig = getCo
   return claimsFromPayload(decodePayload(token));
 }
 
-async function verifyViaGoTrue(token: string, cfg: ServerConfig): Promise<TokenClaims> {
-  const apikey = cfg.supabaseAnonKey || cfg.supabaseServiceRoleKey;
-  let resp: Response;
+async function goTrueUserLookup(token: string, cfg: ServerConfig, apikey: string): Promise<Response> {
   try {
-    resp = await fetch(`${cfg.supabaseUrl.replace(/\/+$/, "")}/auth/v1/user`, {
+    return await fetch(`${cfg.supabaseUrl.replace(/\/+$/, "")}/auth/v1/user`, {
       headers: { apikey, Authorization: `Bearer ${token}` },
       cache: "no-store",
     });
   } catch (err) {
     throw new SupabaseError(`GoTrue user lookup transport error: ${(err as Error).message}`);
+  }
+}
+
+async function verifyViaGoTrue(token: string, cfg: ServerConfig): Promise<TokenClaims> {
+  const apikey = cfg.supabaseAnonKey || cfg.supabaseServiceRoleKey;
+  let resp = await goTrueUserLookup(token, cfg, apikey);
+  if ((resp.status === 401 || resp.status === 403) && apikey !== cfg.supabaseServiceRoleKey && cfg.supabaseServiceRoleKey) {
+    // A 401 here can mean a bad TOKEN — or a bad/stale ANON APIKEY (e.g. a
+    // legacy key left in the server-side SUPABASE_ANON_KEY secret after the
+    // project moved to publishable keys), which locks every user out with a
+    // login loop even though their sessions are valid. The service-role key
+    // is health-checked by every DB call the app makes, so retry once with
+    // it: a genuinely bad token still 401s; a dead anon key self-heals.
+    const firstStatus = resp.status;
+    resp = await goTrueUserLookup(token, cfg, cfg.supabaseServiceRoleKey);
+    if (resp.ok) {
+      console.warn(
+        `[personastorm auth] GoTrue rejected the configured anon key (-> ${firstStatus}) but accepted the service-role key — ` +
+          "the server-side SUPABASE_ANON_KEY secret is stale and should be updated to the current publishable key.",
+      );
+    }
   }
   if (resp.status === 401 || resp.status === 403) {
     throw new HttpError(401, "Invalid or expired session token.");

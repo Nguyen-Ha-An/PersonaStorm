@@ -1,5 +1,7 @@
 # ⛈ PersonaStorm — the product wind tunnel
 
+![PersonaStorm — 1,000 synthetic personas storm a product concept](docs/assets/cover.png)
+
 Paste a product concept, landing page, ad, or pricing table. PersonaStorm
 generates **1,000 structured synthetic personas** for your target market,
 classifies the product into one of **10 categories**, runs each persona

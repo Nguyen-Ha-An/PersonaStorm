@@ -16,10 +16,10 @@
 import { ProviderNotConfiguredError } from "../../errors";
 import type { StimulusFeatures } from "../stimulusParser";
 import type { Persona, PersonaReaction } from "../types";
-import { chatCompletion, isTransientChatError } from "./chatClient";
+import { ChatHttpError, chatCompletion, isTransientChatError } from "./chatClient";
 import { parseLlmReaction } from "./nvidiaProvider";
 import { REACTION_JSON_SCHEMA, buildSystemPrompt, buildUserPrompt } from "./prompts";
-import { reactBatchDefault, type PersonaInferenceProvider } from "./types";
+import type { PersonaInferenceProvider } from "./types";
 
 export interface FireworksProviderOptions {
   apiKey: string;
@@ -27,10 +27,18 @@ export interface FireworksProviderOptions {
   model: string;
   maxTokens?: number;
   timeoutMs?: number;
-  /** Attempts per persona on transient (429/5xx/network) failures. */
+  /** Attempts per persona on transient (5xx/network) failures. */
   maxRetries?: number;
+  /** Attempts per persona on 429 rate limits (paced by Retry-After). */
+  maxRateLimitRetries?: number;
   /** Backoff base in ms (delay = base * 2^attempt); tests pass a tiny value. */
   retryBaseMs?: number;
+  /**
+   * Max fraction of personas allowed to fail after retries before the storm
+   * fails honestly rather than shipping a thin report — mirrors the Python
+   * engine's SWARM_MAX_DROP_FRACTION.
+   */
+  maxDropFraction?: number;
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -43,7 +51,9 @@ export class FireworksProvider implements PersonaInferenceProvider {
   private maxTokens: number;
   private timeoutMs: number;
   private maxRetries: number;
+  private maxRateLimitRetries: number;
   private retryBaseMs: number;
+  private maxDropFraction: number;
 
   constructor(opts: FireworksProviderOptions) {
     if (!opts.baseUrl) {
@@ -74,9 +84,11 @@ export class FireworksProvider implements PersonaInferenceProvider {
     // platform killing the whole function.
     this.timeoutMs = opts.timeoutMs ?? 45_000;
     this.maxRetries = Math.max(1, opts.maxRetries ?? 3);
+    this.maxRateLimitRetries = Math.max(1, opts.maxRateLimitRetries ?? 5);
     // Deliberately no jitter: engine paths avoid unseeded randomness (repo
     // invariant), and the swarm's concurrency is a bounded 8 workers.
     this.retryBaseMs = opts.retryBaseMs ?? 1_000;
+    this.maxDropFraction = Math.min(0.5, Math.max(0, opts.maxDropFraction ?? 0.1));
   }
 
   async react(
@@ -86,12 +98,12 @@ export class FireworksProvider implements PersonaInferenceProvider {
     features: StimulusFeatures | null,
     category: string | null,
   ): Promise<PersonaReaction> {
-    // Retry transient failures (429/5xx/network) with exponential backoff —
-    // one rate-limited persona out of 1,000 must not fail the whole storm.
+    // Retry transient failures with exponential backoff. Rate limits (429)
+    // get more attempts and honor the provider's Retry-After pacing, since a
+    // 1,000-call swarm WILL brush the account's requests-per-minute cap.
     // Non-transient errors (schema, auth, 404 model) surface immediately.
     let lastErr: unknown;
-    for (let attempt = 0; attempt < this.maxRetries; attempt++) {
-      if (attempt > 0) await sleep(this.retryBaseMs * 2 ** (attempt - 1));
+    for (let attempt = 0; ; attempt++) {
       try {
         const content = await chatCompletion({
           baseUrl: this.baseUrl,
@@ -110,12 +122,26 @@ export class FireworksProvider implements PersonaInferenceProvider {
       } catch (err) {
         lastErr = err;
         if (!isTransientChatError(err)) throw err;
+        const isRateLimit = err instanceof ChatHttpError && err.status === 429;
+        const budget = isRateLimit ? this.maxRateLimitRetries : this.maxRetries;
+        if (attempt + 1 >= budget) throw lastErr;
+        const backoff = this.retryBaseMs * 2 ** attempt;
+        const wait = isRateLimit && err instanceof ChatHttpError && err.retryAfterMs
+          ? Math.max(err.retryAfterMs, backoff)
+          : backoff;
+        await sleep(Math.min(wait, 15_000));
       }
     }
-    throw lastErr;
   }
 
-  reactBatch(
+  /**
+   * Drop-tolerant fan-out (mirrors the Python engine's
+   * SWARM_MAX_DROP_FRACTION): a bounded fraction of personas may fail after
+   * retries without killing the storm — the report is computed from the
+   * survivors and labeled (runStorm appends a quality note). Beyond the cap
+   * the storm fails honestly rather than shipping a thin report.
+   */
+  async reactBatch(
     personas: Persona[],
     stimulus: string,
     stimulusType: string,
@@ -123,6 +149,39 @@ export class FireworksProvider implements PersonaInferenceProvider {
     concurrency: number,
     category: string | null,
   ): Promise<PersonaReaction[]> {
-    return reactBatchDefault(this, personas, stimulus, stimulusType, features, concurrency, category);
+    const results = new Array<PersonaReaction | null>(personas.length).fill(null);
+    let failures = 0;
+    let lastFailure: unknown;
+    let next = 0;
+    const limit = Math.max(1, concurrency);
+    const worker = async (): Promise<void> => {
+      while (true) {
+        const i = next++;
+        if (i >= personas.length) return;
+        try {
+          results[i] = await this.react(personas[i], stimulus, stimulusType, features, category);
+        } catch (err) {
+          failures++;
+          lastFailure = err;
+          console.warn(
+            `[personastorm fireworks] persona ${personas[i].persona_id} failed after retries:`,
+            (err as Error).message,
+          );
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(limit, personas.length) }, () => worker()));
+
+    const allowed = Math.floor(this.maxDropFraction * personas.length);
+    if (failures > allowed) {
+      const lastMsg = lastFailure instanceof Error ? lastFailure.message : String(lastFailure ?? "unknown");
+      // The last upstream error is embedded so failure classification
+      // (publicFailureReason) still names the real cause, e.g. "-> 429".
+      throw new Error(
+        `Swarm drop cap exceeded: ${failures}/${personas.length} personas failed after retries ` +
+          `(allowed ${allowed}). Last error: ${lastMsg}`,
+      );
+    }
+    return results.filter((r): r is PersonaReaction => r !== null);
   }
 }

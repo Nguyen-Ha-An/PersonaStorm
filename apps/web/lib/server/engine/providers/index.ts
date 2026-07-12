@@ -20,6 +20,7 @@ export function getProvider(cfg: ServerConfig, ledger?: AssumptionLedger): Perso
       baseUrl: cfg.fireworksBaseUrl,
       model: cfg.fireworksModel,
       maxTokens: cfg.fireworksMaxTokens,
+      maxDropFraction: cfg.swarmMaxDropFraction,
     });
   }
   if (cfg.inferenceProvider === "nvidia") {

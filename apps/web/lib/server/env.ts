@@ -71,6 +71,9 @@ export interface ServerConfig {
   fireworksModel: string;
   fireworksMaxTokens: number;
   fireworksDeepseekModel: string;
+  /** Max fraction of swarm personas allowed to fail-after-retry before the
+   * storm fails honestly (mirrors apps/api's SWARM_MAX_DROP_FRACTION). */
+  swarmMaxDropFraction: number;
   // ── Orchestrated worker swarm ──
   orchestratorProvider: OrchestratorProvider;
   orchestratorModel: string;
@@ -167,6 +170,10 @@ export function getConfig(): ServerConfig {
     fireworksModel,
     fireworksMaxTokens: intEnv("FIREWORKS_MAX_TOKENS", 2048),
     fireworksDeepseekModel,
+    swarmMaxDropFraction: (() => {
+      const raw = Number(trimmed(process.env.SWARM_MAX_DROP_FRACTION));
+      return Number.isFinite(raw) && raw >= 0 && raw <= 0.5 ? raw : 0.1;
+    })(),
     // Orchestrator "brain" defaults to Fireworks so the whole swarm runs on a
     // single FIREWORKS_API_KEY; set ORCHESTRATOR_PROVIDER=nvidia for Nemotron.
     orchestratorProvider:

@@ -102,32 +102,33 @@ const STALE_RUNNING_MS = 6 * 60 * 1000;
 async function assertNoActiveRun(gateway: Gateway, userId: string): Promise<void> {
   const recent = await gateway.listUserStorms(userId, 5);
   const now = Date.now();
-  const active = recent.find(
-    (r) =>
-      r.status === "running" &&
-      now - new Date(String(r.created_at ?? 0)).getTime() < STALE_RUNNING_MS,
-  );
-  if (active) {
-    throw new HttpError(429, "You already have a storm running. Wait for it to finish before starting another.");
-  }
-  // A 'running' row older than the stale window is a CRASHED invocation — the
-  // platform killed the function (time limit / OOM) before the in-process
-  // refund could execute, so the user was charged with no result and the
-  // frontend never received a response. Settle it here: mark failed + refund.
-  // Best-effort; a failure to settle must not block the new run.
   for (const r of recent) {
     if (r.status !== "running") continue;
-    if (now - new Date(String(r.created_at ?? 0)).getTime() < STALE_RUNNING_MS) continue;
+    const createdMs = Date.parse(String(r.created_at ?? ""));
+    // Unparseable timestamp → inert: we can't reason about its age, so it
+    // neither blocks a new run nor gets auto-settled (never a blind refund).
+    if (!Number.isFinite(createdMs)) continue;
+    if (now - createdMs < STALE_RUNNING_MS) {
+      throw new HttpError(429, "You already have a storm running. Wait for it to finish before starting another.");
+    }
+    // A 'running' row older than the stale window is a CRASHED invocation —
+    // the platform killed the function (time limit / OOM) before the
+    // in-process refund could execute, so the user was charged with no result
+    // and the frontend never received a response. Settle it: mark failed +
+    // refund. The conditional running→failed transition is the idempotency
+    // gate — of any concurrent racers, exactly one wins it and issues the one
+    // refund. Best-effort; a failure to settle must not block the new run.
     try {
-      await gateway.updateStorm(String(r.id), {
+      const settled = await gateway.settleStormIfRunning(String(r.id), {
         status: "failed",
         error: "The run was interrupted before it could finish (server time limit). Your credits have been refunded — try a smaller persona count for live runs.",
       });
+      if (!settled) continue; // another request already settled it
       const credits = Number(r.price_credits ?? 0);
       if (credits > 0) {
         await refundStorm(gateway, userId, credits, String(r.id), `Refund — storm ${r.id} interrupted`);
       }
-      console.warn(`[personastorm storm] settled crashed run ${r.id}: marked failed and refunded ${r.price_credits} credits.`);
+      console.warn(`[personastorm storm] settled crashed run ${r.id}: marked failed and refunded ${credits} credits.`);
     } catch (settleErr) {
       console.error(`[personastorm storm] could not settle crashed run ${r.id}:`, (settleErr as Error).message);
     }
@@ -230,8 +231,14 @@ export async function createAndRunStorm(
   } catch (err) {
     console.error(`[personastorm storm] run ${stormId} failed, refunding:`, (err as Error).message);
     try {
-      await refundStorm(gateway, user.id, quote.total_credits, stormId, `Refund — storm ${stormId} failed`);
-      await gateway.updateStorm(stormId, { status: "failed", error: publicFailureReason(err) });
+      // Mark failed FIRST via the conditional transition, then refund only if
+      // this invocation won it. A crash between the two steps under-refunds
+      // (admin-recoverable) instead of leaving a 'running' row that the stale
+      // settler would refund a second time.
+      const settled = await gateway.settleStormIfRunning(stormId, { status: "failed", error: publicFailureReason(err) });
+      if (settled) {
+        await refundStorm(gateway, user.id, quote.total_credits, stormId, `Refund — storm ${stormId} failed`);
+      }
     } catch (refundErr) {
       console.error(`[personastorm storm] refund after failed run also failed for ${stormId}:`, (refundErr as Error).message);
     }

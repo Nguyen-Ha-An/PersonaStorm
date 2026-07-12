@@ -56,7 +56,17 @@ export async function ensureDemoStorm(
     const existing = await gateway.getStorm(DEMO_STORM_ID);
     if (existing && existing.status === "complete" && existing.report_json) return true;
 
-    const result = await runStorm(DEMO_INPUT, cfg);
+    // The demo storm is free, seeded, and deterministic — it must NEVER spend
+    // live API credits, so all providers are pinned to mock regardless of the
+    // deployment's env (this path bypasses resolveEffectiveConfig, so it would
+    // otherwise inherit whatever live providers env still names).
+    const demoCfg: ServerConfig = {
+      ...cfg,
+      inferenceProvider: "mock",
+      analystProvider: "mock",
+      semanticProvider: "mock",
+    };
+    const result = await runStorm(DEMO_INPUT, demoCfg);
 
     if (!existing) {
       await gateway.recordStorm({

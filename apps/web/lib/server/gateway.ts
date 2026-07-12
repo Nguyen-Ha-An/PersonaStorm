@@ -73,6 +73,14 @@ export interface Gateway {
   updateActiveInferenceSettings(input: InferenceSettingsRow): Promise<Row>;
   recordStorm(row: Row): Promise<void>;
   updateStorm(stormId: string, fields: Row): Promise<void>;
+  /**
+   * Apply `fields` to the storm ONLY if its status is still 'running', and
+   * report whether the transition happened. This is the idempotency gate for
+   * refunds: whoever wins the running→failed transition owns the (single)
+   * refund; every other racer sees `false` and must not credit. Backed by a
+   * conditional PATCH (status=eq.running) on Supabase.
+   */
+  settleStormIfRunning(stormId: string, fields: Row): Promise<boolean>;
   getStorm(stormId: string): Promise<Row | null>;
   listUserStorms(userId: string, limit?: number): Promise<Row[]>;
   adminListUsers(search?: string | null): Promise<Row[]>;
@@ -226,6 +234,13 @@ class InMemoryGateway implements Gateway {
   async updateStorm(stormId: string, fields: Row): Promise<void> {
     const s = this.storms.get(stormId);
     if (s) Object.assign(s, fields);
+  }
+
+  async settleStormIfRunning(stormId: string, fields: Row): Promise<boolean> {
+    const s = this.storms.get(stormId);
+    if (!s || s.status !== "running") return false;
+    Object.assign(s, fields);
+    return true;
   }
 
   async getStorm(stormId: string): Promise<Row | null> {
@@ -437,6 +452,17 @@ class HttpGateway implements Gateway {
 
   async updateStorm(stormId: string, fields: Row): Promise<void> {
     await this.admin.mutate("PATCH", "storm_runs", { params: { id: `eq.${stormId}` }, json: fields, prefer: "return=minimal" });
+  }
+
+  async settleStormIfRunning(stormId: string, fields: Row): Promise<boolean> {
+    // Conditional PATCH: the status filter makes the running→X transition
+    // atomic in Postgres, so exactly one racer sees rows back.
+    const rows = await this.admin.mutate("PATCH", "storm_runs", {
+      params: { id: `eq.${stormId}`, status: "eq.running" },
+      json: fields,
+      prefer: "return=representation",
+    });
+    return Array.isArray(rows) && rows.length > 0;
   }
 
   async getStorm(stormId: string): Promise<Row | null> {

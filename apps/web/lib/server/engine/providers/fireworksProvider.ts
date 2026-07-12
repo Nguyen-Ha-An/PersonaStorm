@@ -68,8 +68,14 @@ export class FireworksProvider implements PersonaInferenceProvider {
     this.baseUrl = opts.baseUrl.replace(/\/+$/, "");
     this.model = opts.model;
     this.maxTokens = opts.maxTokens ?? 2048;
-    this.timeoutMs = opts.timeoutMs ?? 120_000;
+    // 45s per attempt keeps the worst single-persona chain (3 attempts +
+    // backoff ≈ 138s) inside the storm route's 300s serverless budget —
+    // a slow persona must fail in-process (clean refund), never by the
+    // platform killing the whole function.
+    this.timeoutMs = opts.timeoutMs ?? 45_000;
     this.maxRetries = Math.max(1, opts.maxRetries ?? 3);
+    // Deliberately no jitter: engine paths avoid unseeded randomness (repo
+    // invariant), and the swarm's concurrency is a bounded 8 workers.
     this.retryBaseMs = opts.retryBaseMs ?? 1_000;
   }
 

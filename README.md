@@ -186,13 +186,23 @@ input → parser → category classifier
      semantic source · confidence downgrades)
 ```
 
-Three independent `.env` knobs, three graceful fallbacks: the **reaction
-provider** (`INFERENCE_PROVIDER`) generates the 1,000 persona reactions; the
-**semantic assessor** (`SEMANTIC_PROVIDER`) makes one LLM call per storm to
-ground five product-fit criteria; the **analyst model** (`ANALYST_PROVIDER`)
-summarizes and diagnoses the swarm output afterward. Every one of them
-re-narrates or grounds only — **none ever invents a number**; `market_fit_score`
-is always recomputed server-side by `compute_market_fit`.
+The **real prototype runs its LLM inference on the Fireworks API** via a
+**Nemotron-orchestrated Fireworks worker swarm**: NVIDIA **Nemotron** is the
+orchestrator "brain" (plan → delegate → review → synthesize) and **Fireworks
+DeepSeek-V4-Flash** runs the physical workers that produce the persona
+reactions (`FIREWORKS_API_KEY`). The number of real Fireworks calls is
+hard-capped and extra demand is absorbed as virtual agents inside shards, so a
+1,000-persona swarm stays cheap. See
+[docs/superpowers/plans/2026-07-10-nemotron-fireworks-worker-swarm.md](docs/superpowers/plans/2026-07-10-nemotron-fireworks-worker-swarm.md).
+
+Alongside that, three provider knobs cover the classic / testing / offline
+paths: the **reaction provider** (`INFERENCE_PROVIDER`), the **semantic
+assessor** (`SEMANTIC_PROVIDER`), and the **analyst model**
+(`ANALYST_PROVIDER`). Their `nvidia` option is a generic OpenAI-compatible
+client (usable for direct NVIDIA-NIM testing, or pointed at Fireworks), and
+`mock` runs fully offline. Whatever the provider, every one of them re-narrates
+or grounds text only — **none ever invents a number**; `market_fit_score` is
+always recomputed server-side by `compute_market_fit`.
 
 One calibrated model + 1,000 persona *profiles* — not 1,000 models. Personas
 are data; the model has one trained skill: react consistently as the persona
@@ -274,7 +284,11 @@ key needed.
 | `SEMANTIC_PROVIDER` | *(analyst provider)* | semantic grounding: `mock` (deterministic offline stand-in — no blend, honest formula fallback) \| `nvidia` (one real LLM call/storm grounding 5 criteria). Defaults to whatever `ANALYST_PROVIDER` is. |
 | `SEMANTIC_MODEL` / `SEMANTIC_MAX_TOKENS` | *(analyst model)* / `2048` | model + token budget for the semantic assessor; model falls back to `ANALYST_MODEL` → `NVIDIA_MODEL`. |
 | `PERSONA_PRIORS_DIR` | *(repo `data/persona_priors`)* | directory of evidence-annotated trait priors; unset → repo data when present, else embedded presets (labeled `unverified`). See `data/persona_priors/README.md`. |
-| `NVIDIA_API_KEY` | — | required for any hosted NVIDIA path — reaction swarm, analyst, **and** semantic assessor (get an `nvapi-` key at [build.nvidia.com](https://build.nvidia.com)) |
+| `FIREWORKS_API_KEY` | — | **the real prototype's inference key** — DeepSeek-V4-Flash workers in the Nemotron-orchestrated swarm run on Fireworks. Server-side only. |
+| `FIREWORKS_BASE_URL` | `https://api.fireworks.ai/inference/v1` | OpenAI-compatible Fireworks endpoint for the worker swarm. |
+| `FIREWORKS_DEEPSEEK_MODEL` | `accounts/fireworks/models/deepseek-v4-flash` | Fireworks worker model. |
+| `NVIDIA_ORCHESTRATOR_MODEL` | `nvidia/nemotron-3-ultra-550b-a55b` | Nemotron orchestrator ("main brain") that plans/synthesizes the swarm. |
+| `NVIDIA_API_KEY` | — | **testing / reference only** — the Nemotron orchestrator and the direct `nvidia` reaction/analyst/semantic paths (get an `nvapi-` key at [build.nvidia.com](https://build.nvidia.com)). Not the real inference key; that's `FIREWORKS_API_KEY`. |
 | `NVIDIA_BASE_URL` | `https://integrate.api.nvidia.com/v1` | NVIDIA NIM (hosted or self-hosted, OpenAI-compatible) |
 | `NVIDIA_MODEL` | `z-ai/glm-5.2` | used by both the `nvidia` reaction provider and the `nvidia` analyst |
 | `NVIDIA_MAX_TOKENS` / `ANALYST_MAX_TOKENS` | `2048` / `4096` | per-persona reaction budget / larger analyst-report budget |
@@ -309,14 +323,20 @@ ANALYST_PROVIDER=mock      # local deterministic report builder's own text (defa
 ANALYST_PROVIDER=nvidia    # NVIDIA NIM GLM-5.2 re-narrates the report (needs NVIDIA_API_KEY)
 ```
 
+Separately, the **real prototype inference path** is the Nemotron-orchestrated
+**Fireworks** worker swarm (enabled via the admin **Inference settings** panel /
+`orchestration_enabled`, needs `FIREWORKS_API_KEY`); when it's off, the classic
+`INFERENCE_PROVIDER` path above runs untouched.
+
 Practical combos: **all mock** (fully offline demo/CI — the default; semantic
-grounding is honestly disabled, criteria stay on formulas), **mock swarm +
-nvidia semantic + nvidia analyst** (offline swarm, one grounding call + one
-report-polish call), and **vllm swarm + nvidia semantic/analyst** (future AMD
-MI300X-hosted swarm). Semantic grounding only *changes* the numbers when
-`SEMANTIC_PROVIDER=nvidia` and a live key is present — in mock mode the report
-labels `semantic_source: fallback_formulas` and adds a confidence downgrade, so
-a demo never silently passes off ungrounded scores as grounded.
+grounding is honestly disabled, criteria stay on formulas), **Fireworks
+orchestrated swarm** (the real prototype — DeepSeek workers, Nemotron brain),
+and **mock swarm + nvidia semantic/analyst** (offline swarm plus a real
+grounding/report call for testing). Semantic grounding only *changes* the
+numbers when `SEMANTIC_PROVIDER` is a real (non-mock) provider with a live key —
+in mock mode the report labels `semantic_source: fallback_formulas` and adds a
+confidence downgrade, so a demo never silently passes off ungrounded scores as
+grounded.
 
 No code changes for either knob — the swap points are
 `apps/api/app/services/inference/` (`PersonaInferenceProvider`) and
@@ -404,17 +424,23 @@ grounding:** the sanitizer trust boundary, the anti-optimism assessor (mock +
 LLM, never-throw), the source-gated `0.7/0.3` blend, and the offline
 benchmark backtest — all surfaced as `semantic_source` + confidence downgrades.
 
-**Structured placeholders / not yet exercised:** `VLLMProvider` (plumbing +
+**Real prototype inference:** the Nemotron-orchestrated **Fireworks** worker
+swarm (DeepSeek-V4-Flash workers, Nemotron orchestrator) is the intended live
+LLM path (`FIREWORKS_API_KEY`); it falls back gracefully and the classic mock
+path stays fully offline. **Testing / reference only:** the direct `nvidia`
+reaction/analyst/semantic paths (NVIDIA NIM) and the `SemanticAssessor` — an
+`nvidia`-labeled OpenAI-compatible client that can also target Fireworks.
+
+**Structured placeholders / verify-with-a-key:** `VLLMProvider` (plumbing +
 prompts + guided-JSON schema ready; needs a live MI300X/vLLM endpoint). The
-hosted LLM paths — `NvidiaProvider` (reaction swarm), `NvidiaAnalyst` (report
-narration), and the `SemanticAssessor` — are implemented against NVIDIA NIM
-GLM-5.2 and **fall back gracefully without a live key, but have not been run
-against a live `NVIDIA_API_KEY` in this environment**, so semantic grounding's
-real accuracy gain is unmeasured (mock mode honestly stays on formulas). The
-benchmark ships an **illustrative 5-entry seed set** (a machinery tripwire, not
-accuracy validation) — real validation needs a curated 15–25-product set and
-re-derived thresholds. A future LoRA-calibrated persona model is roadmapped
-(see [docs/training-roadmap.md](docs/training-roadmap.md)).
+hosted LLM paths fall back gracefully without a key; the full offline mock
+pipeline is exercised and green in both engines, but the live Fireworks/NVIDIA
+paths should be smoke-tested against a real key before relying on their output,
+so semantic grounding's real accuracy gain is currently unmeasured (mock mode
+honestly stays on formulas). The benchmark ships an **illustrative 5-entry seed
+set** (a machinery tripwire, not accuracy validation) — real validation needs a
+curated 15–25-product set and re-derived thresholds. A future LoRA-calibrated
+persona model is roadmapped (see [docs/training-roadmap.md](docs/training-roadmap.md)).
 
 ## License / hackathon note
 

@@ -544,8 +544,16 @@ class HttpGateway implements Gateway {
   async adminListStorms(limit = 100): Promise<Row[]> {
     const storms = await this.admin.get("storm_runs", { select: STORM_LIST_COLUMNS, order: "created_at.desc", limit: String(limit) });
     if (storms.length === 0) return [];
-    const userIds = Array.from(new Set(storms.map((s) => s.user_id))).sort();
-    const profiles = await this.admin.get("profiles", { id: `in.(${userIds.join(",")})`, select: "id,email" });
+    // The demo storm row has user_id NULL (see 20260708000000_demo_read_only:
+    // `check (is_demo or user_id is not null)`), and a literal `null` inside a
+    // uuid `in.(…)` filter is a PostgREST 400 — which took the whole admin
+    // storm list down the moment the demo row existed. Filter ids first.
+    const userIds = Array.from(
+      new Set(storms.map((s) => s.user_id).filter((id): id is string => typeof id === "string" && id.length > 0)),
+    ).sort();
+    const profiles = userIds.length
+      ? await this.admin.get("profiles", { id: `in.(${userIds.join(",")})`, select: "id,email" })
+      : [];
     const emailById = new Map(profiles.map((p) => [p.id, p.email]));
     for (const s of storms) s.user_email = emailById.get(s.user_id) ?? null;
     return storms;

@@ -36,12 +36,16 @@ name: Publish Docker image
 
 on:
   push:
-    branches: [main]
+    # claude/** included so the image publishes from feature branches too —
+    # GitHub only surfaces workflow_dispatch in the Actions tab once the
+    # workflow file reaches the default branch, so branch pushes are the way
+    # to build a submission image before merging (tags: branch name + sha;
+    # `latest` is still reserved for main).
+    branches: [main, "claude/**"]
     tags: ["v*"]
   pull_request:
     branches: [main]
-  # Manual runs (any branch) — handy for building a submission image without
-  # merging first. Pushes the sha-<commit> and branch tags.
+  # Manual runs — available in the Actions tab once this file is on main.
   workflow_dispatch:
 
 concurrency:
